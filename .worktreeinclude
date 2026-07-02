@@ -1,0 +1,5 @@
+# Copy local config that Claude Code worktrees need but git should not track.
+/.env
+/.env.local
+/.env.*
+/.claude/settings.local.json
