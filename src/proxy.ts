@@ -5,6 +5,11 @@ import { env } from "~/env";
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
 
+  // Supabase isn't configured yet — skip auth refresh so the app can run.
+  if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    return response;
+  }
+
   const supabase = createServerClient(
     env.NEXT_PUBLIC_SUPABASE_URL,
     env.NEXT_PUBLIC_SUPABASE_ANON_KEY,

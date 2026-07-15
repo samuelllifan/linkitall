@@ -1,50 +1,73 @@
 @import "tailwindcss";
 
+/* Map Tailwind color utilities to CSS variables so light and dark can swap.
+   (The raw values live in :root / .dark below; @theme inline references them.) */
 @theme inline {
-  /* OKLCH Design Tokens — Light Mode Default (zinc) */
-  --color-background: oklch(1 0 0);
-  --color-foreground: oklch(0.145 0 0);
-  --color-muted: oklch(0.967 0 0);
-  --color-muted-foreground: oklch(0.556 0 0);
-  --color-card: oklch(1 0 0);
-  --color-card-foreground: oklch(0.145 0 0);
-  --color-popover: oklch(1 0 0);
-  --color-popover-foreground: oklch(0.145 0 0);
-  --color-border: oklch(0.92 0 0);
-  --color-input: oklch(0.92 0 0);
-  --color-primary: oklch(0.205 0 0);
-  --color-primary-foreground: oklch(0.985 0 0);
-  --color-secondary: oklch(0.967 0 0);
-  --color-secondary-foreground: oklch(0.205 0 0);
-  --color-accent: oklch(0.967 0 0);
-  --color-accent-foreground: oklch(0.205 0 0);
-  --color-destructive: oklch(0.577 0.245 27.325);
-  --color-ring: oklch(0.556 0 0);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-ring: var(--ring);
   --radius-sm: 0.25rem;
   --radius-md: 0.375rem;
   --radius-lg: 0.5rem;
   --radius-xl: 0.75rem;
 }
 
+/* OKLCH Design Tokens — Light Mode Default (zinc) */
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --muted: oklch(0.967 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --border: oklch(0.92 0 0);
+  --input: oklch(0.92 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.967 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --accent: oklch(0.967 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --ring: oklch(0.556 0 0);
+}
+
 .dark {
-  --color-background: oklch(0.145 0 0);
-  --color-foreground: oklch(0.985 0 0);
-  --color-muted: oklch(0.269 0 0);
-  --color-muted-foreground: oklch(0.708 0 0);
-  --color-card: oklch(0.145 0 0);
-  --color-card-foreground: oklch(0.985 0 0);
-  --color-popover: oklch(0.145 0 0);
-  --color-popover-foreground: oklch(0.985 0 0);
-  --color-border: oklch(0.269 0 0);
-  --color-input: oklch(0.269 0 0);
-  --color-primary: oklch(0.985 0 0);
-  --color-primary-foreground: oklch(0.205 0 0);
-  --color-secondary: oklch(0.269 0 0);
-  --color-secondary-foreground: oklch(0.985 0 0);
-  --color-accent: oklch(0.269 0 0);
-  --color-accent-foreground: oklch(0.985 0 0);
-  --color-destructive: oklch(0.396 0.141 25.723);
-  --color-ring: oklch(0.556 0 0);
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --card: oklch(0.145 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.145 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --border: oklch(0.269 0 0);
+  --input: oklch(0.269 0 0);
+  --primary: oklch(0.985 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.396 0.141 25.723);
+  --ring: oklch(0.556 0 0);
 }
 
 @layer base {
@@ -53,5 +76,451 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+  /* Theme switching: fade surfaces (backgrounds, borders) on one shared clock
+     so boxes flip together instead of in stages. Text and icon colors are
+     deliberately excluded — fading them dips through mid-gray against the
+     also-fading background, which reads as a flash; snapping them keeps text
+     crisp while the surfaces cross-fade underneath. 150ms matches Tailwind's
+     default transition duration, keeping elements that declare their own
+     transition utilities in sync with everything else. */
+  *,
+  ::before,
+  ::after {
+    transition-property: background-color, border-color, outline-color;
+    transition-duration: 0.15s;
+    transition-timing-function: ease-out;
+  }
+}
+
+/* Gentle amber outline flash for the "unsaved changes" bar when a save is
+   skipped. Only the border tints; the mid-keyframes set the color so 0%/100%
+   fall back to the bar's own border (Tailwind v4 @theme inline doesn't expose
+   --color-* vars). */
+@keyframes flash {
+  30%,
+  65% {
+    border-color: #f59e0b;
+  }
+}
+.animate-flash {
+  animation: flash 0.5s ease-in-out;
+}
+
+/* Short, snappy entrance animations for popups: modals, toolbar, and bars. */
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.animate-pop {
+  animation: pop-in 0.2s ease-out;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.animate-fade {
+  animation: fade-in 0.2s ease-out;
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-slide-up {
+  animation: slide-up 0.25s ease-out;
+}
+
+/* Exit animations — reverse of the entrances. `forwards` holds the final
+   (hidden) frame until the element unmounts so it doesn't flash back. */
+@keyframes pop-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+.animate-pop-out {
+  animation: pop-out 0.2s ease-in forwards;
+}
+
+@keyframes fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+.animate-fade-out {
+  animation: fade-out 0.2s ease-in forwards;
+}
+
+@keyframes slide-down {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+}
+.animate-slide-down {
+  animation: slide-down 0.25s ease-in forwards;
+}
+
+/* Gradient distribution slider — the track shows the gradient itself (set via
+   an inline `background`), with a small themed thumb marking the blend point. */
+.gradient-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 0.75rem;
+  border-radius: 9999px;
+  outline: none;
+}
+.gradient-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 1.1rem;
+  width: 1.1rem;
+  border-radius: 9999px;
+  background: var(--background);
+  border: 2px solid var(--foreground);
+  cursor: pointer;
+}
+.gradient-slider::-moz-range-thumb {
+  height: 1.1rem;
+  width: 1.1rem;
+  border-radius: 9999px;
+  background: var(--background);
+  border: 2px solid var(--foreground);
+  cursor: pointer;
+}
+.gradient-slider::-moz-range-track {
+  background: transparent;
+}
+
+/* Aurora background — northern-lights curtains of light hanging from the top of
+   a night sky. Each curtain is a tall vertical gradient (color set inline),
+   heavily blurred and screen-blended so overlapping curtains glow like real
+   aurora. They sway via skew + horizontal drift; `alternate` avoids a snap. */
+.aurora-layer {
+  position: fixed;
+  inset: 0;
+  z-index: -10;
+  overflow: hidden;
+  background: linear-gradient(to bottom, #071019 0%, #05060a 55%, #000 100%);
+}
+.aurora-curtain {
+  position: absolute;
+  top: -20%;
+  filter: blur(45px);
+  opacity: 0.55;
+  mix-blend-mode: screen;
+  transform-origin: top center;
+  animation-iteration-count: infinite;
+  animation-timing-function: ease-in-out;
+  animation-direction: alternate;
+}
+.aurora-curtain-0 {
+  left: -8%;
+  animation-name: aurora-sway-0;
+}
+.aurora-curtain-1 {
+  left: 16%;
+  animation-name: aurora-sway-1;
+  animation-delay: -2s;
+}
+.aurora-curtain-2 {
+  left: 38%;
+  animation-name: aurora-sway-2;
+  animation-delay: -5s;
+}
+.aurora-curtain-3 {
+  left: 60%;
+  animation-name: aurora-sway-1;
+  animation-delay: -3s;
+}
+.aurora-curtain-4 {
+  left: 80%;
+  animation-name: aurora-sway-0;
+  animation-delay: -6s;
+}
+@keyframes aurora-sway-0 {
+  from {
+    transform: translateX(-6%) skewX(-12deg) scaleY(0.9);
+  }
+  to {
+    transform: translateX(10%) skewX(9deg) scaleY(1.2);
+  }
+}
+@keyframes aurora-sway-1 {
+  from {
+    transform: translateX(7%) skewX(10deg) scaleY(1.15);
+  }
+  to {
+    transform: translateX(-9%) skewX(-8deg) scaleY(0.85);
+  }
+}
+@keyframes aurora-sway-2 {
+  from {
+    transform: translateX(-4%) skewX(-6deg) scaleY(1);
+  }
+  to {
+    transform: translateX(8%) skewX(12deg) scaleY(1.3);
+  }
+}
+
+/* Galaxy background — a black sky with small star particles drifting upward.
+   Two tiled layers move at different speeds for a subtle parallax; drift speed
+   comes from the inline `--stars-dur` custom property. */
+.stars-layer {
+  position: fixed;
+  inset: 0;
+  z-index: -10;
+  overflow: hidden;
+  background: #000;
+}
+.stars-layer::before,
+.stars-layer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-repeat: repeat;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+.stars-layer::before {
+  background-image:
+    radial-gradient(1px 1px at 10% 20%, #fff, transparent),
+    radial-gradient(1px 1px at 30% 60%, #fff, transparent),
+    radial-gradient(1px 1px at 70% 40%, #fff, transparent),
+    radial-gradient(1px 1px at 85% 80%, #cbd5e1, transparent),
+    radial-gradient(1px 1px at 50% 95%, #fff, transparent),
+    radial-gradient(1px 1px at 18% 78%, #fff, transparent),
+    radial-gradient(1px 1px at 92% 12%, #fff, transparent);
+  background-size: 300px 300px;
+  opacity: 0.85;
+  animation-name: stars-a;
+  animation-duration: var(--stars-dur, 18s);
+}
+.stars-layer::after {
+  background-image:
+    radial-gradient(1.5px 1.5px at 20% 50%, #fff, transparent),
+    radial-gradient(1.5px 1.5px at 60% 12%, #fff, transparent),
+    radial-gradient(1.5px 1.5px at 82% 72%, #e0e7ff, transparent),
+    radial-gradient(1.5px 1.5px at 40% 30%, #fff, transparent);
+  background-size: 520px 520px;
+  opacity: 0.9;
+  animation-name: stars-b;
+  animation-duration: calc(var(--stars-dur, 18s) * 1.7);
+}
+@keyframes stars-a {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 0 -300px;
+  }
+}
+@keyframes stars-b {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 0 -520px;
+  }
+}
+
+/* Profile-picture effects. Particles emit outward from the avatar center;
+   shine sweeps a glossy highlight across it. Per-instance values (color,
+   duration, delay, travel offset) are passed inline as CSS variables. */
+.avatar-fx-particles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+.avatar-particle {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  border-radius: 9999px;
+  background: var(--p-color, #fff);
+  opacity: 0;
+  animation: avatar-particle var(--p-dur, 3s) linear infinite;
+  animation-delay: var(--p-delay, 0s);
+}
+@keyframes avatar-particle {
+  0% {
+    transform: translate(-50%, -50%) scale(0.3);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(calc(-50% + var(--p-tx)), calc(-50% + var(--p-ty)))
+      scale(1);
+    opacity: 0;
+  }
+}
+.avatar-shine {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.avatar-shine::before {
+  content: "";
+  position: absolute;
+  top: -25%;
+  left: -60%;
+  width: 45%;
+  height: 150%;
+  transform: rotate(18deg);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.7),
+    transparent
+  );
+  animation: avatar-shine var(--s-dur, 3s) ease-in-out infinite;
+}
+@keyframes avatar-shine {
+  0% {
+    left: -60%;
+  }
+  55%,
+  100% {
+    left: 160%;
+  }
+}
+
+/* Animated text effects for name / bio / links. An animated background is
+   clipped to the glyphs. Children inherit a transparent text-fill so the effect
+   stays uniform even over per-character colors. `--text-c` (set inline) is the
+   base color used by the shine sweep. */
+.text-anim-gradient,
+.text-anim-rainbow,
+.text-anim-shine {
+  background-size: 200% auto;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+.text-anim-gradient *,
+.text-anim-rainbow *,
+.text-anim-shine * {
+  color: inherit;
+  -webkit-text-fill-color: transparent;
+  background: none;
+}
+.text-anim-gradient {
+  background-image: linear-gradient(
+    90deg,
+    #6366f1,
+    #8b5cf6,
+    #ec4899,
+    #f59e0b,
+    #6366f1
+  );
+  animation: text-slide 5s linear infinite;
+}
+.text-anim-rainbow {
+  background-image: linear-gradient(
+    90deg,
+    #ff004c,
+    #ff8a00,
+    #ffe600,
+    #31d843,
+    #00b7ff,
+    #7a5cff,
+    #ff004c
+  );
+  animation: text-slide 4s linear infinite;
+}
+.text-anim-shine {
+  background-image: linear-gradient(
+    100deg,
+    var(--text-c, #ffffff) 0%,
+    var(--text-c, #ffffff) 42%,
+    #ffffff 50%,
+    var(--text-c, #ffffff) 58%,
+    var(--text-c, #ffffff) 100%
+  );
+  animation: text-slide 3.2s ease-in-out infinite;
+}
+@keyframes text-slide {
+  to {
+    background-position: 200% center;
+  }
+}
+
+/* Media background — full-viewport uploaded image/video. Framing (object
+   position + zoom) is applied inline per background. */
+.media-layer {
+  position: fixed;
+  inset: 0;
+  z-index: -10;
+  overflow: hidden;
+  background: #05060a;
+}
+.media-layer > * {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Placeholder text for empty contentEditable rich-text fields (name / bio). */
+[contenteditable][data-placeholder]:empty::before {
+  content: attr(data-placeholder);
+  color: var(--muted-foreground);
+  pointer-events: none;
+}
+
+/* Respect users who prefer reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-pop,
+  .animate-fade,
+  .animate-slide-up,
+  .animate-pop-out,
+  .animate-fade-out,
+  .animate-slide-down,
+  .aurora-curtain,
+  .stars-layer::before,
+  .stars-layer::after,
+  .avatar-particle,
+  .avatar-shine::before,
+  .text-anim-gradient,
+  .text-anim-rainbow,
+  .text-anim-shine {
+    animation: none;
+  }
+  *,
+  ::before,
+  ::after {
+    transition-duration: 0ms;
   }
 }

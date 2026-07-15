@@ -1,24 +1,38 @@
 import Link from "next/link";
+import { Button } from "~/components/ui/button";
+import { createClient } from "~/lib/supabase/server";
 
-export default function Home() {
+export default async function Home() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const signedIn = Boolean(user);
+
   return (
-    <main className="flex min-h-[calc(100vh-3.5rem)] flex-col items-center justify-center gap-8 p-8">
-      <div className="flex flex-col items-center gap-4 text-center">
-        <h1 className="text-4xl font-bold tracking-tight">
-          Welcome to your Lumos App
+    <main className="flex flex-1 flex-col">
+      {/* Hero */}
+      <section className="flex flex-1 flex-col items-center justify-center gap-6 px-6 py-24 text-center">
+        <h1 className="max-w-2xl text-balance text-4xl font-bold tracking-tight sm:text-6xl">
+          All of you, all here.
         </h1>
-        <p className="max-w-md text-lg text-muted-foreground">
-          A starter template with a notes app backed by localStorage. Get
-          started by exploring the{" "}
-          <Link href="/notes" className="underline hover:text-foreground">
-            Notes
-          </Link>{" "}
-          page or editing{" "}
-          <code className="rounded bg-muted px-2 py-1 font-mono text-sm">
-            src/app/page.tsx
-          </code>
+        <p className="max-w-xl text-balance text-lg leading-relaxed text-muted-foreground">
+          linkitall brings your platforms, projects, and profiles together in
+          one organized space.
         </p>
-      </div>
+        <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+          <Button asChild size="lg">
+            <Link href="/my-page">
+              {signedIn ? "Go to your page" : "Create your page"}
+            </Link>
+          </Button>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          {signedIn
+            ? "Pick up right where you left off."
+            : "Set up in minutes. Share it anywhere."}
+        </p>
+      </section>
     </main>
   );
 }
