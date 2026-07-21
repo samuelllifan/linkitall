@@ -61,9 +61,6 @@ type GradientConfig = {
   distribution: number;
 };
 
-/** Editable aurora background settings. */
-type AuroraConfig = { colors: string[]; speed: number; size: number };
-
 /** Editable galaxy (starfield) background settings. */
 type StarfieldConfig = { speed: number };
 
@@ -112,6 +109,72 @@ const DESTRUCTIVE_GHOST =
   "text-red-400 hover:bg-red-400/10 hover:text-red-400 dark:hover:bg-red-400/10";
 
 const FONT_SIZES = [12, 14, 16, 18, 20, 24, 28, 32, 40, 48, 60];
+const FONT_SIZE_MIN = 8;
+const FONT_SIZE_MAX = 200;
+
+/**
+ * A typable font-size control: a number input the user can type any size into
+ * (clamped to a sane range), with the common presets offered as datalist
+ * suggestions. Local text state lets intermediate typing feel natural; the
+ * value is clamped and committed on blur / Enter.
+ */
+function FontSizeInput({
+  value,
+  onChange,
+  ariaLabel = "Text size",
+  listId,
+}: {
+  value: number;
+  onChange: (size: number) => void;
+  ariaLabel?: string;
+  listId: string;
+}) {
+  const [text, setText] = useState(String(value));
+
+  // Re-sync when the external value changes (switching fields/links, reset).
+  useEffect(() => setText(String(value)), [value]);
+
+  function commit(raw: string) {
+    const n = Number.parseInt(raw, 10);
+    const clamped = Number.isFinite(n)
+      ? Math.max(FONT_SIZE_MIN, Math.min(FONT_SIZE_MAX, n))
+      : value;
+    setText(String(clamped));
+    if (clamped !== value) onChange(clamped);
+  }
+
+  return (
+    <>
+      <input
+        type="number"
+        inputMode="numeric"
+        min={FONT_SIZE_MIN}
+        max={FONT_SIZE_MAX}
+        value={text}
+        aria-label={ariaLabel}
+        list={listId}
+        onChange={(e) => {
+          setText(e.target.value);
+          // Live-preview in-range values while typing.
+          const n = Number.parseInt(e.target.value, 10);
+          if (Number.isFinite(n) && n >= FONT_SIZE_MIN && n <= FONT_SIZE_MAX) {
+            onChange(n);
+          }
+        }}
+        onBlur={(e) => commit(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") commit((e.target as HTMLInputElement).value);
+        }}
+        className="h-8 w-16 rounded-md border border-input bg-transparent px-2 text-sm outline-none"
+      />
+      <datalist id={listId}>
+        {FONT_SIZES.map((s) => (
+          <option key={s} value={s} />
+        ))}
+      </datalist>
+    </>
+  );
+}
 
 /**
  * Keeps an element mounted through its exit animation. `active` drives whether
@@ -358,16 +421,13 @@ const PICKER_OPTIONS: PickerOption[] = [
   { key: "custom", label: "Custom link", icon: LinkIcon, prefix: "https://" },
 ];
 
+// A fresh page for a user who hasn't created one yet: blank bio, no links, and
+// no avatar (so the default person placeholder shows). The name is seeded from
+// the account email by the caller.
 const DEFAULT_DATA: PageData = {
-  name: "lifanfx",
-  bio: "Video Editor | VFX",
-  links: [
-    {
-      id: "tiktok",
-      label: "TikTok",
-      href: "https://www.tiktok.com/@lifanfx",
-    },
-  ],
+  name: "",
+  bio: "",
+  links: [],
 };
 
 /**
@@ -756,18 +816,11 @@ function TextStyleEditor({
       </div>
       <div className="flex items-center justify-between gap-2 text-sm">
         <span className="text-muted-foreground">Size</span>
-        <select
+        <FontSizeInput
           value={style.fontSize ?? defaultSize}
-          onChange={(e) => onChange({ fontSize: Number(e.target.value) })}
-          aria-label="Text size"
-          className="h-8 rounded-md border border-input bg-transparent px-2 text-sm outline-none"
-        >
-          {FONT_SIZES.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
+          onChange={(size) => onChange({ fontSize: size })}
+          listId="link-font-sizes"
+        />
       </div>
       <div className="flex items-center justify-between gap-2 text-sm">
         <span className="text-muted-foreground">Style</span>
@@ -1289,13 +1342,14 @@ const TEMPLATES: Template[] = [
     preview: "linear-gradient(135deg,#fafafa,#d4d4d8)",
   },
   {
-    key: "aurora",
-    label: "Aurora Dream",
+    key: "violet",
+    label: "Violet Dream",
     background: {
-      type: "aurora",
-      colors: ["#3b82f6", "#8b5cf6", "#ec4899"],
-      speed: 5,
-      size: 6,
+      type: "gradient",
+      from: "#3b82f6",
+      to: "#ec4899",
+      direction: "vertical",
+      distribution: 50,
     },
     font: "poppins",
     linkColor: "#312e81",
@@ -1360,20 +1414,22 @@ function templateMemory(bg: Background): BackgroundMemory {
       },
     };
   }
-  if (bg.type === "aurora") {
-    return { aurora: { colors: bg.colors, speed: bg.speed, size: bg.size } };
-  }
   if (bg.type === "starfield") return { starfield: { speed: bg.speed } };
   return {};
 }
 
 export function MyPageClient({
   initialData,
+  email,
 }: {
   initialData: PageData | null;
+  email?: string | null;
 }) {
-  // Server-provided data (or defaults if the row is missing / fetch failed).
-  const initial = seedBgMemory(initialData ?? DEFAULT_DATA);
+  // Server-provided data, or a blank page seeded with the account email as the
+  // name when the user hasn't created one yet.
+  const initial = seedBgMemory(
+    initialData ?? { ...DEFAULT_DATA, name: email ?? "" },
+  );
 
   // Current theme, used to keep explicit text colors legible on both themes.
   // Gated on mount so the first client render matches the server (no theme).
@@ -1730,11 +1786,6 @@ export function MyPageClient({
     direction: "vertical",
     distribution: 50,
   };
-  const AURORA_DEFAULT: AuroraConfig = {
-    colors: ["#3b82f6", "#8b5cf6", "#ec4899"],
-    speed: 5,
-    size: 6,
-  };
   const STARFIELD_DEFAULT: StarfieldConfig = { speed: 5 };
 
   // The last colors picked per background type live in `draft.bgMemory`, so they
@@ -1761,14 +1812,6 @@ export function MyPageClient({
             distribution: draft.bgMemory.gradient.distribution ?? 50,
           }
         : { ...GRADIENT_DEFAULT };
-  const aurora: AuroraConfig =
-    draft.background?.type === "aurora"
-      ? {
-          colors: draft.background.colors,
-          speed: draft.background.speed,
-          size: draft.background.size,
-        }
-      : (draft.bgMemory?.aurora ?? AURORA_DEFAULT);
   const starfield: StarfieldConfig =
     draft.background?.type === "starfield"
       ? { speed: draft.background.speed }
@@ -1801,13 +1844,6 @@ export function MyPageClient({
         ...prev,
         background: { type: "gradient", ...g },
         bgMemory: { ...prev.bgMemory, gradient: g },
-      }));
-    } else if (type === "aurora") {
-      const a = aurora;
-      setDraft((prev) => ({
-        ...prev,
-        background: { type: "aurora", ...a },
-        bgMemory: { ...prev.bgMemory, aurora: a },
       }));
     } else if (type === "starfield") {
       const s = starfield;
@@ -1847,15 +1883,6 @@ export function MyPageClient({
       ...prev,
       background: { type: "gradient", ...next },
       bgMemory: { ...prev.bgMemory, gradient: next },
-    }));
-  }
-
-  function updateAurora(patch: Partial<AuroraConfig>) {
-    const next = { ...aurora, ...patch };
-    setDraft((prev) => ({
-      ...prev,
-      background: { type: "aurora", ...next },
-      bgMemory: { ...prev.bgMemory, aurora: next },
     }));
   }
 
@@ -2589,18 +2616,12 @@ export function MyPageClient({
       </select>
 
       {/* Font size */}
-      <select
+      <FontSizeInput
         value={activeStyle.fontSize ?? 16}
-        onChange={(e) => setActiveStyle({ fontSize: Number(e.target.value) })}
-        aria-label="Font size"
-        className="h-8 rounded-md border border-input bg-transparent px-2 text-sm outline-none"
-      >
-        {FONT_SIZES.map((s) => (
-          <option key={s} value={s}>
-            {s}
-          </option>
-        ))}
-      </select>
+        onChange={(size) => setActiveStyle({ fontSize: size })}
+        ariaLabel="Font size"
+        listId="text-font-sizes"
+      />
       <span className="mx-1 h-5 w-px bg-border" />
 
       {/* Bold / Italic / Underline — per-character */}
@@ -3689,34 +3710,6 @@ export function MyPageClient({
                   </span>
                 </button>
 
-                {/* Aurora */}
-                <button
-                  type="button"
-                  onClick={() => chooseBackground("aurora")}
-                  className="flex flex-col items-center gap-1.5"
-                >
-                  <span
-                    style={{
-                      background: `radial-gradient(circle at 25% 25%, ${aurora.colors[0]}, transparent 55%), radial-gradient(circle at 75% 70%, ${aurora.colors[2] ?? aurora.colors[0]}, transparent 55%), ${aurora.colors[1] ?? "#05060a"}`,
-                    }}
-                    className={cn(
-                      "size-16 rounded-md border border-border transition-shadow",
-                      bgType === "aurora" &&
-                        "ring-2 ring-ring ring-offset-2 ring-offset-popover",
-                    )}
-                  />
-                  <span
-                    className={cn(
-                      "text-xs",
-                      bgType === "aurora"
-                        ? "text-foreground"
-                        : "text-muted-foreground",
-                    )}
-                  >
-                    Aurora
-                  </span>
-                </button>
-
                 {/* Space */}
                 <button
                   type="button"
@@ -3902,59 +3895,6 @@ export function MyPageClient({
                       background: `linear-gradient(to right, ${grad.from} 0%, ${grad.from} ${grad.distribution}%, ${grad.to} ${grad.distribution}%, ${grad.to} 100%)`,
                     }}
                   />
-                </div>
-              ) : bgType === "aurora" ? (
-                <div className="mt-3 flex animate-slide-up flex-col gap-3 border-t border-border pt-3">
-                  {/* Blob colors */}
-                  <div className="flex items-center justify-between gap-3 text-sm">
-                    <span className="text-muted-foreground">Colors</span>
-                    <div className="flex gap-1">
-                      {[0, 1, 2].map((i) => (
-                        <ColorPicker
-                          key={`aurora-${i}`}
-                          value={aurora.colors[i] ?? "#000000"}
-                          onChange={(c) => {
-                            const colors = [...aurora.colors];
-                            colors[i] = c;
-                            updateAurora({ colors });
-                          }}
-                          ariaLabel={`Aurora color ${i + 1}`}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                  {/* Speed */}
-                  <label className="flex flex-col gap-1.5 text-sm">
-                    <span className="text-muted-foreground">Speed</span>
-                    <input
-                      type="range"
-                      min={0}
-                      max={10}
-                      step={1}
-                      value={aurora.speed}
-                      onChange={(e) =>
-                        updateAurora({ speed: Number(e.target.value) })
-                      }
-                      aria-label="Aurora speed"
-                      className="w-full"
-                    />
-                  </label>
-                  {/* Size */}
-                  <label className="flex flex-col gap-1.5 text-sm">
-                    <span className="text-muted-foreground">Size</span>
-                    <input
-                      type="range"
-                      min={1}
-                      max={10}
-                      step={1}
-                      value={aurora.size}
-                      onChange={(e) =>
-                        updateAurora({ size: Number(e.target.value) })
-                      }
-                      aria-label="Aurora size"
-                      className="w-full"
-                    />
-                  </label>
                 </div>
               ) : bgType === "starfield" ? (
                 <div className="mt-3 flex animate-slide-up flex-col gap-3 border-t border-border pt-3">

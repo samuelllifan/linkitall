@@ -59,16 +59,6 @@ export type Background =
       distribution?: number;
     }
   | {
-      /** Northern-lights curtains of light drifting across a night sky. */
-      type: "aurora";
-      /** Up to three curtain colors. */
-      colors: string[];
-      /** Animation speed, 1 (slow) – 10 (fast). */
-      speed: number;
-      /** Curtain size as a share of the viewport, 30–100. */
-      size: number;
-    }
-  | {
       /** Black space with small drifting star particles. */
       type: "starfield";
       /** Drift speed, 1 (slow) – 10 (fast). */
@@ -89,7 +79,6 @@ export interface BackgroundMemory {
     direction?: "vertical" | "horizontal";
     distribution?: number;
   };
-  aurora?: { colors: string[]; speed: number; size: number };
   starfield?: { speed: number };
   media?: MediaBackground;
 }

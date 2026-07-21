@@ -1,11 +1,18 @@
 "use client";
 
 import {
+  Bebas_Neue,
+  Dancing_Script,
   Inter,
   Lora,
+  Merriweather,
+  Montserrat,
+  Oswald,
+  Pacifico,
   Playfair_Display,
   Poppins,
   Roboto_Mono,
+  Space_Grotesk,
 } from "next/font/google";
 import { useTheme } from "next-themes";
 import {
@@ -41,13 +48,46 @@ const playfair = Playfair_Display({
   weight: ["400", "700"],
 });
 const robotoMono = Roboto_Mono({ subsets: ["latin"], weight: ["400", "700"] });
+const montserrat = Montserrat({ subsets: ["latin"], weight: ["400", "700"] });
+const oswald = Oswald({ subsets: ["latin"], weight: ["400", "700"] });
+const spaceGrotesk = Space_Grotesk({
+  subsets: ["latin"],
+  weight: ["400", "700"],
+});
+const merriweather = Merriweather({
+  subsets: ["latin"],
+  weight: ["400", "700"],
+});
+const dancingScript = Dancing_Script({
+  subsets: ["latin"],
+  weight: ["400", "700"],
+});
+// Bebas Neue and Pacifico ship a single weight; the browser synthesizes bold.
+const bebasNeue = Bebas_Neue({ subsets: ["latin"], weight: "400" });
+const pacifico = Pacifico({ subsets: ["latin"], weight: "400" });
 
 /** Selectable fonts. Inter is the app default (used when none is set). */
 export const FONTS: Record<string, { label: string; family: string }> = {
   inter: { label: "Inter", family: inter.style.fontFamily },
   poppins: { label: "Poppins", family: poppins.style.fontFamily },
+  montserrat: { label: "Montserrat", family: montserrat.style.fontFamily },
+  spaceGrotesk: {
+    label: "Space Grotesk",
+    family: spaceGrotesk.style.fontFamily,
+  },
+  oswald: { label: "Oswald", family: oswald.style.fontFamily },
+  bebasNeue: { label: "Bebas Neue", family: bebasNeue.style.fontFamily },
   lora: { label: "Lora", family: lora.style.fontFamily },
   playfair: { label: "Playfair Display", family: playfair.style.fontFamily },
+  merriweather: {
+    label: "Merriweather",
+    family: merriweather.style.fontFamily,
+  },
+  dancingScript: {
+    label: "Dancing Script",
+    family: dancingScript.style.fontFamily,
+  },
+  pacifico: { label: "Pacifico", family: pacifico.style.fontFamily },
   mono: { label: "Roboto Mono", family: robotoMono.style.fontFamily },
 };
 
@@ -598,6 +638,136 @@ function EmailIcon({ className }: { className?: string }) {
   );
 }
 
+function SpotifyIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+      className={className}
+    >
+      <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.18-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.42 1.56-.299.421-1.02.599-1.56.3z" />
+    </svg>
+  );
+}
+
+function LinkedInIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+      className={className}
+    >
+      <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.225 0z" />
+    </svg>
+  );
+}
+
+function FacebookIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+      className={className}
+    >
+      <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+    </svg>
+  );
+}
+
+function ThreadsIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+      className={className}
+    >
+      <path d="M12.186 24h-.007c-3.581-.024-6.334-1.205-8.184-3.509C2.35 18.44 1.5 15.586 1.472 12.01v-.017c.03-3.579.879-6.43 2.525-8.482C5.845 1.205 8.6.024 12.18 0h.014c2.746.02 5.043.725 6.826 2.098 1.677 1.291 2.858 3.13 3.509 5.467l-2.04.569c-1.104-3.96-3.898-5.984-8.304-6.015-2.91.022-5.11.936-6.54 2.717C4.307 6.504 3.616 8.914 3.589 12c.027 3.086.718 5.496 2.057 7.164 1.43 1.783 3.631 2.698 6.54 2.717 2.623-.02 4.358-.631 5.8-2.045 1.647-1.613 1.618-3.593 1.09-4.798-.31-.71-.873-1.3-1.634-1.75-.192 1.352-.622 2.446-1.284 3.272-.886 1.102-2.14 1.704-3.73 1.79-1.202.065-2.361-.218-3.259-.801-1.063-.689-1.685-1.74-1.752-2.964-.065-1.19.408-2.285 1.33-3.082.88-.76 2.119-1.207 3.583-1.291a13.85 13.85 0 0 1 3.02.142c-.126-.742-.375-1.332-.75-1.757-.513-.586-1.308-.883-2.359-.89h-.029c-.844 0-1.992.232-2.721 1.32L7.734 7.847c.98-1.454 2.568-2.256 4.478-2.256h.044c3.194.02 5.097 1.975 5.287 5.388.108.046.216.094.321.142 1.49.7 2.58 1.761 3.154 3.07.797 1.82.871 4.79-1.548 7.158-1.85 1.81-4.094 2.628-7.277 2.65Zm1.003-11.69c-.242 0-.487.007-.739.021-1.836.103-2.98.946-2.916 2.143.067 1.256 1.452 1.839 2.784 1.767 1.224-.065 2.818-.543 3.086-3.71a10.5 10.5 0 0 0-2.215-.221z" />
+    </svg>
+  );
+}
+
+function BlueskyIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+      className={className}
+    >
+      <path d="M5.769 2.762C8.164 4.548 10.746 8.17 11.694 10.114c.948-1.943 3.53-5.566 5.925-7.352C19.343 1.474 22 .414 22 3.44c0 .603-.346 5.068-.549 5.792-.705 2.516-3.27 3.158-5.55 2.77 3.985.678 4.997 2.923 2.808 5.168-4.157 4.263-5.975-1.07-6.442-2.437-.086-.25-.125-.367-.126-.267-.001-.1-.04.017-.126.267-.467 1.367-2.285 6.7-6.442 2.437-2.19-2.245-1.177-4.49 2.808-5.168-2.28.388-4.845-.254-5.55-2.77C1.076 8.508.73 4.043.73 3.44c0-3.026 2.657-1.966 4.381-.678z" />
+    </svg>
+  );
+}
+
+function TelegramIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+      className={className}
+    >
+      <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z" />
+    </svg>
+  );
+}
+
+function WhatsAppIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+      className={className}
+    >
+      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z" />
+    </svg>
+  );
+}
+
+function RedditIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+      className={className}
+    >
+      <path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.11 3.11 0 0 1 .042.52c0 2.694-3.13 4.87-6.994 4.87-3.865 0-6.994-2.176-6.994-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12c-.688 0-1.25.562-1.25 1.25 0 .687.562 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z" />
+    </svg>
+  );
+}
+
+function PinterestIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+      className={className}
+    >
+      <path d="M12.017 0C5.396 0 .029 5.367.029 11.987c0 5.079 3.158 9.417 7.618 11.162-.105-.949-.199-2.403.041-3.439.219-.937 1.406-5.957 1.406-5.957s-.359-.72-.359-1.781c0-1.663.967-2.911 2.168-2.911 1.024 0 1.518.769 1.518 1.688 0 1.029-.653 2.567-.992 3.992-.285 1.193.6 2.165 1.775 2.165 2.128 0 3.768-2.245 3.768-5.487 0-2.861-2.063-4.869-5.008-4.869-3.41 0-5.409 2.562-5.409 5.199 0 1.033.394 2.143.889 2.741.099.12.112.225.085.345-.09.375-.293 1.199-.334 1.363-.053.225-.172.271-.401.165-1.495-.69-2.433-2.878-2.433-4.646 0-3.776 2.748-7.252 7.92-7.252 4.158 0 7.392 2.967 7.392 6.923 0 4.135-2.607 7.462-6.233 7.462-1.214 0-2.354-.629-2.758-1.379l-.749 2.848c-.269 1.045-1.004 2.352-1.498 3.146 1.123.345 2.306.535 3.55.535 6.607 0 11.985-5.365 11.985-11.987C23.97 5.39 18.592.026 11.985.026L12.017 0z" />
+    </svg>
+  );
+}
+
+function SnapchatIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+      className={className}
+    >
+      <path d="M12.206.793c.99 0 4.347.276 5.93 3.821.529 1.193.403 3.219.299 4.847l-.003.06c-.012.18-.022.345-.03.51.075.045.203.09.401.09.3-.016.659-.12 1.033-.301.165-.088.344-.104.464-.104.182 0 .359.029.509.09.45.149.734.479.734.838.015.449-.39.839-1.213 1.168-.089.029-.209.075-.344.119-.45.135-1.139.36-1.333.81-.09.212-.061.494.09.808l.015.03c.06.136 1.526 3.475 4.791 4.014.255.044.435.27.42.509 0 .075-.015.149-.045.225-.24.569-1.273.988-3.146 1.271-.059.091-.12.375-.164.57-.029.135-.061.271-.105.42-.056.199-.194.3-.44.3h-.017c-.126 0-.28-.028-.462-.061-.257-.045-.575-.09-.978-.09-.226 0-.457.015-.69.061-.442.076-.815.375-1.243.734-.646.539-1.394 1.169-2.694 1.169-.06 0-.12-.005-.164-.008-.09.005-.15.008-.24.008-1.3 0-2.049-.63-2.694-1.169-.428-.359-.801-.658-1.243-.734-.233-.046-.464-.061-.69-.061-.403 0-.721.045-.978.09-.181.033-.335.061-.462.061h-.017c-.245 0-.384-.101-.44-.3-.044-.149-.076-.285-.105-.42-.044-.195-.105-.479-.164-.57-1.873-.283-2.906-.702-3.146-1.271-.03-.076-.045-.15-.045-.225-.015-.239.165-.465.42-.509 3.265-.539 4.731-3.878 4.791-4.014l.015-.03c.151-.314.18-.596.09-.808-.194-.45-.883-.675-1.333-.81-.135-.044-.255-.09-.344-.119-.823-.329-1.228-.719-1.213-1.168 0-.359.284-.689.734-.838.15-.061.327-.09.509-.09.12 0 .299.016.464.104.374.181.733.285 1.033.301.198 0 .326-.045.401-.09-.008-.165-.018-.33-.03-.51l-.003-.06c-.104-1.628-.23-3.654.299-4.847C7.859 1.069 11.216.793 12.206.793z" />
+    </svg>
+  );
+}
+
 export interface Platform {
   key: string;
   label: string;
@@ -633,12 +803,82 @@ export const PLATFORMS: Platform[] = [
     match: /instagram\.com/i,
   },
   {
+    key: "facebook",
+    label: "Facebook",
+    icon: FacebookIcon,
+    prefix: "https://www.facebook.com/",
+    match: /facebook\.com|fb\.(com|me)/i,
+    color: "#1877f2",
+  },
+  {
+    key: "threads",
+    label: "Threads",
+    icon: ThreadsIcon,
+    prefix: "https://www.threads.net/@",
+    match: /threads\.net/i,
+  },
+  {
+    key: "bluesky",
+    label: "Bluesky",
+    icon: BlueskyIcon,
+    prefix: "https://bsky.app/profile/",
+    match: /bsky\.app/i,
+    color: "#0085ff",
+  },
+  {
+    key: "pinterest",
+    label: "Pinterest",
+    icon: PinterestIcon,
+    prefix: "https://www.pinterest.com/",
+    match: /pinterest\.com/i,
+    color: "#e60023",
+  },
+  {
+    key: "snapchat",
+    label: "Snapchat",
+    icon: SnapchatIcon,
+    prefix: "https://www.snapchat.com/add/",
+    match: /snapchat\.com/i,
+  },
+  {
+    key: "reddit",
+    label: "Reddit",
+    icon: RedditIcon,
+    prefix: "https://www.reddit.com/user/",
+    match: /reddit\.com/i,
+    color: "#ff4500",
+  },
+  {
+    key: "spotify",
+    label: "Spotify",
+    icon: SpotifyIcon,
+    prefix: "https://open.spotify.com/artist/",
+    match: /spotify\.com/i,
+    color: "#1db954",
+  },
+  {
     key: "discord",
     label: "Discord",
     icon: DiscordIcon,
     prefix: "https://discord.gg/",
     match: /discord\.(gg|com)/i,
     color: "#5865f2",
+  },
+  {
+    key: "telegram",
+    label: "Telegram",
+    icon: TelegramIcon,
+    prefix: "https://t.me/",
+    match: /t\.me|telegram\.(me|org)/i,
+    color: "#26a5e4",
+  },
+  {
+    key: "whatsapp",
+    label: "WhatsApp",
+    icon: WhatsAppIcon,
+    prefix: "https://wa.me/",
+    match: /wa\.me|whatsapp\.com/i,
+    color: "#25d366",
   },
   {
     key: "x",
@@ -662,6 +902,14 @@ export const PLATFORMS: Platform[] = [
     prefix: "https://www.patreon.com/",
     match: /patreon\.com/i,
     color: "#f96854",
+  },
+  {
+    key: "linkedin",
+    label: "LinkedIn",
+    icon: LinkedInIcon,
+    prefix: "https://www.linkedin.com/in/",
+    match: /linkedin\.com/i,
+    color: "#0a66c2",
   },
   {
     key: "github",
@@ -734,18 +982,31 @@ function alignToJustify(
  * the fill (or the inherited theme color when the box background is off). When
  * `trackUsername` is set (public views only), clicks are recorded for analytics.
  */
+/** Best-effort hostname for a link URL (falls back to the raw href). */
+function linkHostname(href: string): string {
+  try {
+    return new URL(href).hostname.replace(/^www\./, "");
+  } catch {
+    return href;
+  }
+}
+
 export function LinkAnchor({
   link,
   box = DEFAULT_LINK_BOX,
   textStyle,
   isDark = false,
   trackUsername,
+  enablePreview = false,
 }: {
   link: LinkItem;
   box?: BoxStyle;
   textStyle?: TextStyle;
   isDark?: boolean;
   trackUsername?: string;
+  // When set, clicking the box opens a preview card first (instead of
+  // navigating); clicking the card opens the site in a new tab.
+  enablePreview?: boolean;
 }) {
   const platform = getPlatform(link.href);
   const Icon = platform?.icon;
@@ -762,45 +1023,124 @@ export function LinkAnchor({
     : bgOff
       ? undefined
       : contrastText(resolved.color);
-  return (
-    <a
-      href={link.href}
-      target="_blank"
-      rel="noopener noreferrer"
-      onClick={
-        trackUsername
-          ? () => recordClick(trackUsername, link.id, link.label)
-          : undefined
+
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  // Close the preview on outside click or Escape.
+  useEffect(() => {
+    if (!previewOpen) return;
+    function onDown(e: MouseEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
+        setPreviewOpen(false);
       }
-      style={{
-        ...boxCss(resolved),
-        color: textColor,
-        fontFamily: ts?.fontFamily ? FONTS[ts.fontFamily]?.family : undefined,
-        fontSize: ts?.fontSize ? `${ts.fontSize}px` : undefined,
-        fontWeight: ts ? (ts.bold ? 700 : 400) : undefined,
-        fontStyle: ts?.italic ? "italic" : undefined,
-        textDecoration: ts?.underline ? "underline" : undefined,
-        justifyContent: alignToJustify(ts?.align),
-      }}
-      className="flex w-full items-center gap-2 rounded-md px-4 py-3 text-center text-sm font-medium transition-all hover:opacity-90 hover:shadow-sm"
-    >
-      {link.logo ? (
-        // biome-ignore lint/performance/noImgElement: small inline data-URL logo; next/image adds no value
-        <img src={link.logo} alt="" className="size-4 object-contain" />
-      ) : Icon ? (
-        <BrandIcon icon={Icon} color={platform?.color} className="size-4" />
-      ) : null}
-      {ts?.animation && ts.animation !== "none" ? (
-        <span
-          className={textAnimClass(ts)}
-          style={{ "--text-c": textColor ?? "#ffffff" } as CSSProperties}
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setPreviewOpen(false);
+    }
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [previewOpen]);
+
+  const boxStyle: CSSProperties = {
+    ...boxCss(resolved),
+    color: textColor,
+    fontFamily: ts?.fontFamily ? FONTS[ts.fontFamily]?.family : undefined,
+    fontSize: ts?.fontSize ? `${ts.fontSize}px` : undefined,
+    fontWeight: ts ? (ts.bold ? 700 : 400) : undefined,
+    fontStyle: ts?.italic ? "italic" : undefined,
+    textDecoration: ts?.underline ? "underline" : undefined,
+    justifyContent: alignToJustify(ts?.align),
+  };
+  const boxClassName =
+    "flex w-full items-center gap-2 rounded-md px-4 py-3 text-center text-sm font-medium transition-all hover:opacity-90 hover:shadow-sm";
+  const iconEl = link.logo ? (
+    // biome-ignore lint/performance/noImgElement: small inline data-URL logo; next/image adds no value
+    <img src={link.logo} alt="" className="size-4 object-contain" />
+  ) : Icon ? (
+    <BrandIcon icon={Icon} color={platform?.color} className="size-4" />
+  ) : null;
+  const labelEl =
+    ts?.animation && ts.animation !== "none" ? (
+      <span
+        className={textAnimClass(ts)}
+        style={{ "--text-c": textColor ?? "#ffffff" } as CSSProperties}
+      >
+        {link.label}
+      </span>
+    ) : (
+      link.label
+    );
+
+  // Default behavior: the box is a plain link that opens in a new tab.
+  if (!enablePreview) {
+    return (
+      <a
+        href={link.href}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={
+          trackUsername
+            ? () => recordClick(trackUsername, link.id, link.label)
+            : undefined
+        }
+        style={boxStyle}
+        className={boxClassName}
+      >
+        {iconEl}
+        {labelEl}
+      </a>
+    );
+  }
+
+  // Preview mode: the box toggles a preview card; the card is the real link.
+  return (
+    <div ref={wrapRef} className="relative w-full">
+      <button
+        type="button"
+        aria-expanded={previewOpen}
+        onClick={() => setPreviewOpen((v) => !v)}
+        style={boxStyle}
+        className={cn(boxClassName, "cursor-pointer")}
+      >
+        {iconEl}
+        {labelEl}
+      </button>
+
+      {previewOpen ? (
+        <a
+          href={link.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={() => {
+            if (trackUsername) recordClick(trackUsername, link.id, link.label);
+            setPreviewOpen(false);
+          }}
+          className="absolute top-full left-0 z-30 mt-2 flex w-full animate-pop items-center gap-3 rounded-xl border border-border bg-popover p-3 text-left text-popover-foreground shadow-xl transition-all hover:shadow-2xl"
         >
-          {link.label}
-        </span>
-      ) : (
-        link.label
-      )}
-    </a>
+          {/* Favicon of the destination site. */}
+          {/* biome-ignore lint/performance/noImgElement: tiny remote favicon; next/image adds no value */}
+          <img
+            src={`https://www.google.com/s2/favicons?domain=${encodeURIComponent(linkHostname(link.href))}&sz=64`}
+            alt=""
+            className="size-9 shrink-0 rounded-md bg-muted object-contain p-1"
+          />
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span className="truncate text-sm font-semibold">{link.label}</span>
+            <span className="truncate text-xs text-muted-foreground">
+              {linkHostname(link.href)}
+            </span>
+          </span>
+          <span className="shrink-0 text-xs font-medium text-muted-foreground">
+            Open ↗
+          </span>
+        </a>
+      ) : null}
+    </div>
   );
 }
 
@@ -875,7 +1215,7 @@ function speedToDuration(speed: number): string {
 /**
  * Full-viewport background layer behind the page content. Renders nothing for
  * the default (so the theme's own background shows through). Static fills and
- * gradients are a single styled div; aurora/chroma/media get their own markup.
+ * gradients are a single styled div; starfield/media get their own markup.
  */
 export function PageBackground({ bg }: { bg?: Background }) {
   if (!bg || bg.type === "default") return null;
@@ -904,34 +1244,6 @@ export function PageBackground({ bg }: { bg?: Background }) {
     );
   }
 
-  if (bg.type === "aurora") {
-    const base = speedToSeconds(bg.speed);
-    const cols = bg.colors.length ? bg.colors : ["#4ade80"];
-    // Curtain footprint on a 1–10 scale → 32.5%–100% of the viewport.
-    const sizePct = 25 + Math.max(1, Math.min(10, bg.size)) * 7.5;
-    // Five overlapping curtains cycle through the chosen colors; slightly
-    // different durations per curtain keep the sway organic rather than synced.
-    return (
-      <div aria-hidden className="aurora-layer">
-        {[0, 1, 2, 3, 4].map((i) => {
-          const c = cols[i % cols.length];
-          return (
-            <div
-              key={i}
-              className={`aurora-curtain aurora-curtain-${i}`}
-              style={{
-                width: `${sizePct * 0.85}%`,
-                height: `${sizePct + 25}%`,
-                background: `linear-gradient(to bottom, ${c}00 0%, ${c} 42%, ${c}00 88%)`,
-                animationDuration: base === 0 ? "0s" : `${base + i}s`,
-              }}
-            />
-          );
-        })}
-      </div>
-    );
-  }
-
   if (bg.type === "starfield") {
     return (
       <div
@@ -942,21 +1254,26 @@ export function PageBackground({ bg }: { bg?: Background }) {
     );
   }
 
-  // media
-  const frame: CSSProperties = {
-    objectPosition: `${bg.posX}% ${bg.posY}%`,
-    transform: `scale(${bg.zoom})`,
-  };
-  return (
-    <div aria-hidden className="media-layer">
-      {bg.kind === "video" ? (
-        <video src={bg.src} autoPlay muted loop playsInline style={frame} />
-      ) : (
-        // biome-ignore lint/performance/noImgElement: user-provided data-URL background
-        <img src={bg.src} alt="" style={frame} />
-      )}
-    </div>
-  );
+  if (bg.type === "media") {
+    const frame: CSSProperties = {
+      objectPosition: `${bg.posX}% ${bg.posY}%`,
+      transform: `scale(${bg.zoom})`,
+    };
+    return (
+      <div aria-hidden className="media-layer">
+        {bg.kind === "video" ? (
+          <video src={bg.src} autoPlay muted loop playsInline style={frame} />
+        ) : (
+          // biome-ignore lint/performance/noImgElement: user-provided data-URL background
+          <img src={bg.src} alt="" style={frame} />
+        )}
+      </div>
+    );
+  }
+
+  // Unknown/legacy type (e.g. a since-removed background) → fall back to the
+  // theme's own background.
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -1201,6 +1518,7 @@ export function ProfileView({
                 textStyle={data.linkStyle}
                 isDark={isDark}
                 trackUsername={username}
+                enablePreview
               />
             ))}
           </div>

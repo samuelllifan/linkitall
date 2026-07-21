@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { ProfileView } from "~/components/profile-view";
+import { ShareButton } from "~/components/share-button";
 import { getPageServer, getPublicPageServer } from "~/lib/pages.server";
 import { createClient } from "~/lib/supabase/server";
 import { plainText } from "~/lib/text";
@@ -61,7 +62,9 @@ export default async function UserPage({
     const myUsername = (data?.username as string | null) ?? null;
     if (myUsername && myUsername.toLowerCase() === username.toLowerCase()) {
       const initialData = await getPageServer();
-      return <MyPageClient initialData={initialData} />;
+      return (
+        <MyPageClient initialData={initialData} email={user.email ?? null} />
+      );
     }
   }
 
@@ -72,6 +75,7 @@ export default async function UserPage({
 
   return (
     <main className="mx-auto flex min-h-[calc(100vh-3.5rem)] w-full max-w-lg flex-col items-center justify-center px-6 pt-16 pb-28">
+      <ShareButton />
       <ProfileView data={page.data} username={page.username} />
     </main>
   );
