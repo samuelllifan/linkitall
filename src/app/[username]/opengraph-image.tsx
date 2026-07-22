@@ -1,12 +1,73 @@
 import { createClient } from "@supabase/supabase-js";
 import { ImageResponse } from "next/og";
 import { env } from "~/env";
+import type { Background } from "~/lib/pages";
 import { plainText } from "~/lib/text";
 
 export const runtime = "nodejs";
 export const alt = "Profile on linkitall";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
+
+// The card's default fill when a page has no custom background (or one Satori
+// can't render, like starfield/video) — matches the app's dark theme.
+const DEFAULT_BG =
+  "linear-gradient(135deg, #140b2e 0%, #0b0b12 55%, #1a0f2e 100%)";
+
+/**
+ * Translate a page's saved `background` into inline styles Satori can render,
+ * so the share card matches what visitors actually see on the page. Returns the
+ * background style plus a foreground color legible on top of it.
+ */
+function resolveBackground(bg?: Background): {
+  style: Record<string, string>;
+  fg: string;
+} {
+  if (bg?.type === "custom") {
+    return { style: { backgroundColor: bg.color }, fg: readableText(bg.color) };
+  }
+  if (bg?.type === "gradient") {
+    const dir = bg.direction === "horizontal" ? "to right" : "to bottom";
+    const mid = bg.distribution ?? 50;
+    return {
+      style: {
+        backgroundImage: `linear-gradient(${dir}, ${bg.from}, ${mid}%, ${bg.to})`,
+      },
+      // The "linkitall" label sits at the gradient's start (top or left),
+      // which is `from` for both directions — base legibility on it.
+      fg: readableText(bg.from),
+    };
+  }
+  if (
+    bg?.type === "media" &&
+    bg.kind === "image" &&
+    bg.src.startsWith("http")
+  ) {
+    return {
+      style: {
+        backgroundImage: `url(${bg.src})`,
+        backgroundSize: "cover",
+        backgroundPosition: `${bg.posX}% ${bg.posY}%`,
+      },
+      fg: "#ffffff",
+    };
+  }
+  // default, starfield, and video (which Satori can't rasterize) fall back.
+  return { style: { backgroundImage: DEFAULT_BG }, fg: "#ffffff" };
+}
+
+/** Black or white text, whichever contrasts better with a hex background. */
+function readableText(hex: string): string {
+  const m = /^#?([\da-f]{6})$/i.exec(hex.trim());
+  if (!m) return "#ffffff";
+  const n = Number.parseInt(m[1], 16);
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  // Relative luminance (sRGB coefficients); dark text on light backgrounds.
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.6 ? "#0b0b12" : "#ffffff";
+}
 
 // A shared card shown when a page URL is posted to social/chat. Rendered from a
 // cookieless anon client (the public-page RPC is anon-accessible), so it works
@@ -21,6 +82,7 @@ export default async function OpengraphImage({
   let name = `@${username}`;
   let tagline = "";
   let avatar: string | null = null;
+  let background: Background | undefined;
 
   try {
     const sb = createClient(
@@ -37,12 +99,17 @@ export default async function OpengraphImage({
       const a = (row.avatar as string | null) ?? null;
       // Satori can embed https and data:image sources; skip anything else.
       if (a && (a.startsWith("http") || a.startsWith("data:image"))) avatar = a;
+      background = (row.styles as { background?: Background } | null)
+        ?.background;
     }
   } catch {
     // Fall back to the username-only card below.
   }
 
   const initial = name.replace(/^@/, "").charAt(0).toUpperCase() || "?";
+  const { style: bgStyle, fg } = resolveBackground(background);
+  // Muted variants of the foreground for the secondary lines.
+  const mutedRgb = fg === "#ffffff" ? "255,255,255" : "11,11,18";
 
   return new ImageResponse(
     <div
@@ -53,9 +120,8 @@ export default async function OpengraphImage({
         flexDirection: "column",
         justifyContent: "space-between",
         padding: "72px",
-        color: "#ffffff",
-        backgroundImage:
-          "linear-gradient(135deg, #140b2e 0%, #0b0b12 55%, #1a0f2e 100%)",
+        color: fg,
+        ...bgStyle,
       }}
     >
       <div style={{ display: "flex", fontSize: 34, fontWeight: 700 }}>
@@ -83,7 +149,7 @@ export default async function OpengraphImage({
               justifyContent: "center",
               fontSize: 110,
               fontWeight: 700,
-              background: "rgba(255,255,255,0.12)",
+              background: `rgba(${mutedRgb},0.12)`,
             }}
           >
             {initial}
@@ -112,7 +178,7 @@ export default async function OpengraphImage({
                 display: "flex",
                 marginTop: 20,
                 fontSize: 38,
-                color: "rgba(255,255,255,0.75)",
+                color: `rgba(${mutedRgb},0.75)`,
                 lineHeight: 1.25,
               }}
             >
@@ -126,10 +192,10 @@ export default async function OpengraphImage({
         style={{
           display: "flex",
           fontSize: 30,
-          color: "rgba(255,255,255,0.6)",
+          color: `rgba(${mutedRgb},0.6)`,
         }}
       >
-        linkitall.net/{username}
+        linkitall.vercel.app/{username}
       </div>
     </div>,
     { ...size },

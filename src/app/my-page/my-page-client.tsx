@@ -21,9 +21,12 @@ import {
   DEFAULT_NAME_BOX,
   DEFAULT_NAME_STYLE,
   DEFAULT_PANEL,
+  discordUsername,
+  effectiveBoxColor,
   FONTS,
   GlassFilter,
   getPlatform,
+  isDiscordLink,
   LinkAnchor,
   LinkIconAnchor,
   PageBackground,
@@ -165,7 +168,7 @@ function FontSizeInput({
         onKeyDown={(e) => {
           if (e.key === "Enter") commit((e.target as HTMLInputElement).value);
         }}
-        className="h-8 w-16 rounded-md border border-input bg-transparent px-2 text-sm outline-none"
+        className="h-8 w-14 rounded-md border border-input bg-transparent px-2 text-sm outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
       />
       <datalist id={listId}>
         {FONT_SIZES.map((s) => (
@@ -472,7 +475,9 @@ function uid(): string {
  */
 function isBlankHref(href: string): boolean {
   const t = href.trim();
-  return t === "" || /^https?:\/\/$/i.test(t);
+  // A bare scheme with nothing after it (an unfinished URL, or a Discord link
+  // with no username yet) counts as blank.
+  return t === "" || /^https?:\/\/$/i.test(t) || /^discord:$/i.test(t);
 }
 
 /**
@@ -2591,7 +2596,7 @@ export function MyPageClient({
     <div
       role="toolbar"
       aria-label="Text formatting"
-      className="flex flex-wrap items-center justify-center gap-1"
+      className="flex flex-wrap items-center justify-center gap-2"
       onMouseDown={(e) => {
         // Keep the focused field (and its selection) active when clicking
         // buttons; let selects/inputs receive focus normally.
@@ -2601,90 +2606,89 @@ export function MyPageClient({
         }
       }}
     >
-      {/* Font family */}
-      <select
-        value={activeStyle.fontFamily ?? "inter"}
-        onChange={(e) => setActiveStyle({ fontFamily: e.target.value })}
-        aria-label="Font"
-        className="h-8 rounded-md border border-input bg-transparent px-2 text-sm outline-none"
-      >
-        {Object.entries(FONTS).map(([key, f]) => (
-          <option key={key} value={key}>
-            {f.label}
-          </option>
-        ))}
-      </select>
-
-      {/* Font size */}
-      <FontSizeInput
-        value={activeStyle.fontSize ?? 16}
-        onChange={(size) => setActiveStyle({ fontSize: size })}
-        ariaLabel="Font size"
-        listId="text-font-sizes"
-      />
-      <span className="mx-1 h-5 w-px bg-border" />
-
-      {/* Bold / Italic / Underline — per-character */}
-      <Button
-        type="button"
-        variant={inlineFmt.bold ? "default" : "ghost"}
-        size="icon-sm"
-        onClick={() => applyInline("bold")}
-        aria-label="Bold"
-        aria-pressed={inlineFmt.bold}
-        className="font-bold"
-      >
-        B
-      </Button>
-      <Button
-        type="button"
-        variant={inlineFmt.italic ? "default" : "ghost"}
-        size="icon-sm"
-        onClick={() => applyInline("italic")}
-        aria-label="Italic"
-        aria-pressed={inlineFmt.italic}
-        className="italic"
-      >
-        I
-      </Button>
-      <Button
-        type="button"
-        variant={inlineFmt.underline ? "default" : "ghost"}
-        size="icon-sm"
-        onClick={() => applyInline("underline")}
-        aria-label="Underline"
-        aria-pressed={inlineFmt.underline}
-        className="underline"
-      >
-        U
-      </Button>
-      <span className="mx-1 h-5 w-px bg-border" />
-
-      {/* Alignment — whole field */}
-      {(["left", "center", "right"] as const).map((a) => (
-        <Button
-          key={a}
-          type="button"
-          variant={activeStyle.align === a ? "default" : "ghost"}
-          size="icon-sm"
-          onClick={() => setActiveStyle({ align: a })}
-          aria-label={`Align ${a}`}
-          aria-pressed={activeStyle.align === a}
+      {/* Font family + size — one group so they wrap together, never apart. */}
+      <div className="flex shrink-0 items-center gap-1">
+        <select
+          value={activeStyle.fontFamily ?? "inter"}
+          onChange={(e) => setActiveStyle({ fontFamily: e.target.value })}
+          aria-label="Font"
+          className="h-8 max-w-[8rem] rounded-md border border-current/20 bg-transparent px-2 text-sm outline-none"
         >
-          <AlignIcon variant={a} className="size-4" />
-        </Button>
-      ))}
-      <span className="mx-1 h-5 w-px bg-border" />
+          {Object.entries(FONTS).map(([key, f]) => (
+            <option key={key} value={key}>
+              {f.label}
+            </option>
+          ))}
+        </select>
+        <FontSizeInput
+          value={activeStyle.fontSize ?? 16}
+          onChange={(size) => setActiveStyle({ fontSize: size })}
+          ariaLabel="Font size"
+          listId="text-font-sizes"
+        />
+      </div>
 
-      {/* Text color — per-character */}
-      <ColorPicker
-        value={textColor}
-        onChange={(c) => {
-          setTextColor(c);
-          applyColor(c);
-        }}
-        ariaLabel="Text color"
-      />
+      {/* Formatting controls — bold/italic/underline, alignment, and color kept
+          together as one non-wrapping group so they always share a row (dropping
+          to the next line as a whole unit, never splitting the alignment set). */}
+      <div className="flex shrink-0 items-center gap-1">
+        <Button
+          type="button"
+          variant={inlineFmt.bold ? "default" : "ghost"}
+          size="icon-sm"
+          onClick={() => applyInline("bold")}
+          aria-label="Bold"
+          aria-pressed={inlineFmt.bold}
+          className="font-bold"
+        >
+          B
+        </Button>
+        <Button
+          type="button"
+          variant={inlineFmt.italic ? "default" : "ghost"}
+          size="icon-sm"
+          onClick={() => applyInline("italic")}
+          aria-label="Italic"
+          aria-pressed={inlineFmt.italic}
+          className="italic"
+        >
+          I
+        </Button>
+        <Button
+          type="button"
+          variant={inlineFmt.underline ? "default" : "ghost"}
+          size="icon-sm"
+          onClick={() => applyInline("underline")}
+          aria-label="Underline"
+          aria-pressed={inlineFmt.underline}
+          className="underline"
+        >
+          U
+        </Button>
+        <span className="mx-0.5 h-5 w-px bg-current/20" />
+        {(["left", "center", "right"] as const).map((a) => (
+          <Button
+            key={a}
+            type="button"
+            variant={activeStyle.align === a ? "default" : "ghost"}
+            size="icon-sm"
+            onClick={() => setActiveStyle({ align: a })}
+            aria-label={`Align ${a}`}
+            aria-pressed={activeStyle.align === a}
+          >
+            <AlignIcon variant={a} className="size-4" />
+          </Button>
+        ))}
+        <span className="mx-0.5 h-5 w-px bg-current/20" />
+        <ColorPicker
+          value={textColor}
+          onChange={(c) => {
+            setTextColor(c);
+            applyColor(c);
+          }}
+          ariaLabel="Text color"
+        />
+      </div>
     </div>
   );
 
@@ -2737,19 +2741,56 @@ export function MyPageClient({
             style={styleToCss(linkTextStyle(link), isDark)}
             className={textAnimClass(linkTextStyle(link))}
           />
-          <Input
-            value={link.href}
-            onChange={(e) => {
-              updateLink(link.id, { href: e.target.value });
-              // Clear the blank-flash flag as soon as they start typing.
-              setFlashLinkIds((ids) => ids.filter((id) => id !== link.id));
-            }}
-            onAnimationEnd={() =>
-              setFlashLinkIds((ids) => ids.filter((id) => id !== link.id))
-            }
-            placeholder="https://..."
-            className={cn(flashLinkIds.includes(link.id) && "animate-flash")}
-          />
+          {isDiscordLink(link.href) ? (
+            // Discord stores a username (copied on click), not a URL.
+            <div className="flex items-center gap-2">
+              <Input
+                value={discordUsername(link.href)}
+                onChange={(e) => {
+                  updateLink(link.id, { href: `discord:${e.target.value}` });
+                  setFlashLinkIds((ids) => ids.filter((id) => id !== link.id));
+                }}
+                onAnimationEnd={() =>
+                  setFlashLinkIds((ids) => ids.filter((id) => id !== link.id))
+                }
+                placeholder="Discord username"
+                aria-label="Discord username"
+                className={cn(
+                  flashLinkIds.includes(link.id) && "animate-flash",
+                )}
+              />
+              <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-muted/60 px-2.5 py-1 font-medium text-[11px] text-muted-foreground">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                  className="size-3"
+                >
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                </svg>
+                Copied on click
+              </span>
+            </div>
+          ) : (
+            <Input
+              value={link.href}
+              onChange={(e) => {
+                updateLink(link.id, { href: e.target.value });
+                // Clear the blank-flash flag as soon as they start typing.
+                setFlashLinkIds((ids) => ids.filter((id) => id !== link.id));
+              }}
+              onAnimationEnd={() =>
+                setFlashLinkIds((ids) => ids.filter((id) => id !== link.id))
+              }
+              placeholder="https://..."
+              className={cn(flashLinkIds.includes(link.id) && "animate-flash")}
+            />
+          )}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1">
               {isCustom ? (
@@ -2826,10 +2867,11 @@ export function MyPageClient({
           {fontOpen === link.id ? (
             <div
               style={{
-                backgroundColor: resolveLinkBox(link, linkBox).color,
-                color: contrastText(resolveLinkBox(link, linkBox).color),
+                color: contrastText(
+                  effectiveBoxColor(resolveLinkBox(link, linkBox), isDark),
+                ),
               }}
-              className="rounded-md border border-input p-3 animate-slide-up"
+              className="rounded-md border border-current/15 p-3 animate-slide-up"
             >
               <TextStyleEditor
                 style={linkTextStyle(link)}
@@ -3010,10 +3052,9 @@ export function MyPageClient({
                   {fontOpen === "name" ? (
                     <div
                       style={{
-                        backgroundColor: nameBox.color,
-                        color: contrastText(nameBox.color),
+                        color: contrastText(effectiveBoxColor(nameBox, isDark)),
                       }}
-                      className="border-t border-input p-2 animate-slide-up"
+                      className="border-t border-current/15 p-2 animate-slide-up"
                     >
                       {formatToolbar}
                     </div>
@@ -3093,10 +3134,9 @@ export function MyPageClient({
                   {fontOpen === "bio" ? (
                     <div
                       style={{
-                        backgroundColor: bioBox.color,
-                        color: contrastText(bioBox.color),
+                        color: contrastText(effectiveBoxColor(bioBox, isDark)),
                       }}
-                      className="border-t border-input p-2 animate-slide-up"
+                      className="border-t border-current/15 p-2 animate-slide-up"
                     >
                       {formatToolbar}
                     </div>

@@ -74,8 +74,22 @@
   * {
     @apply border-border;
   }
+  html {
+    /* Stop the elastic rubber-band at the scroll boundaries. It let the sticky
+       navbar bounce down over the fixed edit-mode controls (Background /
+       Templates) when scrolling up fast, causing a brief overlap. */
+    overscroll-behavior-y: none;
+  }
   body {
     @apply bg-background text-foreground;
+  }
+  /* Native <select> dropdown lists use OS-default colors on Windows / Linux, so
+     the theme's light option text lands on a white system list and reads as
+     invisible. Pin option colors to the theme so choices stay legible on every
+     platform (macOS ignores these and styles the popup natively — also fine). */
+  option {
+    background-color: var(--popover);
+    color: var(--popover-foreground);
   }
   /* Theme switching: fade surfaces (backgrounds, borders) on one shared clock
      so boxes flip together instead of in stages. Text and icon colors are

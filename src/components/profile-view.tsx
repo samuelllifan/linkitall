@@ -19,6 +19,7 @@ import {
   type ComponentType,
   type CSSProperties,
   type ReactNode,
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -188,6 +189,31 @@ export function contrastText(bg: string | undefined): string | undefined {
   return relLuminance(rgb) > 0.4 ? "#000000" : "#ffffff";
 }
 
+/**
+ * The solid color a box surface actually appears as — its color composited over
+ * the page background at its own opacity (or the page background itself when the
+ * box is off). Used so controls layered on a box (e.g. the text toolbar) can
+ * tint themselves to match what's visible above them instead of the raw color.
+ */
+export function effectiveBoxColor(box: BoxStyle, isDark: boolean): string {
+  const base = isDark ? { r: 10, g: 10, b: 10 } : { r: 255, g: 255, b: 255 };
+  const hex = (n: number) =>
+    Math.max(0, Math.min(255, Math.round(n)))
+      .toString(16)
+      .padStart(2, "0");
+  const toHex = (c: { r: number; g: number; b: number }) =>
+    `#${hex(c.r)}${hex(c.g)}${hex(c.b)}`;
+  if (box.enabled === false) return toHex(base);
+  const rgb = parseColor(box.color);
+  if (!rgb) return toHex(base);
+  const a = Math.max(0, Math.min(100, box.opacity)) / 100;
+  return toHex({
+    r: rgb.r * a + base.r * (1 - a),
+    g: rgb.g * a + base.g * (1 - a),
+    b: rgb.b * a + base.b * (1 - a),
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Box surfaces (card behind name/bio, link buttons)
 // ---------------------------------------------------------------------------
@@ -226,13 +252,21 @@ function withOpacity(color: string, opacity: number): string {
 
 /** Inline CSS (background + outline) for a box surface. `fill` overrides color. */
 export function boxCss(box: BoxStyle, fill?: string): CSSProperties {
-  // Background turned off → a fully transparent surface (no fill, no outline).
+  // `padding-box` keeps the fill from rendering under the antialiased rounded
+  // border. Without it, Windows Chromium (notably at fractional display
+  // scaling) leaves a bright hairline / square-looking artifact at the corners.
   if (box.enabled === false) {
-    return { backgroundColor: "transparent", border: "1px solid transparent" };
+    // Background turned off → a fully transparent surface (no fill, no outline).
+    return {
+      backgroundColor: "transparent",
+      border: "1px solid transparent",
+      backgroundClip: "padding-box",
+    };
   }
   return {
     backgroundColor: withOpacity(fill ?? box.color, box.opacity),
     border: `1px solid ${box.outline ? box.outlineColor : "transparent"}`,
+    backgroundClip: "padding-box",
   };
 }
 
@@ -619,7 +653,7 @@ function PayhipIcon({ className }: { className?: string }) {
       aria-hidden="true"
       className={className}
     >
-      <path d="M5.25 2.25a3 3 0 0 0-3 3v4.318a3 3 0 0 0 .879 2.121l9.58 9.581c.92.92 2.39.92 3.31 0l4.66-4.66c.92-.92.92-2.39 0-3.31l-9.58-9.581a3 3 0 0 0-2.12-.879H5.25ZM6.375 7.5a1.125 1.125 0 1 0 0-2.25 1.125 1.125 0 0 0 0 2.25Z" />
+      <path d="M3.695 0A3.696 3.696 0 0 0 0 3.695v12.92A7.384 7.384 0 0 0 7.385 24h12.92A3.696 3.696 0 0 0 24 20.305V0H3.695zm11.653 5.604a3.88 3.88 0 0 1 .166 0 3.88 3.88 0 0 1 2.677 1.132 3.88 3.88 0 0 1 0 5.48l-.36.356c-1.826-1.825-3.648-3.656-5.476-5.482l.358-.354a3.88 3.88 0 0 1 2.635-1.132zm-6.627.125a3.88 3.88 0 0 1 2.566 1c2.068 2.062 4.127 4.133 6.192 6.199l-5.481 5.482-6.19-6.203C3.549 9.7 5.346 5.702 8.722 5.729zm-1.744 1.71a.464.464 0 0 0-.465.465v1.817c0 .256.208.463.465.463h1.816a.464.464 0 0 0 .463-.463l.008-1.817A.464.464 0 0 0 8.8 7.44H6.977z" />
     </svg>
   );
 }
@@ -860,8 +894,11 @@ export const PLATFORMS: Platform[] = [
     key: "discord",
     label: "Discord",
     icon: DiscordIcon,
-    prefix: "https://discord.gg/",
-    match: /discord\.(gg|com)/i,
+    // A Discord handle isn't a navigable URL, so it's stored under a `discord:`
+    // scheme (see {@link discordUsername}) and clicking copies it instead of
+    // opening a link. The legacy invite-URL forms still resolve to Discord.
+    prefix: "discord:",
+    match: /^discord:|discord\.(gg|com)/i,
     color: "#5865f2",
   },
   {
@@ -932,6 +969,7 @@ export const PLATFORMS: Platform[] = [
     icon: PayhipIcon,
     prefix: "https://payhip.com/",
     match: /payhip\.com/i,
+    color: "#5c6ac4",
   },
   {
     key: "email",
@@ -945,6 +983,23 @@ export const PLATFORMS: Platform[] = [
 /** Resolve the platform (icon + brand color) from a link's URL. */
 export function getPlatform(href: string): Platform | undefined {
   return PLATFORMS.find((p) => p.match.test(href));
+}
+
+/**
+ * Discord links store a username under a `discord:` scheme instead of a URL,
+ * because a Discord handle isn't something you can navigate to — clicking it
+ * copies the username to the clipboard. Returns true for such links.
+ */
+export function isDiscordLink(href: string): boolean {
+  return /^discord:/i.test(href.trim());
+}
+
+/** The username portion of a `discord:` link ("" when none is set yet). */
+export function discordUsername(href: string): string {
+  return href
+    .trim()
+    .replace(/^discord:/i, "")
+    .trim();
 }
 
 /** Render a platform icon in its brand color (icons use `currentColor`). */
@@ -991,6 +1046,82 @@ function linkHostname(href: string): string {
   }
 }
 
+/**
+ * Copy-to-clipboard state with a short-lived "copied" flag, used to flash the
+ * "Link copied!" confirmation after a Discord username is copied.
+ */
+function useCopied(timeout = 1600) {
+  const [copied, setCopied] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    [],
+  );
+  const copy = useCallback(
+    (text: string) => {
+      // Confirm immediately for responsive feedback; the clipboard write may be
+      // blocked (e.g. an insecure context) but the interaction still registers.
+      setCopied(true);
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = setTimeout(() => setCopied(false), timeout);
+      void navigator.clipboard?.writeText(text).catch(() => {});
+    },
+    [timeout],
+  );
+  return { copied, copy };
+}
+
+/**
+ * Bottom-of-screen "Link copied!" toast, styled and animated like the editor's
+ * unsaved-changes bar: it slides up on `show`, then slides back down before
+ * unmounting so the exit is animated too.
+ */
+function CopiedToast({ show }: { show: boolean }) {
+  const [mounted, setMounted] = useState(show);
+  const [visible, setVisible] = useState(show);
+  useEffect(() => {
+    if (show) {
+      setMounted(true);
+      setVisible(true);
+      return;
+    }
+    setVisible(false);
+    const t = setTimeout(() => setMounted(false), 200);
+    return () => clearTimeout(t);
+  }, [show]);
+
+  if (!mounted) return null;
+  return (
+    <div
+      className={cn(
+        "pointer-events-none fixed inset-x-0 bottom-6 z-50 flex justify-center px-4",
+        visible ? "animate-slide-up" : "animate-slide-down",
+      )}
+    >
+      <div
+        role="status"
+        className="flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-foreground text-sm font-medium shadow-lg"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2.5}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+          className="size-4 text-green-500"
+        >
+          <path d="M20 6 9 17l-5-5" />
+        </svg>
+        Link copied!
+      </div>
+    </div>
+  );
+}
+
 export function LinkAnchor({
   link,
   box = DEFAULT_LINK_BOX,
@@ -1026,6 +1157,7 @@ export function LinkAnchor({
 
   const [previewOpen, setPreviewOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const { copied, copy } = useCopied();
 
   // Close the preview on outside click or Escape.
   useEffect(() => {
@@ -1075,6 +1207,30 @@ export function LinkAnchor({
     ) : (
       link.label
     );
+
+  // Discord: the href holds a username, not a URL. Clicking copies it and
+  // flashes a "Link copied!" confirmation instead of navigating.
+  if (isDiscordLink(link.href)) {
+    const username = discordUsername(link.href);
+    return (
+      <>
+        <button
+          type="button"
+          aria-label={`Copy Discord username ${username}`}
+          onClick={() => {
+            copy(username);
+            if (trackUsername) recordClick(trackUsername, link.id, link.label);
+          }}
+          style={boxStyle}
+          className={cn(boxClassName, "cursor-pointer")}
+        >
+          {iconEl}
+          {labelEl}
+        </button>
+        <CopiedToast show={copied} />
+      </>
+    );
+  }
 
   // Default behavior: the box is a plain link that opens in a new tab.
   if (!enablePreview) {
@@ -1162,6 +1318,45 @@ export function LinkIconAnchor({
   const fallbackColor = link.textStyle?.color
     ? adaptColor(link.textStyle.color, isDark)
     : undefined;
+  const { copied, copy } = useCopied();
+  const inner = link.logo ? (
+    // biome-ignore lint/performance/noImgElement: small inline data-URL logo; next/image adds no value
+    <img src={link.logo} alt="" className="size-8 object-contain" />
+  ) : Icon ? (
+    <BrandIcon icon={Icon} color={platform?.color} className="size-8" />
+  ) : (
+    <span
+      style={fallbackColor ? { color: fallbackColor } : undefined}
+      className="text-lg font-semibold"
+    >
+      {link.label.charAt(0).toUpperCase() || "?"}
+    </span>
+  );
+  const iconClassName =
+    "flex size-11 items-center justify-center rounded-md transition-transform hover:scale-110";
+
+  // Discord: copy the username instead of navigating, with a confirmation.
+  if (isDiscordLink(link.href)) {
+    const username = discordUsername(link.href);
+    return (
+      <>
+        <button
+          type="button"
+          aria-label={`Copy Discord username ${username}`}
+          title={link.label}
+          onClick={() => {
+            copy(username);
+            if (trackUsername) recordClick(trackUsername, link.id, link.label);
+          }}
+          className={cn(iconClassName, "cursor-pointer")}
+        >
+          {inner}
+        </button>
+        <CopiedToast show={copied} />
+      </>
+    );
+  }
+
   return (
     <a
       href={link.href}
@@ -1174,21 +1369,9 @@ export function LinkIconAnchor({
           ? () => recordClick(trackUsername, link.id, link.label)
           : undefined
       }
-      className="flex size-11 items-center justify-center rounded-md transition-transform hover:scale-110"
+      className={iconClassName}
     >
-      {link.logo ? (
-        // biome-ignore lint/performance/noImgElement: small inline data-URL logo; next/image adds no value
-        <img src={link.logo} alt="" className="size-8 object-contain" />
-      ) : Icon ? (
-        <BrandIcon icon={Icon} color={platform?.color} className="size-8" />
-      ) : (
-        <span
-          style={fallbackColor ? { color: fallbackColor } : undefined}
-          className="text-lg font-semibold"
-        >
-          {link.label.charAt(0).toUpperCase() || "?"}
-        </span>
-      )}
+      {inner}
     </a>
   );
 }

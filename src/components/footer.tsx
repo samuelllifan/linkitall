@@ -1,6 +1,6 @@
 export function Footer() {
   return (
-    <footer className="border-t border-border">
+    <footer className="relative z-10 border-t border-border bg-white dark:bg-black">
       <div className="flex w-full flex-col gap-8 px-6 py-12 sm:flex-row sm:justify-between">
         <div className="flex flex-col gap-2">
           <span className="font-medium text-foreground">linkitall</span>
