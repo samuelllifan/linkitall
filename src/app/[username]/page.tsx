@@ -63,7 +63,7 @@ export default async function UserPage({
     if (myUsername && myUsername.toLowerCase() === username.toLowerCase()) {
       const initialData = await getPageServer();
       return (
-        <MyPageClient initialData={initialData} email={user.email ?? null} />
+        <MyPageClient initialData={initialData} username={myUsername} />
       );
     }
   }

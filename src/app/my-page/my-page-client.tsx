@@ -423,7 +423,7 @@ const PICKER_OPTIONS: PickerOption[] = [
 
 // A fresh page for a user who hasn't created one yet: blank bio, no links, and
 // no avatar (so the default person placeholder shows). The name is seeded from
-// the account email by the caller.
+// the account username by the caller.
 const DEFAULT_DATA: PageData = {
   name: "",
   bio: "",
@@ -1420,15 +1420,15 @@ function templateMemory(bg: Background): BackgroundMemory {
 
 export function MyPageClient({
   initialData,
-  email,
+  username,
 }: {
   initialData: PageData | null;
-  email?: string | null;
+  username?: string | null;
 }) {
-  // Server-provided data, or a blank page seeded with the account email as the
-  // name when the user hasn't created one yet.
+  // Server-provided data, or a blank page seeded with the account username as
+  // the name when the user hasn't created one yet.
   const initial = seedBgMemory(
-    initialData ?? { ...DEFAULT_DATA, name: email ?? "" },
+    initialData ?? { ...DEFAULT_DATA, name: username ?? "" },
   );
 
   // Current theme, used to keep explicit text colors legible on both themes.
@@ -4046,7 +4046,7 @@ export function MyPageClient({
           />
           <div
             className={cn(
-              "relative w-full max-w-xs rounded-lg border border-border bg-background p-4 shadow-lg",
+              "relative w-full max-w-md rounded-lg border border-border bg-background p-4 shadow-lg",
               picker.visible ? "animate-pop" : "animate-pop-out",
             )}
             role="dialog"
@@ -4054,7 +4054,11 @@ export function MyPageClient({
             aria-label="Add a link"
           >
             <h2 className="mb-3 text-sm font-semibold">Add a link</h2>
-            <div className="flex flex-col gap-2">
+            {/* Compact logo grid: show only the platform icons so the whole
+                catalog fits in a tidy rectangle instead of a tall list that
+                runs off screen. Names are exposed via title/aria-label, and the
+                grid scrolls within the modal on short viewports. */}
+            <div className="grid max-h-[60vh] grid-cols-4 gap-2 overflow-y-auto sm:grid-cols-6">
               {PICKER_OPTIONS.map((option) => {
                 const Icon = option.icon;
                 const count = option.match
@@ -4065,16 +4069,17 @@ export function MyPageClient({
                     key={option.key}
                     type="button"
                     onClick={() => addLink(option)}
-                    className="flex items-center gap-3 rounded-md border border-border px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground"
+                    title={option.label}
+                    aria-label={option.label}
+                    className="relative flex aspect-square items-center justify-center rounded-md border border-border transition-colors hover:bg-accent hover:text-accent-foreground"
                   >
                     <BrandIcon
                       icon={Icon}
                       color={option.color}
-                      className="size-4"
+                      className="size-5"
                     />
-                    {option.label}
                     {count > 0 ? (
-                      <span className="ml-auto flex size-5 items-center justify-center rounded-full bg-foreground text-xs font-medium text-background">
+                      <span className="absolute right-1 top-1 flex size-4 items-center justify-center rounded-full bg-foreground text-[10px] font-medium text-background">
                         {count}
                       </span>
                     ) : null}
