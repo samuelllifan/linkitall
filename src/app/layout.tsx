@@ -13,7 +13,7 @@ const inter = Inter({ subsets: ["latin"] });
 export const metadata: Metadata = {
   title: "linkitall — one link for everything you make",
   description:
-    "Build a fully customizable link-in-bio and portfolio in minutes. Made for online creators.",
+    "Build a fully customizable link-in-bio in minutes. Made for online creators.",
 };
 
 export default async function RootLayout({
