@@ -1,7 +1,6 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useTheme } from "next-themes";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -11,11 +10,10 @@ import { createClient } from "~/lib/supabase/client";
 import { useUnsavedGuard } from "~/lib/unsaved-guard";
 import { cn } from "~/lib/utils";
 
-type Category = "account" | "accessibility";
+type Category = "account";
 
 const CATEGORIES: { key: Category; label: string }[] = [
   { key: "account", label: "Account" },
-  { key: "accessibility", label: "Accessibility" },
 ];
 
 const PASSWORD_PLACEHOLDER = "••••••••";
@@ -186,42 +184,6 @@ function AccountSection({
   );
 }
 
-function AccessibilitySection() {
-  const { resolvedTheme, setTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-  const isDark = mounted && resolvedTheme === "dark";
-
-  return (
-    <div className="flex max-w-md items-center justify-between gap-4">
-      <div>
-        <p className="text-sm font-medium">Dark mode</p>
-        <p className="text-xs text-muted-foreground">
-          Switch between light and dark themes.
-        </p>
-      </div>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={isDark}
-        aria-label="Toggle dark mode"
-        onClick={() => setTheme(isDark ? "light" : "dark")}
-        className={cn(
-          "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors",
-          isDark ? "bg-foreground" : "bg-input",
-        )}
-      >
-        <span
-          className={cn(
-            "inline-block size-4 rounded-full bg-background transition-transform",
-            isDark ? "translate-x-6" : "translate-x-1",
-          )}
-        />
-      </button>
-    </div>
-  );
-}
-
 export function SettingsClient({
   userEmail,
   username,
@@ -351,22 +313,18 @@ export function SettingsClient({
 
         {/* Active section */}
         <section key={active} className="animate-slide-up min-w-0 flex-1">
-          {active === "account" ? (
-            <AccountSection
-              usernameInput={usernameInput}
-              setUsernameInput={setUsernameInput}
-              password={password}
-              setPassword={setPassword}
-              showPassword={showPassword}
-              setShowPassword={setShowPassword}
-              editingPassword={editingPassword}
-              setEditingPassword={setEditingPassword}
-              userEmail={userEmail}
-              msg={msg}
-            />
-          ) : (
-            <AccessibilitySection />
-          )}
+          <AccountSection
+            usernameInput={usernameInput}
+            setUsernameInput={setUsernameInput}
+            password={password}
+            setPassword={setPassword}
+            showPassword={showPassword}
+            setShowPassword={setShowPassword}
+            editingPassword={editingPassword}
+            setEditingPassword={setEditingPassword}
+            userEmail={userEmail}
+            msg={msg}
+          />
         </section>
       </div>
 

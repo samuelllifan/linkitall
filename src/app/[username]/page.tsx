@@ -26,7 +26,9 @@ export async function generateMetadata({
     plainText(page.data.bio) || `${name}'s links, all in one place.`;
 
   return {
-    title: `${name} · linkitall`,
+    // Browser tab title follows the account username (with an @), not the
+    // display name, so it stays stable regardless of what the page is named.
+    title: `@${page.username} · linkitall`,
     description,
     openGraph: {
       type: "profile",

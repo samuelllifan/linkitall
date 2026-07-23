@@ -1,6 +1,5 @@
 "use client";
 
-import { useTheme } from "next-themes";
 import {
   type ComponentType,
   type CSSProperties,
@@ -29,6 +28,7 @@ import {
   isDiscordLink,
   LinkAnchor,
   LinkIconAnchor,
+  NO_TINT,
   PageBackground,
   PLATFORMS,
   panelCss,
@@ -66,6 +66,59 @@ type GradientConfig = {
 
 /** Editable galaxy (starfield) background settings. */
 type StarfieldConfig = { speed: number };
+
+/** Editable aurora (wavy gradient) background settings. */
+type AuroraConfig = { color: string; baseColor: string; speed: number };
+
+/**
+ * A static, reasonably faithful thumbnail of the aurora background for the
+ * picker: a soft, blurred wavy light region fading down into the base color.
+ * Built as an inline SVG data-URI so it mirrors the chosen colors and the real
+ * wavy look without spinning up a WebGL context per thumbnail.
+ */
+function auroraThumb(color: string, baseColor: string): string {
+  const svg =
+    `<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64' preserveAspectRatio='none'>` +
+    `<defs>` +
+    `<linearGradient id='g' x1='0' y1='0' x2='0' y2='1'>` +
+    `<stop offset='0%' stop-color='${color}'/>` +
+    `<stop offset='52%' stop-color='${color}' stop-opacity='0.5'/>` +
+    `<stop offset='100%' stop-color='${color}' stop-opacity='0'/>` +
+    `</linearGradient>` +
+    `<filter id='b' x='-30%' y='-30%' width='160%' height='160%'>` +
+    `<feGaussianBlur stdDeviation='3'/>` +
+    `</filter>` +
+    `</defs>` +
+    `<rect width='64' height='64' fill='${baseColor}'/>` +
+    `<path d='M0 -6 H64 V31 C50 43 42 23 28 33 C17 40 8 31 0 35 Z' fill='url(#g)' filter='url(#b)'/>` +
+    `</svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+}
+
+/**
+ * Static starfield thumbnail — a denser, subtly-varied night sky (mixed dot
+ * sizes and a couple of cool-tinted stars) over black, matching the real
+ * `.stars-layer` look better than a handful of uniform dots.
+ */
+const STARFIELD_THUMB = [
+  "radial-gradient(1.5px 1.5px at 18% 24%, #fff, transparent)",
+  "radial-gradient(1px 1px at 62% 16%, #fff, transparent)",
+  "radial-gradient(1px 1px at 41% 52%, #e0e7ff, transparent)",
+  "radial-gradient(1.5px 1.5px at 83% 63%, #fff, transparent)",
+  "radial-gradient(1px 1px at 30% 77%, #fff, transparent)",
+  "radial-gradient(1px 1px at 55% 39%, #cbd5e1, transparent)",
+  "radial-gradient(1px 1px at 12% 60%, #fff, transparent)",
+  "radial-gradient(1px 1px at 90% 30%, #fff, transparent)",
+  "radial-gradient(1.5px 1.5px at 48% 12%, #fff, transparent)",
+  "radial-gradient(1px 1px at 73% 85%, #fff, transparent)",
+  "radial-gradient(1px 1px at 25% 43%, #fff, transparent)",
+  "radial-gradient(1px 1px at 66% 71%, #fff, transparent)",
+  "radial-gradient(1px 1px at 8% 84%, #cbd5e1, transparent)",
+  "radial-gradient(1px 1px at 38% 90%, #fff, transparent)",
+  "radial-gradient(1px 1px at 95% 78%, #fff, transparent)",
+  "radial-gradient(1px 1px at 52% 62%, #fff, transparent)",
+  "#000",
+].join(", ");
 
 /** Clamp a number into the inclusive [min, max] range. */
 function clamp(n: number, min: number, max: number): number {
@@ -603,6 +656,24 @@ const COLOR_PRESETS = [
   "#000000",
 ];
 
+/** "No color" glyph: a circle with a diagonal cross line through it. */
+function NoTintGlyph({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      aria-hidden="true"
+      className={cn("text-muted-foreground", className)}
+    >
+      <circle cx="12" cy="12" r="9" />
+      <line x1="18.5" y1="5.5" x2="5.5" y2="18.5" />
+    </svg>
+  );
+}
+
 /**
  * A color control: a swatch button that opens a small popover with preset
  * colors plus a native picker for anything custom. `align` decides which side
@@ -613,12 +684,17 @@ function ColorPicker({
   onChange,
   ariaLabel,
   align = "right",
+  allowNone = false,
 }: {
   value: string;
   onChange: (color: string) => void;
   ariaLabel: string;
   align?: "left" | "right";
+  // When true, offer a "no tint" swatch (a circle with a cross) that selects
+  // the {@link NO_TINT} sentinel instead of a color.
+  allowNone?: boolean;
 }) {
+  const isNone = allowNone && value === NO_TINT;
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -646,10 +722,14 @@ function ColorPicker({
         aria-label={ariaLabel}
         className="size-8 rounded-md border border-input p-1"
       >
-        <span
-          className="block size-full rounded-sm"
-          style={{ backgroundColor: value }}
-        />
+        {isNone ? (
+          <NoTintGlyph className="size-full" />
+        ) : (
+          <span
+            className="block size-full rounded-sm"
+            style={{ backgroundColor: value }}
+          />
+        )}
       </button>
       {open ? (
         <div
@@ -661,6 +741,21 @@ function ColorPicker({
           )}
         >
           <div className="grid grid-cols-6 gap-1">
+            {allowNone ? (
+              <button
+                type="button"
+                onClick={() => onChange(NO_TINT)}
+                aria-label="No tint"
+                title="No tint"
+                className={cn(
+                  "flex size-6 items-center justify-center rounded-md border border-black/10",
+                  isNone &&
+                    "ring-2 ring-ring ring-offset-1 ring-offset-popover",
+                )}
+              >
+                <NoTintGlyph className="size-5" />
+              </button>
+            ) : null}
             {COLOR_PRESETS.map((c) => (
               <button
                 key={c}
@@ -670,7 +765,8 @@ function ColorPicker({
                 style={{ backgroundColor: c }}
                 className={cn(
                   "size-6 rounded-md border border-black/10",
-                  value.toLowerCase() === c.toLowerCase() &&
+                  !isNone &&
+                    value.toLowerCase() === c.toLowerCase() &&
                     "ring-2 ring-ring ring-offset-1 ring-offset-popover",
                 )}
               />
@@ -680,7 +776,7 @@ function ColorPicker({
             Custom
             <input
               type="color"
-              value={value}
+              value={isNone ? "#000000" : value}
               onChange={(e) => onChange(e.target.value)}
               aria-label={`${ariaLabel} custom value`}
               className="size-7 cursor-pointer rounded-md border border-input bg-transparent p-0.5"
@@ -1420,6 +1516,10 @@ function templateMemory(bg: Background): BackgroundMemory {
     };
   }
   if (bg.type === "starfield") return { starfield: { speed: bg.speed } };
+  if (bg.type === "aurora")
+    return {
+      aurora: { color: bg.color, baseColor: bg.baseColor, speed: bg.speed },
+    };
   return {};
 }
 
@@ -1436,12 +1536,8 @@ export function MyPageClient({
     initialData ?? { ...DEFAULT_DATA, name: username ?? "" },
   );
 
-  // Current theme, used to keep explicit text colors legible on both themes.
-  // Gated on mount so the first client render matches the server (no theme).
-  const { resolvedTheme } = useTheme();
-  const [themeMounted, setThemeMounted] = useState(false);
-  useEffect(() => setThemeMounted(true), []);
-  const isDark = themeMounted && resolvedTheme === "dark";
+  // The app is dark-only.
+  const isDark = true;
 
   const [editing, setEditing] = useState(false);
   // Bumps only on a real mode switch so the fade animates on toggle, not load.
@@ -1547,16 +1643,23 @@ export function MyPageClient({
   const [dragId, setDragId] = useState<string | null>(null);
   const [dragDelta, setDragDelta] = useState(0);
   const [dragTarget, setDragTarget] = useState<number | null>(null);
-  const linkCardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
-  // Immutable metrics captured at drag start: dragged card index/height, the
-  // inter-card gap, and every card's original center (viewport coords). Cards
-  // only move via CSS transforms during a drag, so these baselines stay valid.
+  const linkCardRefs = useRef<Map<string, HTMLElement>>(new Map());
+  // Icon buttons in the horizontal (logos) layout, drag-reordered left↔right.
+  const iconRowRefs = useRef<Map<string, HTMLElement>>(new Map());
+  // Immutable metrics captured at drag start: the dragged item's index and
+  // size (along the drag axis), the inter-item gap, every item's original
+  // center (viewport coords), plus whether the pointer has moved enough to
+  // count as a drag (vs. a click). Items only move via CSS transforms during a
+  // drag, so these baselines stay valid. `axis` is "y" for the stacked link
+  // list and "x" for the logos icon row.
   const dragMetaRef = useRef<{
     index: number;
-    startY: number;
-    height: number;
+    axis: "x" | "y";
+    start: number;
+    size: number;
     gap: number;
     centers: number[];
+    moved: boolean;
   } | null>(null);
 
   const dirty = useMemo(
@@ -1792,6 +1895,11 @@ export function MyPageClient({
     distribution: 50,
   };
   const STARFIELD_DEFAULT: StarfieldConfig = { speed: 5 };
+  const AURORA_DEFAULT: AuroraConfig = {
+    color: "#e6e6e6",
+    baseColor: "#000000",
+    speed: 5,
+  };
 
   // The last colors picked per background type live in `draft.bgMemory`, so they
   // persist across Custom/Gradient switches AND get saved — surviving a reload
@@ -1821,6 +1929,14 @@ export function MyPageClient({
     draft.background?.type === "starfield"
       ? { speed: draft.background.speed }
       : (draft.bgMemory?.starfield ?? STARFIELD_DEFAULT);
+  const aurora: AuroraConfig =
+    draft.background?.type === "aurora"
+      ? {
+          color: draft.background.color ?? AURORA_DEFAULT.color,
+          baseColor: draft.background.baseColor ?? AURORA_DEFAULT.baseColor,
+          speed: draft.background.speed ?? AURORA_DEFAULT.speed,
+        }
+      : (draft.bgMemory?.aurora ?? AURORA_DEFAULT);
   const media: MediaBackground | undefined =
     draft.background?.type === "media"
       ? {
@@ -1856,6 +1972,13 @@ export function MyPageClient({
         ...prev,
         background: { type: "starfield", ...s },
         bgMemory: { ...prev.bgMemory, starfield: s },
+      }));
+    } else if (type === "aurora") {
+      const a = aurora;
+      setDraft((prev) => ({
+        ...prev,
+        background: { type: "aurora", ...a },
+        bgMemory: { ...prev.bgMemory, aurora: a },
       }));
     } else if (type === "media") {
       if (media) {
@@ -1897,6 +2020,15 @@ export function MyPageClient({
       ...prev,
       background: { type: "starfield", ...next },
       bgMemory: { ...prev.bgMemory, starfield: next },
+    }));
+  }
+
+  function updateAurora(patch: Partial<AuroraConfig>) {
+    const next = { ...aurora, ...patch };
+    setDraft((prev) => ({
+      ...prev,
+      background: { type: "aurora", ...next },
+      bgMemory: { ...prev.bgMemory, aurora: next },
     }));
   }
 
@@ -1992,8 +2124,12 @@ export function MyPageClient({
   function choosePanel(type: PanelStyle["type"]) {
     setDraft((prev) => {
       const cur = prev.panel ?? DEFAULT_PANEL;
+      // Carry the current tint forward, but never the no-tint sentinel (it's
+      // only valid on glass; a solid Color panel needs a real hex).
       const tint =
-        cur.type === "color" || cur.type === "glass" ? cur.color : "#000000";
+        (cur.type === "color" || cur.type === "glass") && cur.color !== NO_TINT
+          ? cur.color
+          : "#000000";
       let next: PanelStyle;
       if (type === "color") {
         next = {
@@ -2398,20 +2534,29 @@ export function MyPageClient({
 
   // ---- Drag-to-reorder handlers -------------------------------------------
 
-  function onLinkDragStart(e: React.PointerEvent, id: string, index: number) {
+  function onLinkDragStart(
+    e: React.PointerEvent,
+    id: string,
+    index: number,
+    axis: "x" | "y" = "y",
+    refs: React.RefObject<Map<string, HTMLElement>> = linkCardRefs,
+  ) {
     e.preventDefault();
+    const horiz = axis === "x";
     const centers = draft.links.map((l) => {
-      const el = linkCardRefs.current.get(l.id);
-      const r = el?.getBoundingClientRect();
-      return r ? r.top + r.height / 2 : 0;
+      const r = refs.current.get(l.id)?.getBoundingClientRect();
+      if (!r) return 0;
+      return horiz ? r.left + r.width / 2 : r.top + r.height / 2;
     });
-    const self = linkCardRefs.current.get(id)?.getBoundingClientRect();
+    const self = refs.current.get(id)?.getBoundingClientRect();
     dragMetaRef.current = {
       index,
-      startY: e.clientY,
-      height: self?.height ?? 0,
-      gap: 12,
+      axis,
+      start: horiz ? e.clientX : e.clientY,
+      size: (horiz ? self?.width : self?.height) ?? 0,
+      gap: horiz ? 16 : 12,
       centers,
+      moved: false,
     };
     setDragId(id);
     setDragDelta(0);
@@ -2428,7 +2573,8 @@ export function MyPageClient({
   function onLinkDragMove(e: React.PointerEvent) {
     const meta = dragMetaRef.current;
     if (!meta || dragId === null) return;
-    const delta = e.clientY - meta.startY;
+    const delta = (meta.axis === "x" ? e.clientX : e.clientY) - meta.start;
+    if (Math.abs(delta) > 4) meta.moved = true;
     setDragDelta(delta);
     const draggedCenter = meta.centers[meta.index] + delta;
     let target = meta.index;
@@ -2461,6 +2607,14 @@ export function MyPageClient({
     setDragTarget(null);
   }
 
+  // Logos icon-row pointer up: a drag reorders; a tap (no movement) selects the
+  // link for editing. Read `moved` before onLinkDragEnd clears the metrics.
+  function onIconDragEnd(id: string) {
+    const moved = dragMetaRef.current?.moved ?? false;
+    onLinkDragEnd();
+    if (!moved) setEditingLinkId(id);
+  }
+
   // How far a card at original index `i` should shift to make room for the
   // dragged card, given the current drag target.
   function dragShiftFor(id: string, i: number): number {
@@ -2469,7 +2623,7 @@ export function MyPageClient({
     if (id === dragId) return dragDelta;
     const from = meta.index;
     const to = dragTarget;
-    const step = meta.height + meta.gap;
+    const step = meta.size + meta.gap;
     if (from < to && i > from && i <= to) return -step;
     if (from > to && i < from && i >= to) return step;
     return 0;
@@ -2707,40 +2861,50 @@ export function MyPageClient({
           else linkCardRefs.current.delete(link.id);
         }}
         style={{
-          transform: shift ? `translateY(${shift}px)` : undefined,
-          transition: isDragging ? "none" : "transform 150ms ease",
-          zIndex: isDragging ? 30 : undefined,
+          // Only the stacked (vertical) list reorders by dragging the card
+          // itself; the logos row reorders via its icons, so skip the transform.
+          transform:
+            !horizontal && shift ? `translateY(${shift}px)` : undefined,
+          transition:
+            !horizontal && isDragging ? "none" : "transform 150ms ease",
+          zIndex: !horizontal && isDragging ? 30 : undefined,
           // Mirror the live view-page box style so edits preview here.
           ...boxCss(resolveLinkBox(link, linkBox)),
         }}
         className={cn(
           "relative flex items-stretch gap-2 rounded-md p-3",
-          isDragging && "shadow-lg",
+          !horizontal && isDragging && "shadow-lg",
         )}
       >
-        <button
-          type="button"
-          aria-label="Drag to reorder"
-          onPointerDown={(e) => onLinkDragStart(e, link.id, index)}
-          onPointerMove={onLinkDragMove}
-          onPointerUp={onLinkDragEnd}
-          onPointerCancel={onLinkDragEnd}
-          className={cn(
-            "flex shrink-0 touch-none items-center rounded-md px-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
-            isDragging ? "cursor-grabbing" : "cursor-grab",
-          )}
-        >
-          <GripIcon className="size-4" />
-        </button>
+        {/* Drag handle — vertical list only; logos reorder via the icon row. */}
+        {!horizontal ? (
+          <button
+            type="button"
+            aria-label="Drag to reorder"
+            onPointerDown={(e) => onLinkDragStart(e, link.id, index)}
+            onPointerMove={onLinkDragMove}
+            onPointerUp={onLinkDragEnd}
+            onPointerCancel={onLinkDragEnd}
+            className={cn(
+              "flex shrink-0 touch-none items-center rounded-md px-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+              isDragging ? "cursor-grabbing" : "cursor-grab",
+            )}
+          >
+            <GripIcon className="size-4" />
+          </button>
+        ) : null}
         <div className="flex min-w-0 flex-1 flex-col gap-2">
-          <Input
-            value={link.label}
-            onChange={(e) => updateLink(link.id, { label: e.target.value })}
-            placeholder="Label"
-            // Preview the link's font/effect settings live while editing.
-            style={styleToCss(linkTextStyle(link), isDark)}
-            className={textAnimClass(linkTextStyle(link))}
-          />
+          {/* The label isn't shown in logos mode, so don't offer to edit it. */}
+          {!horizontal ? (
+            <Input
+              value={link.label}
+              onChange={(e) => updateLink(link.id, { label: e.target.value })}
+              placeholder="Label"
+              // Preview the link's font/effect settings live while editing.
+              style={styleToCss(linkTextStyle(link), isDark)}
+              className={textAnimClass(linkTextStyle(link))}
+            />
+          ) : null}
           {isDiscordLink(link.href) ? (
             // Discord stores a username (copied on click), not a URL.
             <div className="flex items-center gap-2">
@@ -2816,15 +2980,18 @@ export function MyPageClient({
                   {link.logo ? "Change logo" : "Upload logo"}
                 </Button>
               ) : null}
-              {/* Per-link box style (sparkles), with "apply to all". */}
-              <LinkStylePopover
-                box={resolveLinkBox(link, linkBox)}
-                onBox={(patch) => updateLinkBox(link.id, patch)}
-                onApplyAll={() => applyLinkStyleToAll(link.id)}
-                align="left"
-                animation={linkTextStyle(link).animation}
-                onAnimation={(a) => updateLinkText(link.id, { animation: a })}
-              />
+              {/* Per-link box style (sparkles), with "apply to all". The box
+                  surface isn't drawn in logos mode, so hide it there. */}
+              {!horizontal ? (
+                <LinkStylePopover
+                  box={resolveLinkBox(link, linkBox)}
+                  onBox={(patch) => updateLinkBox(link.id, patch)}
+                  onApplyAll={() => applyLinkStyleToAll(link.id)}
+                  align="left"
+                  animation={linkTextStyle(link).animation}
+                  onAnimation={(a) => updateLinkText(link.id, { animation: a })}
+                />
+              ) : null}
               {/* Per-link text/font settings (italic-T). */}
               <button
                 type="button"
@@ -2837,7 +3004,7 @@ export function MyPageClient({
               >
                 <FontIcon className="size-5" />
               </button>
-              {link.box || link.color || link.textStyle ? (
+              {!horizontal && (link.box || link.color || link.textStyle) ? (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -3169,20 +3336,50 @@ export function MyPageClient({
             )}
           >
             {editing && horizontal
-              ? // Horizontal edit: an icon row like view mode; click to edit.
-                draft.links.map((link) => {
+              ? // Horizontal edit: an icon row like view mode. Tap an icon to
+                // edit it; drag it left/right to reorder.
+                draft.links.map((link, index) => {
                   const platform = getPlatform(link.href);
                   const Icon = platform?.icon;
                   const selected = horizontalEditLink?.id === link.id;
+                  const isDragging = dragId === link.id;
+                  const shift = dragShiftFor(link.id, index);
                   return (
                     <button
                       key={link.id}
+                      ref={(el) => {
+                        if (el) iconRowRefs.current.set(link.id, el);
+                        else iconRowRefs.current.delete(link.id);
+                      }}
                       type="button"
-                      onClick={() => setEditingLinkId(link.id)}
+                      onPointerDown={(e) =>
+                        onLinkDragStart(e, link.id, index, "x", iconRowRefs)
+                      }
+                      onPointerMove={onLinkDragMove}
+                      onPointerUp={() => onIconDragEnd(link.id)}
+                      onPointerCancel={onLinkDragEnd}
+                      // Pointer handles select-vs-drag; keep keyboard select too.
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setEditingLinkId(link.id);
+                        }
+                      }}
                       aria-label={`Edit ${link.label || "link"}`}
                       aria-pressed={selected}
+                      style={{
+                        transform: shift ? `translateX(${shift}px)` : undefined,
+                        transition: isDragging
+                          ? "none"
+                          : "transform 150ms ease",
+                        zIndex: isDragging ? 30 : undefined,
+                      }}
                       className={cn(
-                        "flex size-11 items-center justify-center rounded-md transition-transform hover:scale-110",
+                        "flex size-11 touch-none items-center justify-center rounded-md",
+                        isDragging
+                          ? "cursor-grabbing"
+                          : "cursor-grab hover:scale-110",
+                        !isDragging && "transition-transform",
                         selected &&
                           "ring-2 ring-ring ring-offset-2 ring-offset-transparent",
                       )}
@@ -3330,28 +3527,33 @@ export function MyPageClient({
                             value={panel.color}
                             onChange={(c) => updatePanel({ color: c })}
                             ariaLabel="Panel color"
+                            allowNone={panel.type === "glass"}
                           />
                         </div>
-                        <label className="flex flex-col gap-1.5 text-sm">
-                          <span className="flex justify-between text-muted-foreground">
-                            <span>Opacity</span>
-                            <span className="tabular-nums">
-                              {panel.opacity}%
+                        {/* No-tint glass has no fill, so opacity is irrelevant. */}
+                        {panel.type === "glass" &&
+                        panel.color === NO_TINT ? null : (
+                          <label className="flex flex-col gap-1.5 text-sm">
+                            <span className="flex justify-between text-muted-foreground">
+                              <span>Opacity</span>
+                              <span className="tabular-nums">
+                                {panel.opacity}%
+                              </span>
                             </span>
-                          </span>
-                          <input
-                            type="range"
-                            min={0}
-                            max={100}
-                            step={5}
-                            value={panel.opacity}
-                            onChange={(e) =>
-                              updatePanel({ opacity: Number(e.target.value) })
-                            }
-                            aria-label="Panel opacity"
-                            className="w-full"
-                          />
-                        </label>
+                            <input
+                              type="range"
+                              min={0}
+                              max={100}
+                              step={5}
+                              value={panel.opacity}
+                              onChange={(e) =>
+                                updatePanel({ opacity: Number(e.target.value) })
+                              }
+                              aria-label="Panel opacity"
+                              className="w-full"
+                            />
+                          </label>
+                        )}
                       </>
                     ) : panel.type === "gradient" ? (
                       <>
@@ -3750,6 +3952,39 @@ export function MyPageClient({
                   </span>
                 </button>
 
+                {/* Aurora */}
+                <button
+                  type="button"
+                  onClick={() => chooseBackground("aurora")}
+                  className="flex flex-col items-center gap-1.5"
+                >
+                  <span
+                    style={{
+                      backgroundColor: aurora.baseColor,
+                      backgroundImage: auroraThumb(
+                        aurora.color,
+                        aurora.baseColor,
+                      ),
+                      backgroundSize: "cover",
+                    }}
+                    className={cn(
+                      "size-16 rounded-md border border-border transition-shadow",
+                      bgType === "aurora" &&
+                        "ring-2 ring-ring ring-offset-2 ring-offset-popover",
+                    )}
+                  />
+                  <span
+                    className={cn(
+                      "text-xs",
+                      bgType === "aurora"
+                        ? "text-foreground"
+                        : "text-muted-foreground",
+                    )}
+                  >
+                    Aurora
+                  </span>
+                </button>
+
                 {/* Space */}
                 <button
                   type="button"
@@ -3757,9 +3992,7 @@ export function MyPageClient({
                   className="flex flex-col items-center gap-1.5"
                 >
                   <span
-                    style={{
-                      background: `radial-gradient(1px 1px at 25% 40%, #fff, transparent), radial-gradient(1px 1px at 62% 68%, #fff, transparent), radial-gradient(1px 1px at 45% 52%, #fff, transparent), radial-gradient(1px 1px at 80% 82%, #fff, transparent), radial-gradient(1px 1px at 38% 22%, #fff, transparent), radial-gradient(1px 1px at 72% 30%, #fff, transparent), radial-gradient(1px 1px at 15% 75%, #fff, transparent), #000`,
-                    }}
+                    style={{ background: STARFIELD_THUMB }}
                     className={cn(
                       "size-16 rounded-md border border-border transition-shadow",
                       bgType === "starfield" &&
@@ -3951,6 +4184,42 @@ export function MyPageClient({
                         updateStarfield({ speed: Number(e.target.value) })
                       }
                       aria-label="Space speed"
+                      className="w-full"
+                    />
+                  </label>
+                </div>
+              ) : bgType === "aurora" ? (
+                <div className="mt-3 flex animate-slide-up flex-col gap-3 border-t border-border pt-3">
+                  {/* Colors — the light wash fades down into the dark base. */}
+                  <div className="flex items-center justify-between gap-3 text-sm">
+                    <span className="text-muted-foreground">Light</span>
+                    <ColorPicker
+                      value={aurora.color}
+                      onChange={(c) => updateAurora({ color: c })}
+                      ariaLabel="Aurora light color"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-3 text-sm">
+                    <span className="text-muted-foreground">Dark</span>
+                    <ColorPicker
+                      value={aurora.baseColor}
+                      onChange={(c) => updateAurora({ baseColor: c })}
+                      ariaLabel="Aurora dark color"
+                    />
+                  </div>
+                  {/* Wave speed — 0 holds it still. */}
+                  <label className="flex flex-col gap-1.5 text-sm">
+                    <span className="text-muted-foreground">Wave speed</span>
+                    <input
+                      type="range"
+                      min={0}
+                      max={10}
+                      step={1}
+                      value={aurora.speed}
+                      onChange={(e) =>
+                        updateAurora({ speed: Number(e.target.value) })
+                      }
+                      aria-label="Aurora wave speed"
                       className="w-full"
                     />
                   </label>

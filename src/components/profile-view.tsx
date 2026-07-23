@@ -14,7 +14,6 @@ import {
   Roboto_Mono,
   Space_Grotesk,
 } from "next/font/google";
-import { useTheme } from "next-themes";
 import {
   type ComponentType,
   type CSSProperties,
@@ -24,6 +23,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import { recordClick, recordView } from "~/lib/analytics";
 import type {
   AvatarEffect,
@@ -290,11 +290,27 @@ export function resolveLinkBox(
 /** Default panel: none, so the page background shows through unchanged. */
 export const DEFAULT_PANEL: PanelStyle = { type: "transparent" };
 
+/**
+ * Sentinel `color` for a glass panel with no tint: the pane is fully
+ * transparent (just the backdrop blur/refraction), so the background shows
+ * through, blurred. Stored in place of a hex so it round-trips through saves.
+ */
+export const NO_TINT = "none";
+
+/**
+ * Drop shadow lifting a solid/gradient panel off the page background so its
+ * edges read clearly even when the panel color is close to the background.
+ */
+const PANEL_SHADOW = "0 12px 40px -6px rgba(0, 0, 0, 0.5)";
+
 /** Inline CSS for a panel surface. Returns `{}` for the transparent default. */
 export function panelCss(panel: PanelStyle): CSSProperties {
   switch (panel.type) {
     case "color":
-      return { backgroundColor: withOpacity(panel.color, panel.opacity) };
+      return {
+        backgroundColor: withOpacity(panel.color, panel.opacity),
+        boxShadow: PANEL_SHADOW,
+      };
     case "gradient": {
       const dir = panel.direction === "horizontal" ? "to right" : "to bottom";
       return {
@@ -302,26 +318,48 @@ export function panelCss(panel: PanelStyle): CSSProperties {
           panel.from,
           panel.opacity,
         )}, ${withOpacity(panel.to, panel.opacity)})`,
+        boxShadow: PANEL_SHADOW,
       };
     }
-    case "glass":
+    case "glass": {
       // Apple-style "liquid glass". The SVG displacement filter (see
       // <GlassFilter/>) warps the backdrop in real time so it genuinely
       // refracts what's behind it; the layered sheen + bright rim + specular
       // bottom glow give it the lens-like depth. `backdrop-filter` (Chromium)
       // gets the refraction; `-webkit-backdrop-filter` (Safari, no url()
       // filters) falls back to a heavier frosted blur.
+      //
+      // `color: "none"` = no tint: a purely blurred + warped pane. We drop the
+      // white sheen/rim entirely (it read as a stray white corner tint) and
+      // lean on the displacement warp + blur so it's just a distorted, glassy
+      // view of the background — no color of its own.
+      const noTint = panel.color === NO_TINT;
       return {
-        backgroundColor: withOpacity(panel.color, panel.opacity),
-        backgroundImage:
-          "linear-gradient(135deg, rgba(255,255,255,0.4), rgba(255,255,255,0.08) 40%, rgba(255,255,255,0) 56%), radial-gradient(120% 80% at 50% 0%, rgba(255,255,255,0.28), rgba(255,255,255,0) 60%)",
-        backdropFilter:
-          "url(#liquid-glass) blur(3px) saturate(180%) brightness(1.06)",
-        WebkitBackdropFilter: "blur(22px) saturate(180%)",
-        border: "1px solid rgba(255, 255, 255, 0.45)",
-        boxShadow:
-          "inset 0 1px 1px rgba(255,255,255,0.9), inset 0 -8px 24px rgba(255,255,255,0.12), inset 0 0 12px rgba(255,255,255,0.08), 0 12px 40px rgba(0,0,0,0.3)",
+        backgroundColor: noTint
+          ? "transparent"
+          : withOpacity(panel.color, panel.opacity),
+        // Sheen only when tinted; a no-tint pane stays purely see-through.
+        backgroundImage: noTint
+          ? undefined
+          : "linear-gradient(135deg, rgba(255,255,255,0.4), rgba(255,255,255,0.08) 40%, rgba(255,255,255,0) 56%), radial-gradient(120% 80% at 50% 0%, rgba(255,255,255,0.28), rgba(255,255,255,0) 60%)",
+        // No-tint leans harder on the warp/blur to sell the glass without color.
+        backdropFilter: noTint
+          ? "url(#liquid-glass) blur(5px) saturate(150%)"
+          : "url(#liquid-glass) blur(3px) saturate(180%) brightness(1.06)",
+        WebkitBackdropFilter: noTint
+          ? "blur(26px) saturate(150%)"
+          : "blur(22px) saturate(180%)",
+        // A faint rim keeps the edge readable; skip the bright 0.45 rim on
+        // no-tint so it doesn't reintroduce a white outline.
+        border: noTint
+          ? "1px solid rgba(255, 255, 255, 0.14)"
+          : "1px solid rgba(255, 255, 255, 0.45)",
+        // No-tint keeps only the drop shadow (no inset white highlights).
+        boxShadow: noTint
+          ? "0 12px 40px rgba(0,0,0,0.3)"
+          : "inset 0 1px 1px rgba(255,255,255,0.9), inset 0 -8px 24px rgba(255,255,255,0.12), inset 0 0 12px rgba(255,255,255,0.08), 0 12px 40px rgba(0,0,0,0.3)",
       };
+    }
     default:
       return {};
   }
@@ -1092,8 +1130,12 @@ function CopiedToast({ show }: { show: boolean }) {
     return () => clearTimeout(t);
   }, [show]);
 
-  if (!mounted) return null;
-  return (
+  if (!mounted || typeof document === "undefined") return null;
+  // Portal to <body> so the fixed toast anchors to the viewport bottom. Rendered
+  // inline it would be trapped inside the profile panel, whose backdrop-filter
+  // (glass) / transforms create a containing block for `position: fixed`,
+  // floating the toast over the page content instead.
+  return createPortal(
     <div
       className={cn(
         "pointer-events-none fixed inset-x-0 bottom-6 z-50 flex justify-center px-4",
@@ -1118,7 +1160,8 @@ function CopiedToast({ show }: { show: boolean }) {
         </svg>
         Link copied!
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -1395,6 +1438,297 @@ function speedToDuration(speed: number): string {
   return `${speedToSeconds(speed)}s`;
 }
 
+// GLSL for the aurora surface. A full-screen triangle is shaded per-pixel: a
+// broad light-top → dark-bottom gradient (NOT a radial glow — the light fills
+// the whole top), whose transition line is pushed up and down by domain-warped
+// fractal noise so it undulates in smooth, organic waves. Colour is mixed in
+// linear steps and a tiny per-pixel dither is added, so the gradient stays
+// perfectly smooth with no 8-bit banding. `u_time` drifts the noise to animate.
+const AURORA_VERT = `
+attribute vec2 a_pos;
+void main() { gl_Position = vec4(a_pos, 0.0, 1.0); }
+`;
+
+const AURORA_FRAG = `
+precision highp float;
+uniform vec2 u_resolution;
+uniform float u_time;
+uniform vec3 u_light;
+uniform vec3 u_dark;
+
+vec2 hash2(vec2 p) {
+  p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+  return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+}
+
+// Smooth value noise in [-1, 1].
+float noise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(dot(hash2(i + vec2(0.0, 0.0)), f - vec2(0.0, 0.0)),
+                 dot(hash2(i + vec2(1.0, 0.0)), f - vec2(1.0, 0.0)), u.x),
+             mix(dot(hash2(i + vec2(0.0, 1.0)), f - vec2(0.0, 1.0)),
+                 dot(hash2(i + vec2(1.0, 1.0)), f - vec2(1.0, 1.0)), u.x), u.y);
+}
+
+// Fractal Brownian motion — only two octaves so the field stays a clean, smooth
+// undulation. More octaves add fine high-frequency detail that reads as smoke.
+float fbm(vec2 p) {
+  float v = 0.0;
+  float a = 0.5;
+  for (int i = 0; i < 2; i++) {
+    v += a * noise(p);
+    p *= 2.0;
+    a *= 0.5;
+  }
+  return v;
+}
+
+float hash1(vec2 p) {
+  return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+}
+
+void main() {
+  vec2 uv = gl_FragCoord.xy / u_resolution.xy;
+  uv.y = 1.0 - uv.y;                          // y = 0 at the top
+  float aspect = u_resolution.x / u_resolution.y;
+  vec2 p = vec2(uv.x * aspect, uv.y);         // isotropic noise coords
+  float t = u_time;
+
+  // A smooth, clearly wavy "horizon" between the light top and dark bottom: two
+  // sine waves of different frequency give clean, pronounced undulation, and
+  // low-frequency noise nudges the crests so they read as organic, not
+  // mechanical.
+  //
+  // Animation: stretch slowly breathes the waves' horizontal length in and out;
+  // the sine phases drift at two incommensurate rates and the noise term drifts
+  // in time, so the pattern continuously cycles without ever exactly repeating.
+  // Every time term is zero at t = 0 (sin(0)=0, +t*k=0, stretch=1), so the
+  // paused / reduced-motion frame is exactly the tuned static look.
+  float stretch = 1.0 + 0.16 * sin(t * 0.40);
+  float nx = fbm(vec2(p.x * 0.9 * stretch + t * 0.28, 0.7 + t * 0.20));
+  float wave =
+      sin(uv.x * 6.2831 * 1.1 * stretch + 0.6 + t * 0.80) * 0.085
+    + sin(uv.x * 6.2831 * 2.3 * stretch - 1.2 - t * 0.62) * 0.042
+    + nx * 0.09;
+  float horizon = 0.45 + wave;
+
+  // Light above the horizon, dark below, with a wide fade → a long, very smooth
+  // vertical gradient (no radial glow).
+  float v = 1.0 - smoothstep(horizon - 0.5, horizon + 0.5, uv.y);
+
+  // Gentle, wide horizontal easing so the far corners settle a touch darker.
+  v *= 0.9 + 0.1 * (1.0 - pow(min(abs(uv.x - 0.5) * 2.0, 1.0), 2.6));
+  v = clamp(v, 0.0, 1.0);
+
+  vec3 col = mix(u_dark, u_light, v);
+
+  // Per-pixel dither breaks up 8-bit banding across the smooth falloff.
+  col += (hash1(gl_FragCoord.xy + fract(t)) - 0.5) / 255.0;
+
+  gl_FragColor = vec4(col, 1.0);
+}
+`;
+
+/**
+ * Parse a `#rgb` / `#rrggbb` hex string into normalized [r, g, b] (0–1).
+ * Tolerates missing/invalid input (returns black) so a malformed background
+ * can never crash the shader setup.
+ */
+function hexToRgb(hex: string): [number, number, number] {
+  const h = (typeof hex === "string" ? hex : "").replace("#", "");
+  const full =
+    h.length === 3
+      ? h
+          .split("")
+          .map((c) => c + c)
+          .join("")
+      : h.padEnd(6, "0").slice(0, 6);
+  const n = Number.parseInt(full, 16);
+  if (Number.isNaN(n)) return [0, 0, 0];
+  return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+}
+
+function compileShader(
+  gl: WebGLRenderingContext,
+  type: number,
+  src: string,
+): WebGLShader | null {
+  const sh = gl.createShader(type);
+  if (!sh) return null;
+  gl.shaderSource(sh, src);
+  gl.compileShader(sh);
+  if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+    console.warn("aurora shader compile failed:", gl.getShaderInfoLog(sh));
+    gl.deleteShader(sh);
+    return null;
+  }
+  return sh;
+}
+
+/**
+ * WebGL canvas that renders (and, when `speed` > 0, animates) the aurora
+ * surface. Fills its positioned parent. `baseColor` is also set as the canvas
+ * background so a WebGL-less browser degrades to a plain dark fill.
+ */
+function AuroraCanvas({
+  color,
+  baseColor,
+  speed,
+}: {
+  color: string;
+  baseColor: string;
+  speed: number;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const gl = canvas.getContext("webgl", { alpha: false, antialias: false });
+    if (!gl) return;
+
+    const vs = compileShader(gl, gl.VERTEX_SHADER, AURORA_VERT);
+    const fs = compileShader(gl, gl.FRAGMENT_SHADER, AURORA_FRAG);
+    if (!vs || !fs) return;
+    const program = gl.createProgram();
+    if (!program) return;
+    gl.attachShader(program, vs);
+    gl.attachShader(program, fs);
+    gl.linkProgram(program);
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+      console.warn(
+        "aurora program link failed:",
+        gl.getProgramInfoLog(program),
+      );
+      return;
+    }
+    // Activate the program via a bound reference instead of a direct
+    // `gl.useProgram(...)` call: Biome's useHookAtTopLevel rule misreads that
+    // call as a misplaced React hook (the `use*` name) and won't suppress inline.
+    const activateProgram = gl.useProgram.bind(gl);
+    activateProgram(program);
+
+    const buffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    // One oversized triangle covering the whole clip space.
+    gl.bufferData(
+      gl.ARRAY_BUFFER,
+      new Float32Array([-1, -1, 3, -1, -1, 3]),
+      gl.STATIC_DRAW,
+    );
+    const aPos = gl.getAttribLocation(program, "a_pos");
+    gl.enableVertexAttribArray(aPos);
+    gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+    const uRes = gl.getUniformLocation(program, "u_resolution");
+    const uTime = gl.getUniformLocation(program, "u_time");
+    const uLight = gl.getUniformLocation(program, "u_light");
+    const uDark = gl.getUniformLocation(program, "u_dark");
+    gl.uniform3fv(uLight, hexToRgb(color));
+    gl.uniform3fv(uDark, hexToRgb(baseColor));
+
+    const reduced = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    const animate = speed > 0 && !reduced;
+
+    let raf = 0;
+    let startTime = 0;
+
+    const draw = (t: number) => {
+      gl.uniform1f(uTime, t);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    };
+
+    const resize = () => {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const w = Math.max(1, Math.floor(canvas.clientWidth * dpr));
+      const h = Math.max(1, Math.floor(canvas.clientHeight * dpr));
+      if (canvas.width !== w || canvas.height !== h) {
+        canvas.width = w;
+        canvas.height = h;
+      }
+      gl.viewport(0, 0, w, h);
+      gl.uniform2f(uRes, w, h);
+      // Always paint at least one frame (t = 0) so the surface shows even if the
+      // animation loop is throttled (e.g. a background/hidden tab).
+      draw(0);
+    };
+
+    const frame = (now: number) => {
+      if (!startTime) startTime = now;
+      draw(((now - startTime) / 1000) * speed * 0.08);
+      raf = requestAnimationFrame(frame);
+    };
+
+    resize();
+    window.addEventListener("resize", resize);
+    if (animate) raf = requestAnimationFrame(frame);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", resize);
+      gl.deleteProgram(program);
+      gl.deleteShader(vs);
+      gl.deleteShader(fs);
+      gl.deleteBuffer(buffer);
+    };
+  }, [color, baseColor, speed]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      aria-hidden
+      className="absolute inset-0 h-full w-full"
+      style={{ backgroundColor: baseColor }}
+    />
+  );
+}
+
+/**
+ * Aurora background — a broad light-to-dark gradient whose boundary undulates in
+ * smooth organic waves (a WebGL shader; see `AURORA_FRAG`), recreated from a
+ * reference design. `AuroraSurface` fills its positioned parent;
+ * `AuroraBackground` pins that surface to the whole viewport behind the page.
+ */
+export function AuroraSurface({
+  color,
+  baseColor,
+  speed,
+}: {
+  color: string;
+  baseColor: string;
+  speed: number;
+}) {
+  return (
+    <div
+      aria-hidden
+      className="absolute inset-0 overflow-hidden"
+      style={{ backgroundColor: baseColor }}
+    >
+      <AuroraCanvas color={color} baseColor={baseColor} speed={speed} />
+    </div>
+  );
+}
+
+function AuroraBackground({
+  color,
+  baseColor,
+  speed,
+}: {
+  color: string;
+  baseColor: string;
+  speed: number;
+}) {
+  return (
+    <div aria-hidden className="fixed inset-0 -z-10">
+      <AuroraSurface color={color} baseColor={baseColor} speed={speed} />
+    </div>
+  );
+}
+
 /**
  * Full-viewport background layer behind the page content. Renders nothing for
  * the default (so the theme's own background shows through). Static fills and
@@ -1433,6 +1767,16 @@ export function PageBackground({ bg }: { bg?: Background }) {
         aria-hidden
         className="stars-layer"
         style={{ "--stars-dur": speedToDuration(bg.speed) } as CSSProperties}
+      />
+    );
+  }
+
+  if (bg.type === "aurora") {
+    return (
+      <AuroraBackground
+        color={bg.color ?? "#e6e6e6"}
+        baseColor={bg.baseColor ?? "#000000"}
+        speed={bg.speed ?? 5}
       />
     );
   }
@@ -1595,10 +1939,8 @@ export function ProfileView({
   data: PageData;
   username?: string;
 }) {
-  const { resolvedTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-  const isDark = mounted && resolvedTheme === "dark";
+  // The app is dark-only.
+  const isDark = true;
 
   // Record a single view per mount. The ref guards against React's double
   // effect invocation in development strict mode.
@@ -1622,91 +1964,100 @@ export function ProfileView({
   const horizontal = data.panelOrientation === "horizontal";
 
   return (
-    <div
-      style={panelCss(panel)}
-      className={cn(
-        "relative mx-auto flex w-full max-w-lg flex-col items-center gap-6",
-        panel.type !== "transparent" && "rounded-2xl p-6",
-      )}
-    >
+    <>
+      {/* The page background and glass filter must sit OUTSIDE the panel: the
+          panel's backdrop-filter (glass) creates a containing block, so a
+          `fixed` background nested inside it would be trapped within the panel
+          (leaving the rest of the page black) and bleed square corners past the
+          panel's rounded edges. As siblings they anchor to the viewport. */}
       <PageBackground bg={data.background} />
       <GlassFilter />
 
-      <AvatarFx effect={data.avatarEffect} outline={data.avatarOutline}>
-        {data.avatar ? (
-          // biome-ignore lint/performance/noImgElement: small inline data-URL avatar; next/image adds no value
-          <img
-            src={data.avatar}
-            alt=""
-            className="size-24 rounded-full object-cover"
-          />
-        ) : (
-          <div className="flex size-24 items-center justify-center rounded-full bg-muted text-3xl font-semibold text-muted-foreground">
-            {data.name.charAt(0).toUpperCase() || "?"}
-          </div>
+      <div
+        style={panelCss(panel)}
+        className={cn(
+          "relative mx-auto flex w-full max-w-lg flex-col items-center gap-6",
+          panel.type !== "transparent" && "rounded-2xl p-6",
         )}
-      </AvatarFx>
+      >
+        <AvatarFx effect={data.avatarEffect} outline={data.avatarOutline}>
+          {data.avatar ? (
+            // biome-ignore lint/performance/noImgElement: small inline data-URL avatar; next/image adds no value
+            <img
+              src={data.avatar}
+              alt=""
+              className="size-24 rounded-full object-cover"
+            />
+          ) : (
+            <div className="flex size-24 items-center justify-center rounded-full bg-muted text-3xl font-semibold text-muted-foreground">
+              {data.name.charAt(0).toUpperCase() || "?"}
+            </div>
+          )}
+        </AvatarFx>
 
-      {/* Name and bio, kept close together in their own group. */}
-      <div className="flex w-full flex-col items-center gap-2">
-        <div
-          style={boxCss(nameBox)}
-          className="flex w-full flex-col items-center rounded-lg px-4 py-3"
-        >
-          <RichText
-            as="h1"
-            html={data.name}
-            isDark={isDark}
-            className={cn("w-full tracking-tight", textAnimClass(nameStyle))}
-            style={styleToCss(nameStyle, isDark)}
-          />
+        {/* Name and bio, kept close together in their own group. */}
+        <div className="flex w-full flex-col items-center gap-2">
+          <div
+            style={boxCss(nameBox)}
+            className="flex w-full flex-col items-center rounded-lg px-4 py-3"
+          >
+            <RichText
+              as="h1"
+              html={data.name}
+              isDark={isDark}
+              className={cn("w-full tracking-tight", textAnimClass(nameStyle))}
+              style={styleToCss(nameStyle, isDark)}
+            />
+          </div>
+          <div
+            style={boxCss(bioBox)}
+            className="flex w-full flex-col items-center rounded-lg px-4 py-3"
+          >
+            <RichText
+              as="p"
+              html={data.bio}
+              isDark={isDark}
+              className={cn(
+                "w-full",
+                !bioStyle.color &&
+                  !bioStyle.animation &&
+                  "text-muted-foreground",
+                textAnimClass(bioStyle),
+              )}
+              style={styleToCss(bioStyle, isDark)}
+            />
+          </div>
         </div>
-        <div
-          style={boxCss(bioBox)}
-          className="flex w-full flex-col items-center rounded-lg px-4 py-3"
-        >
-          <RichText
-            as="p"
-            html={data.bio}
-            isDark={isDark}
-            className={cn(
-              "w-full",
-              !bioStyle.color && !bioStyle.animation && "text-muted-foreground",
-              textAnimClass(bioStyle),
-            )}
-            style={styleToCss(bioStyle, isDark)}
-          />
-        </div>
+
+        {data.links.length > 0 ? (
+          horizontal ? (
+            <div className="flex w-full flex-wrap items-center justify-center gap-5">
+              {data.links.map((link) => (
+                <LinkIconAnchor
+                  key={link.id}
+                  link={link}
+                  isDark={isDark}
+                  trackUsername={username}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="flex w-full flex-col gap-3">
+              {data.links.map((link) => (
+                <LinkAnchor
+                  key={link.id}
+                  link={link}
+                  box={linkBox}
+                  textStyle={data.linkStyle}
+                  isDark={isDark}
+                  trackUsername={username}
+                  enablePreview
+                />
+              ))}
+            </div>
+          )
+        ) : null}
       </div>
-
-      {data.links.length > 0 ? (
-        horizontal ? (
-          <div className="flex w-full flex-wrap items-center justify-center gap-5">
-            {data.links.map((link) => (
-              <LinkIconAnchor
-                key={link.id}
-                link={link}
-                isDark={isDark}
-                trackUsername={username}
-              />
-            ))}
-          </div>
-        ) : (
-          <div className="flex w-full flex-col gap-3">
-            {data.links.map((link) => (
-              <LinkAnchor
-                key={link.id}
-                link={link}
-                box={linkBox}
-                textStyle={data.linkStyle}
-                isDark={isDark}
-                trackUsername={username}
-                enablePreview
-              />
-            ))}
-          </div>
-        )
-      ) : null}
-    </div>
+    </>
   );
 }

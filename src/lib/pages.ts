@@ -64,6 +64,21 @@ export type Background =
       /** Drift speed, 1 (slow) – 10 (fast). */
       speed: number;
     }
+  | {
+      /**
+       * A soft luminous glow blooming from the top-center and fading to a solid
+       * base color at the edges and bottom — like a large, diffuse overhead
+       * light. Meant to be animated (the glow drifts / undulates); `speed`
+       * controls that motion, 0 = static.
+       */
+      type: "aurora";
+      /** Glow color (hex). */
+      color: string;
+      /** Solid base color the glow fades into (hex). */
+      baseColor: string;
+      /** Drift speed, 0 (static) – 10 (fast). */
+      speed: number;
+    }
   | ({ type: "media" } & MediaBackground);
 
 /**
@@ -80,6 +95,7 @@ export interface BackgroundMemory {
     distribution?: number;
   };
   starfield?: { speed: number };
+  aurora?: { color: string; baseColor: string; speed: number };
   media?: MediaBackground;
 }
 

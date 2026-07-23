@@ -5,7 +5,6 @@ import { Navbar } from "~/components/navbar";
 import { SessionGuard } from "~/components/session-guard";
 import { createClient } from "~/lib/supabase/server";
 import { UnsavedGuardProvider } from "~/lib/unsaved-guard";
-import { ThemeProvider } from "./theme-provider";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -37,16 +36,15 @@ export default async function RootLayout({
   }
 
   return (
-    <html lang="en" suppressHydrationWarning>
+    // Dark-only app: the `dark` class is hardcoded and never changes.
+    <html lang="en" className="dark">
       <body className={`${inter.className} flex min-h-dvh flex-col`}>
-        <ThemeProvider>
-          <UnsavedGuardProvider>
-            <SessionGuard />
-            <Navbar userEmail={user?.email ?? null} username={username} />
-            {children}
-            <Footer />
-          </UnsavedGuardProvider>
-        </ThemeProvider>
+        <UnsavedGuardProvider>
+          <SessionGuard />
+          <Navbar userEmail={user?.email ?? null} username={username} />
+          {children}
+          <Footer />
+        </UnsavedGuardProvider>
       </body>
     </html>
   );
