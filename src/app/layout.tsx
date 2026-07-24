@@ -10,7 +10,7 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "linkitall — one link for everything you make",
+  title: "linkitall",
   description:
     "Build a fully customizable link-in-bio in minutes. Made for online creators.",
 };
@@ -26,13 +26,15 @@ export default async function RootLayout({
   } = await supabase.auth.getUser();
 
   let username: string | null = null;
+  let isAdmin = false;
   if (user) {
     const { data } = await supabase
       .from("profiles")
-      .select("username")
+      .select("username, is_admin")
       .eq("id", user.id)
       .maybeSingle();
     username = (data?.username as string | null) ?? null;
+    isAdmin = Boolean(data?.is_admin);
   }
 
   return (
@@ -41,7 +43,11 @@ export default async function RootLayout({
       <body className={`${inter.className} flex min-h-dvh flex-col`}>
         <UnsavedGuardProvider>
           <SessionGuard />
-          <Navbar userEmail={user?.email ?? null} username={username} />
+          <Navbar
+            userEmail={user?.email ?? null}
+            username={username}
+            isAdmin={isAdmin}
+          />
           {children}
           <Footer />
         </UnsavedGuardProvider>

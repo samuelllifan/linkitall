@@ -53,9 +53,11 @@ function Avatar() {
 export function Navbar({
   userEmail,
   username,
+  isAdmin = false,
 }: {
   userEmail: string | null;
   username: string | null;
+  isAdmin?: boolean;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -179,6 +181,17 @@ export function Navbar({
                   </div>
 
                   <div className="my-1 h-px bg-border" />
+
+                  {isAdmin ? (
+                    <Link
+                      href="/admin"
+                      role="menuitem"
+                      onClick={() => setMenuOpen(false)}
+                      className="flex w-full items-center rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-muted"
+                    >
+                      Admin
+                    </Link>
+                  ) : null}
 
                   <Link
                     href="/settings"
