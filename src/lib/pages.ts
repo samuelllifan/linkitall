@@ -59,10 +59,16 @@ export type Background =
       distribution?: number;
     }
   | {
-      /** Black space with small drifting star particles. */
-      type: "starfield";
-      /** Drift speed, 1 (slow) – 10 (fast). */
-      speed: number;
+      /** A tiled square grid of lines drawn over a solid base color. */
+      type: "grid";
+      /** Solid fill behind the grid (hex). */
+      baseColor: string;
+      /** Grid line color (hex). */
+      lineColor: string;
+      /** Cell size — spacing between lines, in px. */
+      size: number;
+      /** Line thickness, in px. */
+      thickness: number;
     }
   | {
       /**
@@ -94,7 +100,12 @@ export interface BackgroundMemory {
     direction?: "vertical" | "horizontal";
     distribution?: number;
   };
-  starfield?: { speed: number };
+  grid?: {
+    baseColor: string;
+    lineColor: string;
+    size: number;
+    thickness: number;
+  };
   aurora?: { color: string; baseColor: string; speed: number };
   media?: MediaBackground;
 }

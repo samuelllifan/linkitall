@@ -64,8 +64,13 @@ type GradientConfig = {
   distribution: number;
 };
 
-/** Editable galaxy (starfield) background settings. */
-type StarfieldConfig = { speed: number };
+/** Editable grid background settings. */
+type GridConfig = {
+  baseColor: string;
+  lineColor: string;
+  size: number;
+  thickness: number;
+};
 
 /** Editable aurora (wavy gradient) background settings. */
 type AuroraConfig = { color: string; baseColor: string; speed: number };
@@ -96,29 +101,38 @@ function auroraThumb(color: string, baseColor: string): string {
 }
 
 /**
- * Static starfield thumbnail — a denser, subtly-varied night sky (mixed dot
- * sizes and a couple of cool-tinted stars) over black, matching the real
- * `.stars-layer` look better than a handful of uniform dots.
+ * CSS `background` shorthand for a grid preview — two line gradients (with a
+ * per-layer size) over the base color. `cell` defaults to a small value so the
+ * tiny picker swatch shows several lines regardless of the real cell size.
  */
-const STARFIELD_THUMB = [
-  "radial-gradient(1.5px 1.5px at 18% 24%, #fff, transparent)",
-  "radial-gradient(1px 1px at 62% 16%, #fff, transparent)",
-  "radial-gradient(1px 1px at 41% 52%, #e0e7ff, transparent)",
-  "radial-gradient(1.5px 1.5px at 83% 63%, #fff, transparent)",
-  "radial-gradient(1px 1px at 30% 77%, #fff, transparent)",
-  "radial-gradient(1px 1px at 55% 39%, #cbd5e1, transparent)",
-  "radial-gradient(1px 1px at 12% 60%, #fff, transparent)",
-  "radial-gradient(1px 1px at 90% 30%, #fff, transparent)",
-  "radial-gradient(1.5px 1.5px at 48% 12%, #fff, transparent)",
-  "radial-gradient(1px 1px at 73% 85%, #fff, transparent)",
-  "radial-gradient(1px 1px at 25% 43%, #fff, transparent)",
-  "radial-gradient(1px 1px at 66% 71%, #fff, transparent)",
-  "radial-gradient(1px 1px at 8% 84%, #cbd5e1, transparent)",
-  "radial-gradient(1px 1px at 38% 90%, #fff, transparent)",
-  "radial-gradient(1px 1px at 95% 78%, #fff, transparent)",
-  "radial-gradient(1px 1px at 52% 62%, #fff, transparent)",
-  "#000",
-].join(", ");
+function gridThumb(g: GridConfig, cell = 12): string {
+  const t = Math.max(0, g.thickness);
+  return (
+    `linear-gradient(to right, ${g.lineColor} ${t}px, transparent ${t}px) 0 0 / ${cell}px ${cell}px, ` +
+    `linear-gradient(to bottom, ${g.lineColor} ${t}px, transparent ${t}px) 0 0 / ${cell}px ${cell}px, ` +
+    `${g.baseColor}`
+  );
+}
+
+/**
+ * The grid "Size" control exposes 10 presets rather than a raw px amount, so the
+ * slider snaps through ten evenly-perceived cell sizes.
+ */
+const GRID_SIZE_STEPS = [16, 24, 32, 40, 56, 72, 88, 104, 128, 160];
+
+/** 1-based slider position (1–10) of the preset nearest a given px size. */
+function gridSizeLevel(size: number): number {
+  let best = 0;
+  for (let i = 1; i < GRID_SIZE_STEPS.length; i++) {
+    if (
+      Math.abs(GRID_SIZE_STEPS[i] - size) <
+      Math.abs(GRID_SIZE_STEPS[best] - size)
+    ) {
+      best = i;
+    }
+  }
+  return best + 1;
+}
 
 /** Clamp a number into the inclusive [min, max] range. */
 function clamp(n: number, min: number, max: number): number {
@@ -1457,12 +1471,19 @@ const TEMPLATES: Template[] = [
     preview: "linear-gradient(135deg,#3b82f6,#8b5cf6,#ec4899)",
   },
   {
-    key: "space",
-    label: "Deep Space",
-    background: { type: "starfield", speed: 4 },
+    key: "grid",
+    label: "Grid",
+    background: {
+      type: "grid",
+      baseColor: "#0a0a0a",
+      lineColor: "#2a2a2a",
+      size: 32,
+      thickness: 1,
+    },
     font: "mono",
     linkColor: "#1e293b",
-    preview: "radial-gradient(circle at 35% 30%,#1e293b,#000)",
+    preview:
+      "linear-gradient(to right,#2a2a2a 1px,transparent 1px) 0 0/12px 12px, linear-gradient(to bottom,#2a2a2a 1px,transparent 1px) 0 0/12px 12px, #0a0a0a",
   },
   {
     key: "sunset",
@@ -1515,7 +1536,15 @@ function templateMemory(bg: Background): BackgroundMemory {
       },
     };
   }
-  if (bg.type === "starfield") return { starfield: { speed: bg.speed } };
+  if (bg.type === "grid")
+    return {
+      grid: {
+        baseColor: bg.baseColor,
+        lineColor: bg.lineColor,
+        size: bg.size,
+        thickness: bg.thickness,
+      },
+    };
   if (bg.type === "aurora")
     return {
       aurora: { color: bg.color, baseColor: bg.baseColor, speed: bg.speed },
@@ -1894,7 +1923,12 @@ export function MyPageClient({
     direction: "vertical",
     distribution: 50,
   };
-  const STARFIELD_DEFAULT: StarfieldConfig = { speed: 5 };
+  const GRID_DEFAULT: GridConfig = {
+    baseColor: "#0a0a0a",
+    lineColor: "#2a2a2a",
+    size: 32,
+    thickness: 1,
+  };
   const AURORA_DEFAULT: AuroraConfig = {
     color: "#e6e6e6",
     baseColor: "#000000",
@@ -1925,10 +1959,15 @@ export function MyPageClient({
             distribution: draft.bgMemory.gradient.distribution ?? 50,
           }
         : { ...GRADIENT_DEFAULT };
-  const starfield: StarfieldConfig =
-    draft.background?.type === "starfield"
-      ? { speed: draft.background.speed }
-      : (draft.bgMemory?.starfield ?? STARFIELD_DEFAULT);
+  const grid: GridConfig =
+    draft.background?.type === "grid"
+      ? {
+          baseColor: draft.background.baseColor,
+          lineColor: draft.background.lineColor,
+          size: draft.background.size,
+          thickness: draft.background.thickness,
+        }
+      : (draft.bgMemory?.grid ?? GRID_DEFAULT);
   const aurora: AuroraConfig =
     draft.background?.type === "aurora"
       ? {
@@ -1966,12 +2005,12 @@ export function MyPageClient({
         background: { type: "gradient", ...g },
         bgMemory: { ...prev.bgMemory, gradient: g },
       }));
-    } else if (type === "starfield") {
-      const s = starfield;
+    } else if (type === "grid") {
+      const g = grid;
       setDraft((prev) => ({
         ...prev,
-        background: { type: "starfield", ...s },
-        bgMemory: { ...prev.bgMemory, starfield: s },
+        background: { type: "grid", ...g },
+        bgMemory: { ...prev.bgMemory, grid: g },
       }));
     } else if (type === "aurora") {
       const a = aurora;
@@ -2014,12 +2053,12 @@ export function MyPageClient({
     }));
   }
 
-  function updateStarfield(patch: Partial<StarfieldConfig>) {
-    const next = { ...starfield, ...patch };
+  function updateGrid(patch: Partial<GridConfig>) {
+    const next = { ...grid, ...patch };
     setDraft((prev) => ({
       ...prev,
-      background: { type: "starfield", ...next },
-      bgMemory: { ...prev.bgMemory, starfield: next },
+      background: { type: "grid", ...next },
+      bgMemory: { ...prev.bgMemory, grid: next },
     }));
   }
 
@@ -3985,29 +4024,29 @@ export function MyPageClient({
                   </span>
                 </button>
 
-                {/* Space */}
+                {/* Grid */}
                 <button
                   type="button"
-                  onClick={() => chooseBackground("starfield")}
+                  onClick={() => chooseBackground("grid")}
                   className="flex flex-col items-center gap-1.5"
                 >
                   <span
-                    style={{ background: STARFIELD_THUMB }}
+                    style={{ background: gridThumb(grid) }}
                     className={cn(
                       "size-16 rounded-md border border-border transition-shadow",
-                      bgType === "starfield" &&
+                      bgType === "grid" &&
                         "ring-2 ring-ring ring-offset-2 ring-offset-popover",
                     )}
                   />
                   <span
                     className={cn(
                       "text-xs",
-                      bgType === "starfield"
+                      bgType === "grid"
                         ? "text-foreground"
                         : "text-muted-foreground",
                     )}
                   >
-                    Space
+                    Grid
                   </span>
                 </button>
 
@@ -4169,21 +4208,60 @@ export function MyPageClient({
                     }}
                   />
                 </div>
-              ) : bgType === "starfield" ? (
+              ) : bgType === "grid" ? (
                 <div className="mt-3 flex animate-slide-up flex-col gap-3 border-t border-border pt-3">
-                  {/* Speed */}
+                  {/* Colors */}
+                  <div className="flex items-center justify-between gap-3 text-sm">
+                    <span className="text-muted-foreground">Background</span>
+                    <ColorPicker
+                      value={grid.baseColor}
+                      onChange={(c) => updateGrid({ baseColor: c })}
+                      ariaLabel="Grid background color"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-3 text-sm">
+                    <span className="text-muted-foreground">Lines</span>
+                    <ColorPicker
+                      value={grid.lineColor}
+                      onChange={(c) => updateGrid({ lineColor: c })}
+                      ariaLabel="Grid line color"
+                    />
+                  </div>
+                  {/* Cell size — 10 presets rather than a raw px value. */}
                   <label className="flex flex-col gap-1.5 text-sm">
-                    <span className="text-muted-foreground">Speed</span>
+                    <span className="text-muted-foreground">
+                      Size · {gridSizeLevel(grid.size)}
+                    </span>
                     <input
                       type="range"
-                      min={0}
-                      max={10}
+                      min={1}
+                      max={GRID_SIZE_STEPS.length}
                       step={1}
-                      value={starfield.speed}
+                      value={gridSizeLevel(grid.size)}
                       onChange={(e) =>
-                        updateStarfield({ speed: Number(e.target.value) })
+                        updateGrid({
+                          size: GRID_SIZE_STEPS[Number(e.target.value) - 1],
+                        })
                       }
-                      aria-label="Space speed"
+                      aria-label="Grid cell size"
+                      className="w-full"
+                    />
+                  </label>
+                  {/* Line thickness */}
+                  <label className="flex flex-col gap-1.5 text-sm">
+                    <span className="text-muted-foreground">
+                      Thickness · {grid.thickness}px
+                    </span>
+                    <input
+                      type="range"
+                      min={1}
+                      max={8}
+                      step={1}
+                      value={grid.thickness}
+                      onChange={(e) =>
+                        updateGrid({ thickness: Number(e.target.value) })
+                      }
+                      aria-label="Grid line thickness"
                       className="w-full"
                     />
                   </label>

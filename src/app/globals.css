@@ -218,67 +218,6 @@
   background: transparent;
 }
 
-/* Galaxy background — a black sky with small star particles drifting upward.
-   Two tiled layers move at different speeds for a subtle parallax; drift speed
-   comes from the inline `--stars-dur` custom property. */
-.stars-layer {
-  position: fixed;
-  inset: 0;
-  z-index: -10;
-  overflow: hidden;
-  background: #000;
-}
-.stars-layer::before,
-.stars-layer::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background-repeat: repeat;
-  animation-timing-function: linear;
-  animation-iteration-count: infinite;
-}
-.stars-layer::before {
-  background-image:
-    radial-gradient(1px 1px at 10% 20%, #fff, transparent),
-    radial-gradient(1px 1px at 30% 60%, #fff, transparent),
-    radial-gradient(1px 1px at 70% 40%, #fff, transparent),
-    radial-gradient(1px 1px at 85% 80%, #cbd5e1, transparent),
-    radial-gradient(1px 1px at 50% 95%, #fff, transparent),
-    radial-gradient(1px 1px at 18% 78%, #fff, transparent),
-    radial-gradient(1px 1px at 92% 12%, #fff, transparent);
-  background-size: 300px 300px;
-  opacity: 0.85;
-  animation-name: stars-a;
-  animation-duration: var(--stars-dur, 18s);
-}
-.stars-layer::after {
-  background-image:
-    radial-gradient(1.5px 1.5px at 20% 50%, #fff, transparent),
-    radial-gradient(1.5px 1.5px at 60% 12%, #fff, transparent),
-    radial-gradient(1.5px 1.5px at 82% 72%, #e0e7ff, transparent),
-    radial-gradient(1.5px 1.5px at 40% 30%, #fff, transparent);
-  background-size: 520px 520px;
-  opacity: 0.9;
-  animation-name: stars-b;
-  animation-duration: calc(var(--stars-dur, 18s) * 1.7);
-}
-@keyframes stars-a {
-  from {
-    background-position: 0 0;
-  }
-  to {
-    background-position: 0 -300px;
-  }
-}
-@keyframes stars-b {
-  from {
-    background-position: 0 0;
-  }
-  to {
-    background-position: 0 -520px;
-  }
-}
-
 /* Profile-picture effects. Particles emit outward from the avatar center;
    shine sweeps a glossy highlight across it. Per-instance values (color,
    duration, delay, travel offset) are passed inline as CSS variables. */
@@ -434,8 +373,6 @@
   .animate-pop-out,
   .animate-fade-out,
   .animate-slide-down,
-  .stars-layer::before,
-  .stars-layer::after,
   .avatar-particle,
   .avatar-shine::before,
   .text-anim-gradient,

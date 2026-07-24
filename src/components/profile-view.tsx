@@ -1423,21 +1423,6 @@ export function LinkIconAnchor({
 // Page background
 // ---------------------------------------------------------------------------
 
-/**
- * Map a 0–10 speed onto a base animation duration in seconds (higher = faster).
- * Speed 0 returns 0, which callers treat as "stopped" (no animation).
- */
-function speedToSeconds(speed: number): number {
-  const s = Math.max(0, Math.min(10, speed));
-  if (s === 0) return 0;
-  return (11 - s) * 3;
-}
-
-/** Map a 1–10 speed onto a CSS animation duration string. */
-function speedToDuration(speed: number): string {
-  return `${speedToSeconds(speed)}s`;
-}
-
 // GLSL for the aurora surface. A full-screen triangle is shaded per-pixel: a
 // broad light-top → dark-bottom gradient (NOT a radial glow — the light fills
 // the whole top), whose transition line is pushed up and down by domain-warped
@@ -1732,7 +1717,7 @@ function AuroraBackground({
 /**
  * Full-viewport background layer behind the page content. Renders nothing for
  * the default (so the theme's own background shows through). Static fills and
- * gradients are a single styled div; starfield/media get their own markup.
+ * gradients are a single styled div; grid/media get their own markup.
  */
 export function PageBackground({ bg }: { bg?: Background }) {
   if (!bg || bg.type === "default") return null;
@@ -1761,13 +1746,28 @@ export function PageBackground({ bg }: { bg?: Background }) {
     );
   }
 
-  if (bg.type === "starfield") {
+  if (bg.type === "grid") {
+    const t = Math.max(0, bg.thickness);
+    // Solid base, with the lines in a separate layer masked with a radial
+    // gradient so they fade out toward the edges (the base color stays solid).
+    const fade =
+      "radial-gradient(ellipse 80% 80% at 50% 50%, #000 25%, transparent 85%)";
     return (
       <div
         aria-hidden
-        className="stars-layer"
-        style={{ "--stars-dur": speedToDuration(bg.speed) } as CSSProperties}
-      />
+        className="fixed inset-0 -z-10"
+        style={{ backgroundColor: bg.baseColor }}
+      >
+        <div
+          className="absolute inset-0"
+          style={{
+            backgroundImage: `linear-gradient(to right, ${bg.lineColor} ${t}px, transparent ${t}px), linear-gradient(to bottom, ${bg.lineColor} ${t}px, transparent ${t}px)`,
+            backgroundSize: `${bg.size}px ${bg.size}px`,
+            maskImage: fade,
+            WebkitMaskImage: fade,
+          }}
+        />
+      </div>
     );
   }
 

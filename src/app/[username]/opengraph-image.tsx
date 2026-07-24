@@ -10,7 +10,7 @@ export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
 // The card's default fill when a page has no custom background (or one Satori
-// can't render, like starfield/video) — matches the app's dark theme.
+// can't render, like grid/video) — matches the app's dark theme.
 const DEFAULT_BG =
   "linear-gradient(135deg, #140b2e 0%, #0b0b12 55%, #1a0f2e 100%)";
 
@@ -52,7 +52,7 @@ function resolveBackground(bg?: Background): {
       fg: "#ffffff",
     };
   }
-  // default, starfield, and video (which Satori can't rasterize) fall back.
+  // default, grid, and video (which Satori can't rasterize) fall back.
   return { style: { backgroundImage: DEFAULT_BG }, fg: "#ffffff" };
 }
 
