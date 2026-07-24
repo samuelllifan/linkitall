@@ -1,5 +1,5 @@
 import type { TimelinePoint } from "~/lib/analytics";
-import { ViewsLineChart } from "../dashboard/charts";
+import { CHART_COLORS, PieChart, ViewsLineChart } from "../dashboard/charts";
 
 export interface AdminUserRow {
   id: string;
@@ -16,7 +16,15 @@ export interface AdminUserRow {
 export interface AdminOverview {
   users: AdminUserRow[];
   totals: { users: number; views: number; clicks: number };
+  /** Site-wide view counts grouped by the visitor's device. */
+  devices: { device: string; views: number }[];
   daily: { date: string; views: number; clicks: number }[];
+}
+
+/** "desktop" → "Desktop", "unknown" → "Unknown", etc. */
+function deviceLabel(d: string): string {
+  if (!d) return "Unknown";
+  return d.charAt(0).toUpperCase() + d.slice(1);
 }
 
 /** "google" → "Google", "email" → "Email", etc. */
@@ -62,7 +70,7 @@ function StatCard({ label, value }: { label: string; value: number }) {
 }
 
 export function AdminView({ overview }: { overview: AdminOverview }) {
-  const { users, totals, daily } = overview;
+  const { users, totals, devices, daily } = overview;
 
   // Site-wide views over the last 30 days, shaped for the shared line chart.
   const timeline: TimelinePoint[] = daily.map((d) => {
@@ -72,6 +80,13 @@ export function AdminView({ overview }: { overview: AdminOverview }) {
       : date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
     return { label, count: d.views };
   });
+
+  // Device split, shaped for the shared pie chart.
+  const deviceSlices = devices.map((d, i) => ({
+    label: deviceLabel(d.device),
+    value: d.views,
+    color: CHART_COLORS[i % CHART_COLORS.length],
+  }));
 
   return (
     <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-10">
@@ -88,12 +103,20 @@ export function AdminView({ overview }: { overview: AdminOverview }) {
         <StatCard label="Total clicks" value={totals.clicks} />
       </div>
 
-      <section className="mt-8 rounded-xl border border-border bg-card p-5">
-        <h2 className="mb-4 text-sm font-semibold text-muted-foreground">
-          Views · last 30 days
-        </h2>
-        <ViewsLineChart data={timeline} />
-      </section>
+      <div className="mt-8 grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <section className="rounded-xl border border-border bg-card p-5 lg:col-span-2">
+          <h2 className="mb-4 text-sm font-semibold text-muted-foreground">
+            Views · last 30 days
+          </h2>
+          <ViewsLineChart data={timeline} />
+        </section>
+        <section className="rounded-xl border border-border bg-card p-5">
+          <h2 className="mb-4 text-sm font-semibold text-muted-foreground">
+            Devices
+          </h2>
+          <PieChart slices={deviceSlices} />
+        </section>
+      </div>
 
       <section className="mt-8">
         <h2 className="mb-3 text-sm font-semibold text-muted-foreground">
