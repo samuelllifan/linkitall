@@ -2,13 +2,42 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { ProfileView } from "~/components/profile-view";
 import { ShareButton } from "~/components/share-button";
-import { getPageServer, getPublicPageServer } from "~/lib/pages.server";
+import {
+  getPageServer,
+  getPublicPageServer,
+  type PublicPage,
+} from "~/lib/pages.server";
 import { createClient } from "~/lib/supabase/server";
 import { plainText } from "~/lib/text";
 import { MyPageClient } from "../my-page/my-page-client";
 
 // Always render with fresh data from the database on each request.
 export const dynamic = "force-dynamic";
+
+/**
+ * A short, stable hash of the page's visible content, used to version the OG
+ * image URL. When the owner changes anything the card shows (name, bio, avatar,
+ * or background/styles), this changes, so the `og:image` URL changes too — which
+ * defeats URL-keyed image caches and lets a re-scrape pick up the new card
+ * instead of a stale one. (The image route itself is already `force-dynamic`.)
+ */
+function contentVersion(page: PublicPage): string {
+  const { name, bio, avatar, nameStyle, bioStyle, background } = page.data;
+  const key = JSON.stringify([
+    name,
+    bio,
+    avatar,
+    nameStyle,
+    bioStyle,
+    background,
+  ]);
+  let h = 2166136261; // FNV-1a
+  for (let i = 0; i < key.length; i++) {
+    h ^= key.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0).toString(36);
+}
 
 // Rich link previews when a page URL is shared (the companion `opengraph-image`
 // route supplies the image). Falls back gracefully for unknown usernames.
@@ -25,6 +54,16 @@ export async function generateMetadata({
   const description =
     plainText(page.data.bio) || `${name}'s links, all in one place.`;
 
+  // Version the share-card URL by the page's content so it changes whenever the
+  // owner updates their page (see contentVersion). Resolves against the app's
+  // metadataBase (set in the root layout).
+  const image = {
+    url: `/${encodeURIComponent(page.username)}/opengraph-image?v=${contentVersion(page)}`,
+    width: 1200,
+    height: 630,
+    alt: `${name} on stacked`,
+  };
+
   return {
     // Browser tab title follows the account username (with an @), not the
     // display name, so it stays stable regardless of what the page is named.
@@ -35,8 +74,14 @@ export async function generateMetadata({
       title: name,
       description,
       siteName: "stacked",
+      images: [image],
     },
-    twitter: { card: "summary_large_image", title: name, description },
+    twitter: {
+      card: "summary_large_image",
+      title: name,
+      description,
+      images: [image],
+    },
   };
 }
 

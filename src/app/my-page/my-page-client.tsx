@@ -138,33 +138,6 @@ function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n));
 }
 
-/**
- * Normalize a CSS color to a #rrggbb hex string (needed by `<input type=color>`
- * and for comparing against presets). Accepts hex or `rgb()/rgba()`; returns
- * null for anything unparseable so callers can leave their value untouched.
- */
-function toHex(color: string | null | undefined): string | null {
-  if (!color) return null;
-  const s = color.trim();
-  if (/^#[0-9a-f]{6}$/i.test(s)) return s.toLowerCase();
-  if (/^#[0-9a-f]{3}$/i.test(s)) {
-    return `#${s
-      .slice(1)
-      .split("")
-      .map((c) => c + c)
-      .join("")}`.toLowerCase();
-  }
-  const m = s.match(/^rgba?\(([^)]+)\)$/i);
-  if (m) {
-    const [r, g, b] = m[1].split(",").map((p) => Number.parseInt(p, 10));
-    if ([r, g, b].some((n) => Number.isNaN(n))) return null;
-    const h = (n: number) =>
-      Math.max(0, Math.min(255, n)).toString(16).padStart(2, "0");
-    return `#${h(r)}${h(g)}${h(b)}`;
-  }
-  return null;
-}
-
 /** Profile-picture crop frame size (px). */
 const CROP_SIZE = 256;
 
@@ -1369,9 +1342,6 @@ export function MyPageClient({
   // Panel dropdown (background panel behind the whole profile block).
   const [boxMenu, setBoxMenu] = useState(false);
   const boxMenuRef = useRef<HTMLDivElement | null>(null);
-  // Text color shown in the toolbar swatch — mirrors the current selection's
-  // color (updated on selection change) rather than a fixed default.
-  const [textColor, setTextColor] = useState("#ffffff");
   // Imported-media background: hidden file input, validation error, and the
   // crop editor (source + kind while open, plus its live frame/position/zoom).
   const bgFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -1406,27 +1376,16 @@ export function MyPageClient({
   const [linkFlashTick, setLinkFlashTick] = useState(0);
   const [saving, setSaving] = useState(false);
   const [confirmingSave, setConfirmingSave] = useState(false);
-  // Which text field the formatting toolbar targets.
-  const [activeField, setActiveField] = useState<"name" | "bio">("name");
   // Which element's font/text settings extension is open: "name", "bio", or a
   // link id. Only one is open at a time.
   const [fontOpen, setFontOpen] = useState<string | null>(null);
   // Which link's editor is expanded in horizontal edit mode (icon-row layout).
   const [editingLinkId, setEditingLinkId] = useState<string | null>(null);
-  // Inline formatting state of the current selection, mirrored so the toolbar
-  // B/I/U buttons can show their pressed state.
-  const [inlineFmt, setInlineFmt] = useState({
-    bold: false,
-    italic: false,
-    underline: false,
-  });
 
-  // Editable DOM nodes for the two rich-text fields, plus the last selection
-  // range inside one of them (restored before running a toolbar command in
-  // case focus moved to a toolbar control like the color picker).
+  // Editable DOM nodes for the two rich-text fields (used to seed their initial
+  // HTML on mount).
   const nameEditorRef = useRef<HTMLDivElement | null>(null);
   const bioEditorRef = useRef<HTMLDivElement | null>(null);
-  const savedRangeRef = useRef<Range | null>(null);
 
   // Fade the fixed Edit button out just before it would overlap the footer,
   // and back in once there's clearance again.
@@ -1506,35 +1465,6 @@ export function MyPageClient({
   const bgMenuP = usePresence(bgMenu, 200);
   const boxMenuP = usePresence(boxMenu, 200);
   const mediaCropModal = usePresence(mediaCrop, 200);
-
-  // Mirror the current selection's inline formatting into state (for the
-  // toolbar's pressed states) and remember the range so a command can restore
-  // it if focus moves to a toolbar control.
-  useEffect(() => {
-    if (!editing) return;
-    function onSelectionChange() {
-      const sel = window.getSelection();
-      const node = sel?.anchorNode ?? null;
-      const inName = !!node && nameEditorRef.current?.contains(node);
-      const inBio = !!node && bioEditorRef.current?.contains(node);
-      if (!inName && !inBio) return;
-      if (sel && sel.rangeCount > 0) {
-        savedRangeRef.current = sel.getRangeAt(0).cloneRange();
-      }
-      setInlineFmt({
-        bold: document.queryCommandState("bold"),
-        italic: document.queryCommandState("italic"),
-        underline: document.queryCommandState("underline"),
-      });
-      // Reflect the selection's actual text color in the toolbar swatch.
-      const fore = document.queryCommandValue("foreColor");
-      const hex = toHex(fore);
-      if (hex) setTextColor(hex);
-    }
-    document.addEventListener("selectionchange", onSelectionChange);
-    return () =>
-      document.removeEventListener("selectionchange", onSelectionChange);
-  }, [editing]);
 
   // Close the picker on Escape.
   useEffect(() => {
@@ -2461,158 +2391,22 @@ export function MyPageClient({
   const savedNameBox = saved.nameBox ?? DEFAULT_NAME_BOX;
   const savedBioBox = saved.bioBox ?? saved.nameBox ?? DEFAULT_BIO_BOX;
   const savedLinkBox = saved.linkBox ?? DEFAULT_LINK_BOX;
-  const activeStyle = activeField === "name" ? nameStyle : bioStyle;
-
-  // Patch the currently-targeted field's whole-field style (font/size/align).
-  function setActiveStyle(patch: Partial<TextStyle>) {
-    const key = activeField === "name" ? "nameStyle" : "bioStyle";
-    const base = activeField === "name" ? nameStyle : bioStyle;
-    setDraft((prev) => ({ ...prev, [key]: { ...base, ...patch } }));
+  // Patch the name / bio whole-field text style (font, size, weight, color…).
+  // Name and bio style the whole field — exactly like links — so there's no
+  // per-selection state to track: a color / weight / align change applies to
+  // the entire field and renders immediately via `styleToCss`.
+  function updateNameStyle(patch: Partial<TextStyle>) {
+    setDraft((prev) => ({
+      ...prev,
+      nameStyle: { ...prev.nameStyle, ...patch },
+    }));
   }
-
-  // Read the active editor's HTML back into the draft after a DOM mutation.
-  function syncActiveField() {
-    const el =
-      activeField === "name" ? nameEditorRef.current : bioEditorRef.current;
-    if (el) updateField(activeField, el.innerHTML);
+  function updateBioStyle(patch: Partial<TextStyle>) {
+    setDraft((prev) => ({
+      ...prev,
+      bioStyle: { ...prev.bioStyle, ...patch },
+    }));
   }
-
-  // Run `fn` with the last text selection restored, in case focus moved to a
-  // toolbar control (e.g. the native color input) and collapsed the selection.
-  function withSelection(fn: () => void) {
-    const el =
-      activeField === "name" ? nameEditorRef.current : bioEditorRef.current;
-    const active = document.activeElement;
-    const inEditor =
-      active === nameEditorRef.current || active === bioEditorRef.current;
-    if (!inEditor && el && savedRangeRef.current) {
-      el.focus();
-      const sel = window.getSelection();
-      sel?.removeAllRanges();
-      sel?.addRange(savedRangeRef.current);
-    }
-    fn();
-  }
-
-  // Apply an inline command (bold/italic/underline) to the current selection.
-  function applyInline(command: "bold" | "italic" | "underline") {
-    withSelection(() => {
-      document.execCommand(command, false);
-      setInlineFmt({
-        bold: document.queryCommandState("bold"),
-        italic: document.queryCommandState("italic"),
-        underline: document.queryCommandState("underline"),
-      });
-      syncActiveField();
-    });
-  }
-
-  // Color the selected characters.
-  function applyColor(color: string) {
-    withSelection(() => {
-      document.execCommand("foreColor", false, color);
-      syncActiveField();
-    });
-  }
-
-  const formatToolbar = (
-    <div
-      role="toolbar"
-      aria-label="Text formatting"
-      className="flex flex-wrap items-center justify-center gap-2"
-      onMouseDown={(e) => {
-        // Keep the focused field (and its selection) active when clicking
-        // buttons; let selects/inputs receive focus normally.
-        const tag = (e.target as HTMLElement).tagName;
-        if (tag !== "SELECT" && tag !== "INPUT" && tag !== "OPTION") {
-          e.preventDefault();
-        }
-      }}
-    >
-      {/* Font family + size — one group so they wrap together, never apart. */}
-      <div className="flex shrink-0 items-center gap-1">
-        <select
-          value={activeStyle.fontFamily ?? "inter"}
-          onChange={(e) => setActiveStyle({ fontFamily: e.target.value })}
-          aria-label="Font"
-          className="h-8 max-w-[8rem] rounded-md border border-current/20 bg-transparent px-2 text-sm outline-none"
-        >
-          {Object.entries(FONTS).map(([key, f]) => (
-            <option key={key} value={key}>
-              {f.label}
-            </option>
-          ))}
-        </select>
-        <FontSizeInput
-          value={activeStyle.fontSize ?? 16}
-          onChange={(size) => setActiveStyle({ fontSize: size })}
-          ariaLabel="Font size"
-        />
-      </div>
-
-      {/* Formatting controls — bold/italic/underline, alignment, and color kept
-          together as one non-wrapping group so they always share a row (dropping
-          to the next line as a whole unit, never splitting the alignment set). */}
-      <div className="flex shrink-0 items-center gap-1">
-        <Button
-          type="button"
-          variant={inlineFmt.bold ? "default" : "ghost"}
-          size="icon-sm"
-          onClick={() => applyInline("bold")}
-          aria-label="Bold"
-          aria-pressed={inlineFmt.bold}
-          className="font-bold"
-        >
-          B
-        </Button>
-        <Button
-          type="button"
-          variant={inlineFmt.italic ? "default" : "ghost"}
-          size="icon-sm"
-          onClick={() => applyInline("italic")}
-          aria-label="Italic"
-          aria-pressed={inlineFmt.italic}
-          className="italic"
-        >
-          I
-        </Button>
-        <Button
-          type="button"
-          variant={inlineFmt.underline ? "default" : "ghost"}
-          size="icon-sm"
-          onClick={() => applyInline("underline")}
-          aria-label="Underline"
-          aria-pressed={inlineFmt.underline}
-          className="underline"
-        >
-          U
-        </Button>
-        <span className="mx-0.5 h-5 w-px bg-current/20" />
-        {(["left", "center", "right"] as const).map((a) => (
-          <Button
-            key={a}
-            type="button"
-            variant={activeStyle.align === a ? "default" : "ghost"}
-            size="icon-sm"
-            onClick={() => setActiveStyle({ align: a })}
-            aria-label={`Align ${a}`}
-            aria-pressed={activeStyle.align === a}
-          >
-            <AlignIcon variant={a} className="size-4" />
-          </Button>
-        ))}
-        <span className="mx-0.5 h-5 w-px bg-current/20" />
-        <ColorPicker
-          value={textColor}
-          onChange={(c) => {
-            setTextColor(c);
-            applyColor(c);
-          }}
-          ariaLabel="Text color"
-        />
-      </div>
-    </div>
-  );
 
   // A single link's full editor (inputs + logo + sparkles/font + remove). Used
   // stacked in vertical edit mode, and below the icon row in horizontal edit.
@@ -2668,6 +2462,8 @@ export function MyPageClient({
               value={link.label}
               onChange={(e) => updateLink(link.id, { label: e.target.value })}
               placeholder="Label"
+              // Clicking into the label opens this link's text settings below.
+              onFocus={() => setFontOpen(link.id)}
               // Preview the link's font/effect settings live while editing.
               style={styleToCss(linkTextStyle(link), isDark)}
               className={textAnimClass(linkTextStyle(link))}
@@ -2758,18 +2554,22 @@ export function MyPageClient({
                   align="left"
                 />
               ) : null}
-              {/* Per-link text/font settings (italic-T). */}
-              <button
-                type="button"
-                onClick={() =>
-                  setFontOpen((o) => (o === link.id ? null : link.id))
-                }
-                aria-label="Text settings"
-                aria-expanded={fontOpen === link.id}
-                className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              >
-                <FontIcon className="size-5" />
-              </button>
+              {/* Per-link text/font settings (italic-T). In the stacked list
+                  the settings open by focusing the label, so the button is only
+                  needed in the logos layout, which has no label field. */}
+              {horizontal ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setFontOpen((o) => (o === link.id ? null : link.id))
+                  }
+                  aria-label="Text settings"
+                  aria-expanded={fontOpen === link.id}
+                  className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  <FontIcon className="size-5" />
+                </button>
+              ) : null}
               {!horizontal && (link.box || link.color || link.textStyle) ? (
                 <Button
                   variant="ghost"
@@ -2941,23 +2741,12 @@ export function MyPageClient({
                       label="Customize name box"
                       align="left"
                     />
-                    <button
-                      type="button"
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => {
-                        setActiveField("name");
-                        setFontOpen((o) => (o === "name" ? null : "name"));
-                      }}
-                      aria-label="Text settings"
-                      aria-expanded={fontOpen === "name"}
-                      className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                    >
-                      <FontIcon className="size-5" />
-                    </button>
                   </div>
                 ) : null}
                 {editing ? (
-                  <div className="w-full overflow-hidden rounded-md border border-input transition-colors focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50">
+                  // No `overflow-hidden` here: the text-settings panel's color
+                  // and size popovers open downward and must not be clipped.
+                  <div className="w-full rounded-md border border-input transition-colors focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50">
                     <RichTextField
                       key={`name-${editKey}`}
                       editorRef={nameEditorRef}
@@ -2965,7 +2754,8 @@ export function MyPageClient({
                       placeholder="Your name"
                       ariaLabel="Your name"
                       onInput={(html) => updateField("name", html)}
-                      onFocus={() => setActiveField("name")}
+                      // Clicking into the field opens its text settings below it.
+                      onFocus={() => setFontOpen("name")}
                       style={styleToCss(nameStyle, isDark)}
                       className={cn(
                         "min-h-9 w-full break-words bg-transparent px-3 py-2 tracking-tight whitespace-pre-wrap outline-none",
@@ -2979,9 +2769,13 @@ export function MyPageClient({
                             effectiveBoxColor(nameBox, isDark),
                           ),
                         }}
-                        className="border-t border-current/15 p-2 animate-slide-up"
+                        className="border-t border-current/15 p-3 animate-slide-up"
                       >
-                        {formatToolbar}
+                        <TextStyleEditor
+                          style={nameStyle}
+                          onChange={updateNameStyle}
+                          defaultSize={24}
+                        />
                       </div>
                     ) : null}
                   </div>
@@ -3015,23 +2809,12 @@ export function MyPageClient({
                       label="Customize description box"
                       align="left"
                     />
-                    <button
-                      type="button"
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => {
-                        setActiveField("bio");
-                        setFontOpen((o) => (o === "bio" ? null : "bio"));
-                      }}
-                      aria-label="Text settings"
-                      aria-expanded={fontOpen === "bio"}
-                      className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                    >
-                      <FontIcon className="size-5" />
-                    </button>
                   </div>
                 ) : null}
                 {editing ? (
-                  <div className="w-full overflow-hidden rounded-md border border-input transition-colors focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50">
+                  // No `overflow-hidden` here: the text-settings panel's color
+                  // and size popovers open downward and must not be clipped.
+                  <div className="w-full rounded-md border border-input transition-colors focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50">
                     <RichTextField
                       key={`bio-${editKey}`}
                       editorRef={bioEditorRef}
@@ -3039,7 +2822,8 @@ export function MyPageClient({
                       placeholder="Short bio"
                       ariaLabel="Short bio"
                       onInput={(html) => updateField("bio", html)}
-                      onFocus={() => setActiveField("bio")}
+                      // Clicking into the field opens its text settings below it.
+                      onFocus={() => setFontOpen("bio")}
                       style={styleToCss(bioStyle, isDark)}
                       className={cn(
                         "min-h-9 w-full break-words bg-transparent px-3 py-2 whitespace-pre-wrap outline-none",
@@ -3056,9 +2840,13 @@ export function MyPageClient({
                             effectiveBoxColor(bioBox, isDark),
                           ),
                         }}
-                        className="border-t border-current/15 p-2 animate-slide-up"
+                        className="border-t border-current/15 p-3 animate-slide-up"
                       >
-                        {formatToolbar}
+                        <TextStyleEditor
+                          style={bioStyle}
+                          onChange={updateBioStyle}
+                          defaultSize={14}
+                        />
                       </div>
                     ) : null}
                   </div>

@@ -14,9 +14,10 @@ export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
 // The card's default fill when a page has no custom background (or one Satori
-// can't render, like a video) — matches the app's dark theme.
-const DEFAULT_BG =
-  "linear-gradient(135deg, #140b2e 0%, #0b0b12 55%, #1a0f2e 100%)";
+// can't render, like a video). A page on the default background just shows the
+// app's near-black dark theme, so mirror that (a whisper of gradient keeps it
+// from reading as dead-flat) rather than a decorative tint.
+const DEFAULT_BG = "linear-gradient(180deg, #0e0e13 0%, #08080b 100%)";
 
 /**
  * Translate a page's saved `background` into inline styles Satori can render,
@@ -58,13 +59,15 @@ function resolveBackground(bg?: Background): {
     };
   }
   if (bg?.type === "aurora") {
-    // Approximate the animated glow with a static radial bloom from the
-    // top-center fading into the base color — Satori can't run the WebGL
-    // shader, but this captures the look for a still share card.
+    // The real aurora (a WebGL shader) is a broad light-top → dark-bottom
+    // vertical gradient whose horizon sits a little under halfway down — NOT a
+    // radial glow. Satori can't run the shader, so approximate the static look
+    // with a linear gradient: the light color fills the top and fades into the
+    // base color by ~88% down, mirroring the shader's wide, smooth falloff.
     return {
       style: {
         backgroundColor: bg.baseColor,
-        backgroundImage: `radial-gradient(ellipse 90% 70% at 50% 0%, ${bg.color}, transparent 70%)`,
+        backgroundImage: `linear-gradient(to bottom, ${bg.color} 0%, ${bg.baseColor} 88%)`,
       },
       fg: readableText(bg.baseColor),
     };
@@ -74,9 +77,16 @@ function resolveBackground(bg?: Background): {
     bg.kind === "image" &&
     bg.src.startsWith("http")
   ) {
+    // Mirror the page's darkening overlay so a dimmed photo reads the same on
+    // the card. (Blur is skipped — Satori doesn't rasterize CSS filters.)
+    const dim = Math.max(0, Math.min(100, bg.dim ?? 0)) / 100;
+    const overlay =
+      dim > 0
+        ? `linear-gradient(rgba(0,0,0,${dim}), rgba(0,0,0,${dim})), `
+        : "";
     return {
       style: {
-        backgroundImage: `url(${bg.src})`,
+        backgroundImage: `${overlay}url(${bg.src})`,
         backgroundSize: "cover",
         backgroundPosition: `${bg.posX}% ${bg.posY}%`,
       },
@@ -141,6 +151,12 @@ export default async function OpengraphImage({
   const { style: bgStyle, fg } = resolveBackground(background);
   // Muted variants of the foreground for the secondary lines.
   const mutedRgb = fg === "#ffffff" ? "255,255,255" : "11,11,18";
+  // The top "stacked" label sits at the very top of the card. For aurora that
+  // area is the light glow color (not the base), so contrast the label against
+  // that instead of the base-derived `fg`; every other background is uniform
+  // enough at the top that `fg` is already correct.
+  const topFg =
+    background?.type === "aurora" ? readableText(background.color) : fg;
 
   return new ImageResponse(
     <div
@@ -155,7 +171,9 @@ export default async function OpengraphImage({
         ...bgStyle,
       }}
     >
-      <div style={{ display: "flex", fontSize: 34, fontWeight: 700 }}>
+      <div
+        style={{ display: "flex", fontSize: 34, fontWeight: 700, color: topFg }}
+      >
         stacked
       </div>
 

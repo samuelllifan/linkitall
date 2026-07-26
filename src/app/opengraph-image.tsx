@@ -9,9 +9,6 @@ export const alt =
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-// Matches the app's dark theme (mirrors DEFAULT_BG in the per-page card).
-const BG = "linear-gradient(135deg, #140b2e 0%, #0b0b12 55%, #1a0f2e 100%)";
-
 export default function OpengraphImage() {
   return new ImageResponse(
     <div
@@ -25,7 +22,6 @@ export default function OpengraphImage() {
         padding: "72px",
         color: "#ffffff",
         backgroundColor: "#0b0b12",
-        backgroundImage: BG,
       }}
     >
       {/* Faint grid backdrop, echoing the landing page's grid sections. */}
@@ -83,29 +79,13 @@ export default function OpengraphImage() {
           style={{
             display: "flex",
             marginTop: 28,
-            fontSize: 108,
+            fontSize: 132,
             fontWeight: 700,
             letterSpacing: "-0.03em",
           }}
         >
           stacked
         </div>
-      </div>
-
-      {/* Tagline. */}
-      <div
-        style={{
-          display: "flex",
-          marginTop: 32,
-          maxWidth: 900,
-          textAlign: "center",
-          fontSize: 38,
-          lineHeight: 1.3,
-          color: "rgba(255,255,255,0.72)",
-        }}
-      >
-        The fastest, easiest, and most customizable way to create your
-        link-in-bio page.
       </div>
     </div>,
     { ...size },
