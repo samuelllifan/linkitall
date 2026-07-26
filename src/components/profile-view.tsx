@@ -1232,7 +1232,7 @@ export function LinkAnchor({
     justifyContent: alignToJustify(ts?.align),
   };
   const boxClassName =
-    "flex w-full items-center gap-2 rounded-md px-4 py-3 text-center text-sm font-medium transition-all hover:opacity-90 hover:shadow-sm";
+    "flex w-full items-center gap-2 rounded-md px-4 py-3 text-center text-sm font-medium transition duration-300 ease-out hover:-translate-y-1 hover:scale-105 hover:shadow-xl hover:shadow-black/40 active:translate-y-0 active:scale-95 active:duration-75";
   const iconEl = link.logo ? (
     // biome-ignore lint/performance/noImgElement: small inline data-URL logo; next/image adds no value
     <img src={link.logo} alt="" className="size-4 object-contain" />
@@ -1376,7 +1376,7 @@ export function LinkIconAnchor({
     </span>
   );
   const iconClassName =
-    "flex size-11 items-center justify-center rounded-md transition-transform hover:scale-110";
+    "flex size-11 items-center justify-center rounded-md transition duration-300 ease-out hover:-translate-y-1 hover:scale-110 hover:shadow-xl hover:shadow-black/40 active:translate-y-0 active:scale-95 active:duration-75";
 
   // Discord: copy the username instead of navigating, with a confirmation.
   if (isDiscordLink(link.href)) {
@@ -1708,7 +1708,7 @@ function AuroraBackground({
   speed: number;
 }) {
   return (
-    <div aria-hidden className="fixed inset-0 -z-10">
+    <div aria-hidden className="absolute inset-0 -z-10">
       <AuroraSurface color={color} baseColor={baseColor} speed={speed} />
     </div>
   );
@@ -1726,7 +1726,7 @@ export function PageBackground({ bg }: { bg?: Background }) {
     return (
       <div
         aria-hidden
-        className="fixed inset-0 -z-10"
+        className="absolute inset-0 -z-10"
         style={{ backgroundColor: bg.color }}
       />
     );
@@ -1738,7 +1738,7 @@ export function PageBackground({ bg }: { bg?: Background }) {
     return (
       <div
         aria-hidden
-        className="fixed inset-0 -z-10"
+        className="absolute inset-0 -z-10"
         style={{
           backgroundImage: `linear-gradient(${dir}, ${bg.from}, ${mid}%, ${bg.to})`,
         }}
@@ -1755,7 +1755,7 @@ export function PageBackground({ bg }: { bg?: Background }) {
     return (
       <div
         aria-hidden
-        className="fixed inset-0 -z-10"
+        className="absolute inset-0 -z-10"
         style={{ backgroundColor: bg.baseColor }}
       >
         <div
@@ -1967,9 +1967,11 @@ export function ProfileView({
     <>
       {/* The page background and glass filter must sit OUTSIDE the panel: the
           panel's backdrop-filter (glass) creates a containing block, so a
-          `fixed` background nested inside it would be trapped within the panel
-          (leaving the rest of the page black) and bleed square corners past the
-          panel's rounded edges. As siblings they anchor to the viewport. */}
+          background nested inside it would be trapped within the panel (leaving
+          the rest of the page black) and bleed square corners past the panel's
+          rounded edges. As siblings they fill the full-width `relative` page
+          wrapper (absolute inset-0), so they cover the whole page and scroll
+          with the content rather than staying pinned to the viewport. */}
       <PageBackground bg={data.background} />
       <GlassFilter />
 

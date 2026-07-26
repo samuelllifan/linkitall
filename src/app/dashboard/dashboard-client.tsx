@@ -171,7 +171,7 @@ export function DashboardClient({
                   href={`/${username}`}
                   className="text-foreground underline-offset-4 hover:underline"
                 >
-                  linkitall.net/{username}
+                  stacked.page/{username}
                 </Link>
               </>
             ) : (

@@ -1,4 +1,4 @@
-# linkitall
+# stacked
 
 Created with [create-lumos-app](https://github.com/lumos-fellows/create-lumos-app).
 

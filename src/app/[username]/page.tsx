@@ -19,7 +19,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { username } = await params;
   const page = await getPublicPageServer(username);
-  if (!page) return { title: "linkitall" };
+  if (!page) return { title: "stacked" };
 
   const name = plainText(page.data.name) || `@${page.username}`;
   const description =
@@ -28,13 +28,13 @@ export async function generateMetadata({
   return {
     // Browser tab title follows the account username (with an @), not the
     // display name, so it stays stable regardless of what the page is named.
-    title: `@${page.username} · linkitall`,
+    title: `@${page.username} · stacked`,
     description,
     openGraph: {
       type: "profile",
       title: name,
       description,
-      siteName: "linkitall",
+      siteName: "stacked",
     },
     twitter: { card: "summary_large_image", title: name, description },
   };
@@ -74,7 +74,7 @@ export default async function UserPage({
   if (!page) notFound();
 
   return (
-    <main className="mx-auto flex min-h-[calc(100vh-3.5rem)] w-full max-w-lg flex-col items-center justify-center px-6 pt-16 pb-28">
+    <main className="relative mx-auto flex min-h-[calc(100vh-3.5rem)] w-full flex-col items-center justify-center px-6 pt-16 pb-28">
       <ShareButton />
       <ProfileView data={page.data} username={page.username} />
     </main>

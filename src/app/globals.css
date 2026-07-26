@@ -346,7 +346,7 @@
 /* Media background — full-viewport uploaded image/video. Framing (object
    position + zoom) is applied inline per background. */
 .media-layer {
-  position: fixed;
+  position: absolute;
   inset: 0;
   z-index: -10;
   overflow: hidden;

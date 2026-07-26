@@ -3102,476 +3102,580 @@ export function MyPageClient({
 
   return (
     <>
-      <PageBackground bg={editing ? draft.background : saved.background} />
-      <GlassFilter />
-      <main className="mx-auto flex min-h-[calc(100vh-3.5rem)] w-full max-w-3xl flex-col items-center justify-center px-6 pt-16 pb-28">
-        {/* Keyed by mode so switching edit/view crossfades (but not on load). */}
-        <div
-          key={editing ? "edit" : "view"}
-          style={panelCss(
-            (editing ? draft.panel : saved.panel) ?? DEFAULT_PANEL,
-          )}
-          className={cn(
-            "relative mx-auto flex w-full max-w-lg flex-col items-center gap-6",
-            ((editing ? draft.panel : saved.panel) ?? DEFAULT_PANEL).type !==
-              "transparent" && "rounded-2xl px-6 pt-6",
-            // Reserve bottom room in edit mode for the panel-settings button.
-            editing
-              ? "pb-16"
-              : ((editing ? draft.panel : saved.panel) ?? DEFAULT_PANEL)
-                    .type !== "transparent"
-                ? "pb-6"
-                : "",
-            switched && "animate-fade",
-          )}
-        >
-          {/* Profile picture */}
-          {editing ? (
-            <div className="flex flex-col items-center gap-2">
-              <AvatarFx
-                effect={draft.avatarEffect}
-                outline={draft.avatarOutline}
-              >
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (draft.avatar) {
-                      setAvatarMenu(true);
-                    } else {
-                      // No menu to return to for a first upload.
-                      setCropReturnToMenu(false);
-                      avatarInputRef.current?.click();
-                    }
-                  }}
-                  aria-label="Edit profile photo"
-                  className="group relative size-24 cursor-pointer overflow-hidden rounded-full"
-                >
-                  {draft.avatar ? (
-                    // biome-ignore lint/performance/noImgElement: small inline data-URL avatar; next/image adds no value
-                    <img
-                      src={draft.avatar}
-                      alt=""
-                      className="size-24 rounded-full object-cover"
-                    />
-                  ) : (
-                    <div className="flex size-24 items-center justify-center rounded-full bg-muted text-3xl font-semibold text-muted-foreground">
-                      {draft.name.charAt(0).toUpperCase() || "?"}
-                    </div>
-                  )}
-                  <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 text-xs font-medium text-white opacity-0 transition-opacity group-hover:opacity-100">
-                    {draft.avatar ? "Edit" : "Upload"}
-                  </span>
-                </button>
-              </AvatarFx>
-              <input
-                ref={avatarInputRef}
-                type="file"
-                accept="image/*"
-                className="sr-only"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) pickAvatar(file);
-                  e.target.value = "";
-                }}
-              />
-              <AvatarFxPopover
-                effect={draft.avatarEffect}
-                outline={draft.avatarOutline}
-                onEffect={chooseAvatarEffect}
-                onEffectPatch={updateAvatarEffect}
-                onOutline={toggleAvatarOutline}
-                onOutlineColor={setAvatarOutlineColor}
-              />
-            </div>
-          ) : saved.avatar ? (
-            <AvatarFx effect={saved.avatarEffect} outline={saved.avatarOutline}>
-              {/* biome-ignore lint/performance/noImgElement: small inline data-URL avatar; next/image adds no value */}
-              <img
-                src={saved.avatar}
-                alt={saved.name}
-                className="size-24 rounded-full object-cover"
-              />
-            </AvatarFx>
-          ) : (
-            <AvatarFx effect={saved.avatarEffect} outline={saved.avatarOutline}>
-              <div className="flex size-24 items-center justify-center rounded-full bg-muted text-3xl font-semibold text-muted-foreground">
-                {saved.name.charAt(0).toUpperCase() || "?"}
-              </div>
-            </AvatarFx>
-          )}
-
-          <div className="flex w-full flex-col items-center gap-2">
-            {/* Name — its own box. */}
-            <div
-              style={boxCss(editing ? nameBox : savedNameBox)}
-              className={cn(
-                "relative flex w-full flex-col items-center rounded-lg px-4 pt-3",
-                editing ? "pb-12" : "pb-3",
-              )}
-            >
-              {editing ? (
-                <div className="absolute bottom-2 left-2 z-10 flex items-center gap-1">
-                  <BoxStylePopover
-                    box={nameBox}
-                    onChange={updateNameBox}
-                    label="Customize name box"
-                    align="left"
-                    animation={nameStyle.animation}
-                    onAnimation={(a) =>
-                      setDraft((prev) => ({
-                        ...prev,
-                        nameStyle: { ...prev.nameStyle, animation: a },
-                      }))
-                    }
-                  />
-                  <button
-                    type="button"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => {
-                      setActiveField("name");
-                      setFontOpen((o) => (o === "name" ? null : "name"));
-                    }}
-                    aria-label="Text settings"
-                    aria-expanded={fontOpen === "name"}
-                    className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                  >
-                    <FontIcon className="size-5" />
-                  </button>
-                </div>
-              ) : null}
-              {editing ? (
-                <div className="w-full overflow-hidden rounded-md border border-input transition-colors focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50">
-                  <RichTextField
-                    key={`name-${editKey}`}
-                    editorRef={nameEditorRef}
-                    initialHtml={draft.name}
-                    placeholder="Your name"
-                    ariaLabel="Your name"
-                    onInput={(html) => updateField("name", html)}
-                    onFocus={() => setActiveField("name")}
-                    style={styleToCss(nameStyle, isDark)}
-                    className={cn(
-                      "min-h-9 w-full break-words bg-transparent px-3 py-2 tracking-tight whitespace-pre-wrap outline-none",
-                      textAnimClass(nameStyle),
-                    )}
-                  />
-                  {fontOpen === "name" ? (
-                    <div
-                      style={{
-                        color: contrastText(effectiveBoxColor(nameBox, isDark)),
-                      }}
-                      className="border-t border-current/15 p-2 animate-slide-up"
-                    >
-                      {formatToolbar}
-                    </div>
-                  ) : null}
-                </div>
-              ) : (
-                <RichText
-                  as="h1"
-                  html={saved.name}
-                  isDark={isDark}
-                  className={cn(
-                    "w-full tracking-tight",
-                    textAnimClass(savedNameStyle),
-                  )}
-                  style={styleToCss(savedNameStyle, isDark)}
-                />
-              )}
-            </div>
-
-            {/* Bio — its own box. */}
-            <div
-              style={boxCss(editing ? bioBox : savedBioBox)}
-              className={cn(
-                "relative flex w-full flex-col items-center rounded-lg px-4 pt-3",
-                editing ? "pb-12" : "pb-3",
-              )}
-            >
-              {editing ? (
-                <div className="absolute bottom-2 left-2 z-10 flex items-center gap-1">
-                  <BoxStylePopover
-                    box={bioBox}
-                    onChange={updateBioBox}
-                    label="Customize description box"
-                    align="left"
-                    animation={bioStyle.animation}
-                    onAnimation={(a) =>
-                      setDraft((prev) => ({
-                        ...prev,
-                        bioStyle: { ...prev.bioStyle, animation: a },
-                      }))
-                    }
-                  />
-                  <button
-                    type="button"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => {
-                      setActiveField("bio");
-                      setFontOpen((o) => (o === "bio" ? null : "bio"));
-                    }}
-                    aria-label="Text settings"
-                    aria-expanded={fontOpen === "bio"}
-                    className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                  >
-                    <FontIcon className="size-5" />
-                  </button>
-                </div>
-              ) : null}
-              {editing ? (
-                <div className="w-full overflow-hidden rounded-md border border-input transition-colors focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50">
-                  <RichTextField
-                    key={`bio-${editKey}`}
-                    editorRef={bioEditorRef}
-                    initialHtml={draft.bio}
-                    placeholder="Short bio"
-                    ariaLabel="Short bio"
-                    onInput={(html) => updateField("bio", html)}
-                    onFocus={() => setActiveField("bio")}
-                    style={styleToCss(bioStyle, isDark)}
-                    className={cn(
-                      "min-h-9 w-full break-words bg-transparent px-3 py-2 whitespace-pre-wrap outline-none",
-                      !bioStyle.color &&
-                        !bioStyle.animation &&
-                        "text-muted-foreground",
-                      textAnimClass(bioStyle),
-                    )}
-                  />
-                  {fontOpen === "bio" ? (
-                    <div
-                      style={{
-                        color: contrastText(effectiveBoxColor(bioBox, isDark)),
-                      }}
-                      className="border-t border-current/15 p-2 animate-slide-up"
-                    >
-                      {formatToolbar}
-                    </div>
-                  ) : null}
-                </div>
-              ) : (
-                <RichText
-                  as="p"
-                  html={saved.bio}
-                  isDark={isDark}
-                  className={cn(
-                    "w-full",
-                    !savedBioStyle.color &&
-                      !savedBioStyle.animation &&
-                      "text-muted-foreground",
-                    textAnimClass(savedBioStyle),
-                  )}
-                  style={styleToCss(savedBioStyle, isDark)}
-                />
-              )}
-            </div>
-          </div>
-
+      {/* Full-width, content-height wrapper so the absolute page background
+          fills the whole page and scrolls with the content (see PageBackground). */}
+      <div className="relative flex w-full flex-1 flex-col">
+        <PageBackground bg={editing ? draft.background : saved.background} />
+        <GlassFilter />
+        <main className="mx-auto flex min-h-[calc(100vh-3.5rem)] w-full max-w-3xl flex-col items-center justify-center px-6 pt-16 pb-28">
+          {/* Keyed by mode so switching edit/view crossfades (but not on load). */}
           <div
+            key={editing ? "edit" : "view"}
+            style={panelCss(
+              (editing ? draft.panel : saved.panel) ?? DEFAULT_PANEL,
+            )}
             className={cn(
-              "flex w-full",
-              horizontal
-                ? "flex-wrap items-center justify-center gap-4"
-                : "flex-col gap-3",
+              "relative mx-auto flex w-full max-w-lg flex-col items-center gap-6",
+              ((editing ? draft.panel : saved.panel) ?? DEFAULT_PANEL).type !==
+                "transparent" && "rounded-2xl px-6 pt-6",
+              // Reserve bottom room in edit mode for the panel-settings button.
+              editing
+                ? "pb-16"
+                : ((editing ? draft.panel : saved.panel) ?? DEFAULT_PANEL)
+                      .type !== "transparent"
+                  ? "pb-6"
+                  : "",
+              switched && "animate-fade",
             )}
           >
-            {editing && horizontal
-              ? // Horizontal edit: an icon row like view mode. Tap an icon to
-                // edit it; drag it left/right to reorder.
-                draft.links.map((link, index) => {
-                  const platform = getPlatform(link.href);
-                  const Icon = platform?.icon;
-                  const selected = horizontalEditLink?.id === link.id;
-                  const isDragging = dragId === link.id;
-                  const shift = dragShiftFor(link.id, index);
-                  return (
-                    <button
-                      key={link.id}
-                      ref={(el) => {
-                        if (el) iconRowRefs.current.set(link.id, el);
-                        else iconRowRefs.current.delete(link.id);
-                      }}
-                      type="button"
-                      onPointerDown={(e) =>
-                        onLinkDragStart(e, link.id, index, "x", iconRowRefs)
+            {/* Profile picture */}
+            {editing ? (
+              <div className="flex flex-col items-center gap-2">
+                <AvatarFx
+                  effect={draft.avatarEffect}
+                  outline={draft.avatarOutline}
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (draft.avatar) {
+                        setAvatarMenu(true);
+                      } else {
+                        // No menu to return to for a first upload.
+                        setCropReturnToMenu(false);
+                        avatarInputRef.current?.click();
                       }
-                      onPointerMove={onLinkDragMove}
-                      onPointerUp={() => onIconDragEnd(link.id)}
-                      onPointerCancel={onLinkDragEnd}
-                      // Pointer handles select-vs-drag; keep keyboard select too.
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          setEditingLinkId(link.id);
-                        }
-                      }}
-                      aria-label={`Edit ${link.label || "link"}`}
-                      aria-pressed={selected}
-                      style={{
-                        transform: shift ? `translateX(${shift}px)` : undefined,
-                        transition: isDragging
-                          ? "none"
-                          : "transform 150ms ease",
-                        zIndex: isDragging ? 30 : undefined,
-                      }}
-                      className={cn(
-                        "flex size-11 touch-none items-center justify-center rounded-md",
-                        isDragging
-                          ? "cursor-grabbing"
-                          : "cursor-grab hover:scale-110",
-                        !isDragging && "transition-transform",
-                        selected &&
-                          "ring-2 ring-ring ring-offset-2 ring-offset-transparent",
-                      )}
-                    >
-                      {link.logo ? (
-                        // biome-ignore lint/performance/noImgElement: small inline data-URL logo; next/image adds no value
-                        <img
-                          src={link.logo}
-                          alt=""
-                          className="size-8 object-contain"
-                        />
-                      ) : Icon ? (
-                        <BrandIcon
-                          icon={Icon}
-                          color={platform?.color}
-                          className="size-8"
-                        />
-                      ) : (
-                        <span className="text-lg font-semibold">
-                          {link.label.charAt(0).toUpperCase() || "?"}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })
-              : editing
-                ? draft.links.map((link, index) =>
-                    renderEditLinkCard(link, index),
-                  )
-                : saved.links.map((link) =>
-                    horizontal ? (
-                      <LinkIconAnchor
-                        key={link.id}
-                        link={link}
-                        isDark={isDark}
+                    }}
+                    aria-label="Edit profile photo"
+                    className="group relative size-24 cursor-pointer overflow-hidden rounded-full"
+                  >
+                    {draft.avatar ? (
+                      // biome-ignore lint/performance/noImgElement: small inline data-URL avatar; next/image adds no value
+                      <img
+                        src={draft.avatar}
+                        alt=""
+                        className="size-24 rounded-full object-cover"
                       />
                     ) : (
-                      <LinkAnchor
-                        key={link.id}
-                        link={link}
-                        box={savedLinkBox}
-                        textStyle={saved.linkStyle}
-                        isDark={isDark}
-                      />
-                    ),
-                  )}
-
-            {editing ? (
-              <Button
-                variant="outline"
-                onClick={() => setShowPicker(true)}
-                aria-label="Add link"
-                className={horizontal ? "size-11 rounded-md p-0" : "w-full"}
+                      <div className="flex size-24 items-center justify-center rounded-full bg-muted text-3xl font-semibold text-muted-foreground">
+                        {draft.name.charAt(0).toUpperCase() || "?"}
+                      </div>
+                    )}
+                    <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 text-xs font-medium text-white opacity-0 transition-opacity group-hover:opacity-100">
+                      {draft.avatar ? "Edit" : "Upload"}
+                    </span>
+                  </button>
+                </AvatarFx>
+                <input
+                  ref={avatarInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="sr-only"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) pickAvatar(file);
+                    e.target.value = "";
+                  }}
+                />
+                <AvatarFxPopover
+                  effect={draft.avatarEffect}
+                  outline={draft.avatarOutline}
+                  onEffect={chooseAvatarEffect}
+                  onEffectPatch={updateAvatarEffect}
+                  onOutline={toggleAvatarOutline}
+                  onOutlineColor={setAvatarOutlineColor}
+                />
+              </div>
+            ) : saved.avatar ? (
+              <AvatarFx
+                effect={saved.avatarEffect}
+                outline={saved.avatarOutline}
               >
-                {horizontal ? "+" : "Add link"}
-              </Button>
-            ) : null}
-          </div>
+                {/* biome-ignore lint/performance/noImgElement: small inline data-URL avatar; next/image adds no value */}
+                <img
+                  src={saved.avatar}
+                  alt={saved.name}
+                  className="size-24 rounded-full object-cover"
+                />
+              </AvatarFx>
+            ) : (
+              <AvatarFx
+                effect={saved.avatarEffect}
+                outline={saved.avatarOutline}
+              >
+                <div className="flex size-24 items-center justify-center rounded-full bg-muted text-3xl font-semibold text-muted-foreground">
+                  {saved.name.charAt(0).toUpperCase() || "?"}
+                </div>
+              </AvatarFx>
+            )}
 
-          {/* Horizontal edit: the selected link's full editor, below the row. */}
-          {editing && horizontal ? (
-            <div className="w-full">
-              {horizontalEditLink ? (
-                renderEditLinkCard(
-                  horizontalEditLink,
-                  horizontalEditIndex >= 0 ? horizontalEditIndex : 0,
-                )
-              ) : (
-                <p className="text-center text-sm text-muted-foreground">
-                  Add a link, then tap its icon to edit it.
-                </p>
-              )}
+            <div className="flex w-full flex-col items-center gap-2">
+              {/* Name — its own box. */}
+              <div
+                style={boxCss(editing ? nameBox : savedNameBox)}
+                className={cn(
+                  "relative flex w-full flex-col items-center rounded-lg px-4 pt-3",
+                  editing ? "pb-12" : "pb-3",
+                )}
+              >
+                {editing ? (
+                  <div className="absolute bottom-2 left-2 z-10 flex items-center gap-1">
+                    <BoxStylePopover
+                      box={nameBox}
+                      onChange={updateNameBox}
+                      label="Customize name box"
+                      align="left"
+                      animation={nameStyle.animation}
+                      onAnimation={(a) =>
+                        setDraft((prev) => ({
+                          ...prev,
+                          nameStyle: { ...prev.nameStyle, animation: a },
+                        }))
+                      }
+                    />
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        setActiveField("name");
+                        setFontOpen((o) => (o === "name" ? null : "name"));
+                      }}
+                      aria-label="Text settings"
+                      aria-expanded={fontOpen === "name"}
+                      className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    >
+                      <FontIcon className="size-5" />
+                    </button>
+                  </div>
+                ) : null}
+                {editing ? (
+                  <div className="w-full overflow-hidden rounded-md border border-input transition-colors focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50">
+                    <RichTextField
+                      key={`name-${editKey}`}
+                      editorRef={nameEditorRef}
+                      initialHtml={draft.name}
+                      placeholder="Your name"
+                      ariaLabel="Your name"
+                      onInput={(html) => updateField("name", html)}
+                      onFocus={() => setActiveField("name")}
+                      style={styleToCss(nameStyle, isDark)}
+                      className={cn(
+                        "min-h-9 w-full break-words bg-transparent px-3 py-2 tracking-tight whitespace-pre-wrap outline-none",
+                        textAnimClass(nameStyle),
+                      )}
+                    />
+                    {fontOpen === "name" ? (
+                      <div
+                        style={{
+                          color: contrastText(
+                            effectiveBoxColor(nameBox, isDark),
+                          ),
+                        }}
+                        className="border-t border-current/15 p-2 animate-slide-up"
+                      >
+                        {formatToolbar}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : (
+                  <RichText
+                    as="h1"
+                    html={saved.name}
+                    isDark={isDark}
+                    className={cn(
+                      "w-full tracking-tight",
+                      textAnimClass(savedNameStyle),
+                    )}
+                    style={styleToCss(savedNameStyle, isDark)}
+                  />
+                )}
+              </div>
+
+              {/* Bio — its own box. */}
+              <div
+                style={boxCss(editing ? bioBox : savedBioBox)}
+                className={cn(
+                  "relative flex w-full flex-col items-center rounded-lg px-4 pt-3",
+                  editing ? "pb-12" : "pb-3",
+                )}
+              >
+                {editing ? (
+                  <div className="absolute bottom-2 left-2 z-10 flex items-center gap-1">
+                    <BoxStylePopover
+                      box={bioBox}
+                      onChange={updateBioBox}
+                      label="Customize description box"
+                      align="left"
+                      animation={bioStyle.animation}
+                      onAnimation={(a) =>
+                        setDraft((prev) => ({
+                          ...prev,
+                          bioStyle: { ...prev.bioStyle, animation: a },
+                        }))
+                      }
+                    />
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        setActiveField("bio");
+                        setFontOpen((o) => (o === "bio" ? null : "bio"));
+                      }}
+                      aria-label="Text settings"
+                      aria-expanded={fontOpen === "bio"}
+                      className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    >
+                      <FontIcon className="size-5" />
+                    </button>
+                  </div>
+                ) : null}
+                {editing ? (
+                  <div className="w-full overflow-hidden rounded-md border border-input transition-colors focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50">
+                    <RichTextField
+                      key={`bio-${editKey}`}
+                      editorRef={bioEditorRef}
+                      initialHtml={draft.bio}
+                      placeholder="Short bio"
+                      ariaLabel="Short bio"
+                      onInput={(html) => updateField("bio", html)}
+                      onFocus={() => setActiveField("bio")}
+                      style={styleToCss(bioStyle, isDark)}
+                      className={cn(
+                        "min-h-9 w-full break-words bg-transparent px-3 py-2 whitespace-pre-wrap outline-none",
+                        !bioStyle.color &&
+                          !bioStyle.animation &&
+                          "text-muted-foreground",
+                        textAnimClass(bioStyle),
+                      )}
+                    />
+                    {fontOpen === "bio" ? (
+                      <div
+                        style={{
+                          color: contrastText(
+                            effectiveBoxColor(bioBox, isDark),
+                          ),
+                        }}
+                        className="border-t border-current/15 p-2 animate-slide-up"
+                      >
+                        {formatToolbar}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : (
+                  <RichText
+                    as="p"
+                    html={saved.bio}
+                    isDark={isDark}
+                    className={cn(
+                      "w-full",
+                      !savedBioStyle.color &&
+                        !savedBioStyle.animation &&
+                        "text-muted-foreground",
+                      textAnimClass(savedBioStyle),
+                    )}
+                    style={styleToCss(savedBioStyle, isDark)}
+                  />
+                )}
+              </div>
             </div>
-          ) : null}
 
-          {/* Panel settings — bottom-left of the panel, edit mode only */}
-          {editing ? (
-            <div ref={boxMenuRef} className="absolute bottom-3 left-3 z-40">
-              {boxMenuP.value ? (
-                <div
-                  role="menu"
-                  aria-label="Panel background"
-                  className={cn(
-                    "absolute bottom-full left-0 mb-2 w-72 origin-bottom-left rounded-lg border border-border bg-popover p-3 text-popover-foreground shadow-lg",
-                    boxMenuP.visible ? "animate-pop" : "animate-pop-out",
-                  )}
-                >
-                  <p className="mb-2 text-sm font-medium">Panel background</p>
-                  <div className="flex flex-col gap-3">
-                    <div className="grid grid-cols-4 gap-2">
-                      {(
-                        [
-                          ["transparent", "None"],
-                          ["color", "Color"],
-                          ["gradient", "Gradient"],
-                          ["glass", "Glass"],
-                        ] as [PanelStyle["type"], string][]
-                      ).map(([type, label]) => {
-                        const preview =
-                          type === "transparent"
-                            ? "repeating-conic-gradient(#d4d4d8 0% 25%, transparent 0% 50%) 50% / 10px 10px"
-                            : type === "color"
-                              ? "#000"
-                              : type === "gradient"
-                                ? "linear-gradient(135deg,#3b82f6,#8b5cf6)"
-                                : "rgba(255,255,255,0.35)";
-                        return (
-                          <button
-                            key={type}
-                            type="button"
-                            onClick={() => choosePanel(type)}
-                            className="flex flex-col items-center gap-1"
-                          >
-                            <span
-                              style={{ background: preview }}
-                              className={cn(
-                                "size-12 rounded-md border border-border transition-shadow",
-                                type === "glass" && "backdrop-blur-sm",
-                                panel.type === type &&
-                                  "ring-2 ring-ring ring-offset-2 ring-offset-popover",
-                              )}
-                            />
-                            <span
-                              className={cn(
-                                "text-[11px]",
-                                panel.type === type
-                                  ? "text-foreground"
-                                  : "text-muted-foreground",
-                              )}
-                            >
-                              {label}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    {panel.type === "color" || panel.type === "glass" ? (
-                      <>
-                        <div className="flex items-center justify-between gap-3 text-sm">
-                          <span className="text-muted-foreground">
-                            {panel.type === "glass" ? "Tint" : "Color"}
-                          </span>
-                          <ColorPicker
-                            value={panel.color}
-                            onChange={(c) => updatePanel({ color: c })}
-                            ariaLabel="Panel color"
-                            allowNone={panel.type === "glass"}
+            <div
+              className={cn(
+                "flex w-full",
+                horizontal
+                  ? "flex-wrap items-center justify-center gap-4"
+                  : "flex-col gap-3",
+              )}
+            >
+              {editing && horizontal
+                ? // Horizontal edit: an icon row like view mode. Tap an icon to
+                  // edit it; drag it left/right to reorder.
+                  draft.links.map((link, index) => {
+                    const platform = getPlatform(link.href);
+                    const Icon = platform?.icon;
+                    const selected = horizontalEditLink?.id === link.id;
+                    const isDragging = dragId === link.id;
+                    const shift = dragShiftFor(link.id, index);
+                    return (
+                      <button
+                        key={link.id}
+                        ref={(el) => {
+                          if (el) iconRowRefs.current.set(link.id, el);
+                          else iconRowRefs.current.delete(link.id);
+                        }}
+                        type="button"
+                        onPointerDown={(e) =>
+                          onLinkDragStart(e, link.id, index, "x", iconRowRefs)
+                        }
+                        onPointerMove={onLinkDragMove}
+                        onPointerUp={() => onIconDragEnd(link.id)}
+                        onPointerCancel={onLinkDragEnd}
+                        // Pointer handles select-vs-drag; keep keyboard select too.
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            setEditingLinkId(link.id);
+                          }
+                        }}
+                        aria-label={`Edit ${link.label || "link"}`}
+                        aria-pressed={selected}
+                        style={{
+                          transform: shift
+                            ? `translateX(${shift}px)`
+                            : undefined,
+                          transition: isDragging
+                            ? "none"
+                            : "transform 150ms ease",
+                          zIndex: isDragging ? 30 : undefined,
+                        }}
+                        className={cn(
+                          "flex size-11 touch-none items-center justify-center rounded-md",
+                          isDragging
+                            ? "cursor-grabbing"
+                            : "cursor-grab hover:scale-110",
+                          !isDragging && "transition-transform",
+                          selected &&
+                            "ring-2 ring-ring ring-offset-2 ring-offset-transparent",
+                        )}
+                      >
+                        {link.logo ? (
+                          // biome-ignore lint/performance/noImgElement: small inline data-URL logo; next/image adds no value
+                          <img
+                            src={link.logo}
+                            alt=""
+                            className="size-8 object-contain"
                           />
-                        </div>
-                        {/* No-tint glass has no fill, so opacity is irrelevant. */}
-                        {panel.type === "glass" &&
-                        panel.color === NO_TINT ? null : (
+                        ) : Icon ? (
+                          <BrandIcon
+                            icon={Icon}
+                            color={platform?.color}
+                            className="size-8"
+                          />
+                        ) : (
+                          <span className="text-lg font-semibold">
+                            {link.label.charAt(0).toUpperCase() || "?"}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })
+                : editing
+                  ? draft.links.map((link, index) =>
+                      renderEditLinkCard(link, index),
+                    )
+                  : saved.links.map((link) =>
+                      horizontal ? (
+                        <LinkIconAnchor
+                          key={link.id}
+                          link={link}
+                          isDark={isDark}
+                        />
+                      ) : (
+                        <LinkAnchor
+                          key={link.id}
+                          link={link}
+                          box={savedLinkBox}
+                          textStyle={saved.linkStyle}
+                          isDark={isDark}
+                        />
+                      ),
+                    )}
+
+              {editing ? (
+                <Button
+                  variant="outline"
+                  onClick={() => setShowPicker(true)}
+                  aria-label="Add link"
+                  className={horizontal ? "size-11 rounded-md p-0" : "w-full"}
+                >
+                  {horizontal ? "+" : "Add link"}
+                </Button>
+              ) : null}
+            </div>
+
+            {/* Horizontal edit: the selected link's full editor, below the row. */}
+            {editing && horizontal ? (
+              <div className="w-full">
+                {horizontalEditLink ? (
+                  renderEditLinkCard(
+                    horizontalEditLink,
+                    horizontalEditIndex >= 0 ? horizontalEditIndex : 0,
+                  )
+                ) : (
+                  <p className="text-center text-sm text-muted-foreground">
+                    Add a link, then tap its icon to edit it.
+                  </p>
+                )}
+              </div>
+            ) : null}
+
+            {/* Panel settings — bottom-left of the panel, edit mode only */}
+            {editing ? (
+              <div ref={boxMenuRef} className="absolute bottom-3 left-3 z-40">
+                {boxMenuP.value ? (
+                  <div
+                    role="menu"
+                    aria-label="Panel background"
+                    className={cn(
+                      "absolute bottom-full left-0 mb-2 w-72 origin-bottom-left rounded-lg border border-border bg-popover p-3 text-popover-foreground shadow-lg",
+                      boxMenuP.visible ? "animate-pop" : "animate-pop-out",
+                    )}
+                  >
+                    <p className="mb-2 text-sm font-medium">Panel background</p>
+                    <div className="flex flex-col gap-3">
+                      <div className="grid grid-cols-4 gap-2">
+                        {(
+                          [
+                            ["transparent", "None"],
+                            ["color", "Color"],
+                            ["gradient", "Gradient"],
+                            ["glass", "Glass"],
+                          ] as [PanelStyle["type"], string][]
+                        ).map(([type, label]) => {
+                          const preview =
+                            type === "transparent"
+                              ? "repeating-conic-gradient(#d4d4d8 0% 25%, transparent 0% 50%) 50% / 10px 10px"
+                              : type === "color"
+                                ? "#000"
+                                : type === "gradient"
+                                  ? "linear-gradient(135deg,#3b82f6,#8b5cf6)"
+                                  : "rgba(255,255,255,0.35)";
+                          return (
+                            <button
+                              key={type}
+                              type="button"
+                              onClick={() => choosePanel(type)}
+                              className="flex flex-col items-center gap-1"
+                            >
+                              <span
+                                style={{ background: preview }}
+                                className={cn(
+                                  "size-12 rounded-md border border-border transition-shadow",
+                                  type === "glass" && "backdrop-blur-sm",
+                                  panel.type === type &&
+                                    "ring-2 ring-ring ring-offset-2 ring-offset-popover",
+                                )}
+                              />
+                              <span
+                                className={cn(
+                                  "text-[11px]",
+                                  panel.type === type
+                                    ? "text-foreground"
+                                    : "text-muted-foreground",
+                                )}
+                              >
+                                {label}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {panel.type === "color" || panel.type === "glass" ? (
+                        <>
+                          <div className="flex items-center justify-between gap-3 text-sm">
+                            <span className="text-muted-foreground">
+                              {panel.type === "glass" ? "Tint" : "Color"}
+                            </span>
+                            <ColorPicker
+                              value={panel.color}
+                              onChange={(c) => updatePanel({ color: c })}
+                              ariaLabel="Panel color"
+                              allowNone={panel.type === "glass"}
+                            />
+                          </div>
+                          {/* No-tint glass has no fill, so opacity is irrelevant. */}
+                          {panel.type === "glass" &&
+                          panel.color === NO_TINT ? null : (
+                            <label className="flex flex-col gap-1.5 text-sm">
+                              <span className="flex justify-between text-muted-foreground">
+                                <span>Opacity</span>
+                                <span className="tabular-nums">
+                                  {panel.opacity}%
+                                </span>
+                              </span>
+                              <input
+                                type="range"
+                                min={0}
+                                max={100}
+                                step={5}
+                                value={panel.opacity}
+                                onChange={(e) =>
+                                  updatePanel({
+                                    opacity: Number(e.target.value),
+                                  })
+                                }
+                                aria-label="Panel opacity"
+                                className="w-full"
+                              />
+                            </label>
+                          )}
+                        </>
+                      ) : panel.type === "gradient" ? (
+                        <>
+                          <div className="flex items-center justify-between gap-3 text-sm">
+                            <span className="text-muted-foreground">
+                              Direction
+                            </span>
+                            <div className="flex gap-1">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  updatePanel({ direction: "vertical" })
+                                }
+                                aria-label="Top to bottom"
+                                aria-pressed={panel.direction !== "horizontal"}
+                                className={cn(
+                                  "flex size-8 items-center justify-center rounded-md border transition-colors",
+                                  panel.direction !== "horizontal"
+                                    ? "border-ring bg-muted text-foreground"
+                                    : "border-input text-muted-foreground hover:bg-muted",
+                                )}
+                              >
+                                <ArrowVerticalIcon className="size-4" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  updatePanel({ direction: "horizontal" })
+                                }
+                                aria-label="Left to right"
+                                aria-pressed={panel.direction === "horizontal"}
+                                className={cn(
+                                  "flex size-8 items-center justify-center rounded-md border transition-colors",
+                                  panel.direction === "horizontal"
+                                    ? "border-ring bg-muted text-foreground"
+                                    : "border-input text-muted-foreground hover:bg-muted",
+                                )}
+                              >
+                                <ArrowHorizontalIcon className="size-4" />
+                              </button>
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between gap-3 text-sm">
+                            <span className="text-muted-foreground">
+                              {panel.direction === "horizontal"
+                                ? "Left"
+                                : "Top"}
+                            </span>
+                            <ColorPicker
+                              value={panel.from}
+                              onChange={(c) => updatePanel({ from: c })}
+                              ariaLabel="Panel gradient start color"
+                            />
+                          </div>
+                          <div className="flex items-center justify-between gap-3 text-sm">
+                            <span className="text-muted-foreground">
+                              {panel.direction === "horizontal"
+                                ? "Right"
+                                : "Bottom"}
+                            </span>
+                            <ColorPicker
+                              value={panel.to}
+                              onChange={(c) => updatePanel({ to: c })}
+                              ariaLabel="Panel gradient end color"
+                            />
+                          </div>
                           <label className="flex flex-col gap-1.5 text-sm">
                             <span className="flex justify-between text-muted-foreground">
                               <span>Opacity</span>
@@ -3592,157 +3696,73 @@ export function MyPageClient({
                               className="w-full"
                             />
                           </label>
-                        )}
-                      </>
-                    ) : panel.type === "gradient" ? (
-                      <>
-                        <div className="flex items-center justify-between gap-3 text-sm">
-                          <span className="text-muted-foreground">
-                            Direction
-                          </span>
-                          <div className="flex gap-1">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                updatePanel({ direction: "vertical" })
-                              }
-                              aria-label="Top to bottom"
-                              aria-pressed={panel.direction !== "horizontal"}
-                              className={cn(
-                                "flex size-8 items-center justify-center rounded-md border transition-colors",
-                                panel.direction !== "horizontal"
-                                  ? "border-ring bg-muted text-foreground"
-                                  : "border-input text-muted-foreground hover:bg-muted",
-                              )}
-                            >
-                              <ArrowVerticalIcon className="size-4" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                updatePanel({ direction: "horizontal" })
-                              }
-                              aria-label="Left to right"
-                              aria-pressed={panel.direction === "horizontal"}
-                              className={cn(
-                                "flex size-8 items-center justify-center rounded-md border transition-colors",
-                                panel.direction === "horizontal"
-                                  ? "border-ring bg-muted text-foreground"
-                                  : "border-input text-muted-foreground hover:bg-muted",
-                              )}
-                            >
-                              <ArrowHorizontalIcon className="size-4" />
-                            </button>
-                          </div>
-                        </div>
-                        <div className="flex items-center justify-between gap-3 text-sm">
-                          <span className="text-muted-foreground">
-                            {panel.direction === "horizontal" ? "Left" : "Top"}
-                          </span>
-                          <ColorPicker
-                            value={panel.from}
-                            onChange={(c) => updatePanel({ from: c })}
-                            ariaLabel="Panel gradient start color"
-                          />
-                        </div>
-                        <div className="flex items-center justify-between gap-3 text-sm">
-                          <span className="text-muted-foreground">
-                            {panel.direction === "horizontal"
-                              ? "Right"
-                              : "Bottom"}
-                          </span>
-                          <ColorPicker
-                            value={panel.to}
-                            onChange={(c) => updatePanel({ to: c })}
-                            ariaLabel="Panel gradient end color"
-                          />
-                        </div>
-                        <label className="flex flex-col gap-1.5 text-sm">
-                          <span className="flex justify-between text-muted-foreground">
-                            <span>Opacity</span>
-                            <span className="tabular-nums">
-                              {panel.opacity}%
-                            </span>
-                          </span>
-                          <input
-                            type="range"
-                            min={0}
-                            max={100}
-                            step={5}
-                            value={panel.opacity}
-                            onChange={(e) =>
-                              updatePanel({ opacity: Number(e.target.value) })
-                            }
-                            aria-label="Panel opacity"
-                            className="w-full"
-                          />
-                        </label>
-                      </>
-                    ) : (
-                      <p className="text-xs text-muted-foreground">
-                        No panel — the page background shows through.
-                      </p>
-                    )}
+                        </>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          No panel — the page background shows through.
+                        </p>
+                      )}
 
-                    <div className="my-1 border-t border-border" />
-                    <div className="flex items-center justify-between gap-3 text-sm">
-                      <span className="text-muted-foreground">Links</span>
-                      <div className="flex gap-1">
-                        <button
-                          type="button"
-                          onClick={() => setPanelOrientation("vertical")}
-                          aria-label="Stacked links"
-                          aria-pressed={!horizontal}
-                          className={cn(
-                            "flex h-8 items-center gap-1.5 rounded-md border px-2.5 transition-colors",
-                            !horizontal
-                              ? "border-ring bg-muted text-foreground"
-                              : "border-input text-muted-foreground hover:bg-muted",
-                          )}
-                        >
-                          <ArrowVerticalIcon className="size-4" />
-                          Stacked
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setPanelOrientation("horizontal")}
-                          aria-label="Logos in a row"
-                          aria-pressed={horizontal}
-                          className={cn(
-                            "flex h-8 items-center gap-1.5 rounded-md border px-2.5 transition-colors",
-                            horizontal
-                              ? "border-ring bg-muted text-foreground"
-                              : "border-input text-muted-foreground hover:bg-muted",
-                          )}
-                        >
-                          <ArrowHorizontalIcon className="size-4" />
-                          Logos
-                        </button>
+                      <div className="my-1 border-t border-border" />
+                      <div className="flex items-center justify-between gap-3 text-sm">
+                        <span className="text-muted-foreground">Links</span>
+                        <div className="flex gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setPanelOrientation("vertical")}
+                            aria-label="Stacked links"
+                            aria-pressed={!horizontal}
+                            className={cn(
+                              "flex h-8 items-center gap-1.5 rounded-md border px-2.5 transition-colors",
+                              !horizontal
+                                ? "border-ring bg-muted text-foreground"
+                                : "border-input text-muted-foreground hover:bg-muted",
+                            )}
+                          >
+                            <ArrowVerticalIcon className="size-4" />
+                            Stacked
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setPanelOrientation("horizontal")}
+                            aria-label="Logos in a row"
+                            aria-pressed={horizontal}
+                            className={cn(
+                              "flex h-8 items-center gap-1.5 rounded-md border px-2.5 transition-colors",
+                              horizontal
+                                ? "border-ring bg-muted text-foreground"
+                                : "border-input text-muted-foreground hover:bg-muted",
+                            )}
+                          >
+                            <ArrowHorizontalIcon className="size-4" />
+                            Logos
+                          </button>
+                        </div>
                       </div>
+                      <p className="text-xs text-muted-foreground">
+                        {horizontal
+                          ? "Links show as a row of logos."
+                          : "Links stack as full-width buttons."}
+                      </p>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      {horizontal
-                        ? "Links show as a row of logos."
-                        : "Links stack as full-width buttons."}
-                    </p>
                   </div>
-                </div>
-              ) : null}
+                ) : null}
 
-              <button
-                type="button"
-                onClick={() => setBoxMenu((o) => !o)}
-                aria-haspopup="menu"
-                aria-expanded={boxMenu}
-                aria-label="Panel background"
-                className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              >
-                <SparklesIcon className="size-5" />
-              </button>
-            </div>
-          ) : null}
-        </div>
-      </main>
+                <button
+                  type="button"
+                  onClick={() => setBoxMenu((o) => !o)}
+                  aria-haspopup="menu"
+                  aria-expanded={boxMenu}
+                  aria-label="Panel background"
+                  className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  <SparklesIcon className="size-5" />
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </main>
+      </div>
 
       {/* Unsaved-changes bar — subtle pill, doesn't cover the page */}
       {unsavedBar.value ? (

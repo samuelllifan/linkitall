@@ -7,7 +7,7 @@ import { createClient } from "~/lib/supabase/client";
 /**
  * Implements the "Stay signed in" choice made at sign-in. Supabase persists
  * sessions across browser restarts by default; when the user opts out we record
- * `linkitall-remember=session` and mark the current browser session in
+ * `stacked-remember=session` and mark the current browser session in
  * sessionStorage (which is cleared when the browser fully closes). On the next
  * launch that marker is gone, so we sign the persisted session out. Purely
  * client-side, so it never interferes with the SSR auth-cookie handling.
@@ -19,9 +19,9 @@ export function SessionGuard() {
     let remember: string | null = null;
     let active: string | null = null;
     try {
-      remember = localStorage.getItem("linkitall-remember");
-      active = sessionStorage.getItem("linkitall-session-active");
-      sessionStorage.setItem("linkitall-session-active", "1");
+      remember = localStorage.getItem("stacked-remember");
+      active = sessionStorage.getItem("stacked-session-active");
+      sessionStorage.setItem("stacked-session-active", "1");
     } catch {
       return;
     }

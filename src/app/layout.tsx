@@ -10,7 +10,7 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "linkitall",
+  title: "stacked",
   description:
     "Build a fully customizable link-in-bio in minutes. Made for online creators.",
 };

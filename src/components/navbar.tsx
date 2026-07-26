@@ -94,9 +94,15 @@ export function Navbar({
 
   // A user's page lives at /<username>; fall back to /my-page (which routes to
   // settings) until they've picked one. The Dashboard is account-only.
+  // "My Page" only points at a real /<username> when the visitor is actually
+  // signed in (userEmail present). For guests it always routes to /my-page,
+  // which redirects to /login — so a guest can never be sent to someone's page.
   const links = [
     { href: "/", label: "Home" },
-    { href: username ? `/${username}` : "/my-page", label: "My Page" },
+    {
+      href: userEmail && username ? `/${username}` : "/my-page",
+      label: "My Page",
+    },
     ...(userEmail ? [{ href: "/dashboard", label: "Dashboard" }] : []),
   ];
 
@@ -123,7 +129,7 @@ export function Navbar({
           onClick={guardedClick}
           className="font-semibold tracking-tight"
         >
-          linkitall
+          stacked
         </Link>
         <div className="flex gap-4">
           {links.map((link) => (

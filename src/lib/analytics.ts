@@ -36,7 +36,7 @@ let fallbackVisitorId: string | null = null;
  * NOT count as a new unique view. Carries no personal information.
  */
 export function getVisitorId(): string {
-  const KEY = "linkitall-visitor";
+  const KEY = "stacked-visitor";
   try {
     const existing = localStorage.getItem(KEY);
     if (existing) return existing;

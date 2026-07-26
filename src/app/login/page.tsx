@@ -137,9 +137,15 @@ export default function LoginPage() {
   // Where to land after auth; defaults to the editor.
   const redirectTo = searchParams.get("redirect") || "/my-page";
 
-  const [mode, setMode] = useState<Mode>("signin");
+  // Landing here with `?mode=signup&username=…` (e.g. from the home page's
+  // "Claim Your Page" field) opens the sign-up tab with the name pre-filled.
+  const [mode, setMode] = useState<Mode>(
+    searchParams.get("mode") === "signup" ? "signup" : "signin",
+  );
   const [email, setEmail] = useState("");
-  const [username, setUsernameValue] = useState("");
+  const [username, setUsernameValue] = useState(
+    searchParams.get("username") ?? "",
+  );
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [staySignedIn, setStaySignedIn] = useState(true);
@@ -196,10 +202,10 @@ export default function LoginPage() {
   function persistRemember() {
     try {
       localStorage.setItem(
-        "linkitall-remember",
+        "stacked-remember",
         staySignedIn ? "persist" : "session",
       );
-      sessionStorage.setItem("linkitall-session-active", "1");
+      sessionStorage.setItem("stacked-session-active", "1");
     } catch {
       // Storage unavailable (e.g. privacy mode) — fall back to Supabase's
       // default persistent behavior.
@@ -450,11 +456,11 @@ export default function LoginPage() {
                   {mode === "signup" ? (
                     <div className="flex flex-col gap-2">
                       <Label htmlFor="username">Username</Label>
-                      {/* Fixed "linkitall.net/" prefix sits to the left of the box
+                      {/* Fixed "stacked.page/" prefix sits to the left of the box
                       so the field previews the resulting page address. */}
                       <div className="flex items-center gap-1">
                         <span className="shrink-0 text-sm text-muted-foreground select-none">
-                          linkitall.net/
+                          stacked.page/
                         </span>
                         <Input
                           id="username"

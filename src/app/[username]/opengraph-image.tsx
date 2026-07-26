@@ -5,7 +5,7 @@ import type { Background } from "~/lib/pages";
 import { plainText } from "~/lib/text";
 
 export const runtime = "nodejs";
-export const alt = "Profile on linkitall";
+export const alt = "Profile on stacked";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -33,7 +33,7 @@ function resolveBackground(bg?: Background): {
       style: {
         backgroundImage: `linear-gradient(${dir}, ${bg.from}, ${mid}%, ${bg.to})`,
       },
-      // The "linkitall" label sits at the gradient's start (top or left),
+      // The "stacked" label sits at the gradient's start (top or left),
       // which is `from` for both directions — base legibility on it.
       fg: readableText(bg.from),
     };
@@ -125,7 +125,7 @@ export default async function OpengraphImage({
       }}
     >
       <div style={{ display: "flex", fontSize: 34, fontWeight: 700 }}>
-        linkitall
+        stacked
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: "48px" }}>
@@ -195,7 +195,7 @@ export default async function OpengraphImage({
           color: `rgba(${mutedRgb},0.6)`,
         }}
       >
-        linkitall.vercel.app/{username}
+        stacked.page/{username}
       </div>
     </div>,
     { ...size },
