@@ -430,7 +430,9 @@ function adaptHtmlColors(html: string, isDark: boolean): string {
 
 /** Turn a TextStyle into inline CSS. Undefined props fall back to CSS/classes. */
 export function styleToCss(s: TextStyle, isDark: boolean): CSSProperties {
-  const animated = !!s.animation && s.animation !== "none";
+  // Animated text effects are temporarily disabled, so text always renders as a
+  // static solid color (see `textAnimClass`).
+  const animated = false;
   const color = adaptColor(s.color, isDark);
   return {
     fontFamily: s.fontFamily ? FONTS[s.fontFamily]?.family : undefined,
@@ -451,18 +453,10 @@ export function styleToCss(s: TextStyle, isDark: boolean): CSSProperties {
   };
 }
 
-/** Tailwind/global class for a text style's animated effect (empty when none). */
-export function textAnimClass(s?: TextStyle): string {
-  switch (s?.animation) {
-    case "gradient":
-      return "text-anim-gradient";
-    case "rainbow":
-      return "text-anim-rainbow";
-    case "shine":
-      return "text-anim-shine";
-    default:
-      return "";
-  }
+/** Tailwind/global class for a text style's animated effect.
+ *  Text effects are temporarily disabled, so this always returns none. */
+export function textAnimClass(_s?: TextStyle): string {
+  return "";
 }
 
 // ---------------------------------------------------------------------------
@@ -1614,10 +1608,9 @@ function AuroraCanvas({
     gl.uniform3fv(uLight, hexToRgb(color));
     gl.uniform3fv(uDark, hexToRgb(baseColor));
 
-    const reduced = window.matchMedia(
-      "(prefers-reduced-motion: reduce)",
-    ).matches;
-    const animate = speed > 0 && !reduced;
+    // Motion is a user-chosen feature here, so it always plays (see the note in
+    // globals.css — Windows over-reports `prefers-reduced-motion: reduce`).
+    const animate = speed > 0;
 
     let raf = 0;
     let startTime = 0;
@@ -1782,9 +1775,25 @@ export function PageBackground({ bg }: { bg?: Background }) {
   }
 
   if (bg.type === "media") {
+    const blur = Math.max(0, bg.blur ?? 0);
+    const dim = Math.max(0, Math.min(100, bg.dim ?? 0));
+    // Blur samples past the media's edges, leaving a faint transparent fringe.
+    // Bleed the element a few *pixels* beyond the layer (not a scale factor, so
+    // the content isn't visibly zoomed) so that fringe is clipped away.
+    const bleed = blur > 0 ? blur * 2 : 0;
     const frame: CSSProperties = {
       objectPosition: `${bg.posX}% ${bg.posY}%`,
       transform: `scale(${bg.zoom})`,
+      filter: blur > 0 ? `blur(${blur}px)` : undefined,
+      ...(bleed
+        ? {
+            position: "absolute",
+            top: `${-bleed}px`,
+            left: `${-bleed}px`,
+            width: `calc(100% + ${bleed * 2}px)`,
+            height: `calc(100% + ${bleed * 2}px)`,
+          }
+        : {}),
     };
     return (
       <div aria-hidden className="media-layer">
@@ -1794,6 +1803,12 @@ export function PageBackground({ bg }: { bg?: Background }) {
           // biome-ignore lint/performance/noImgElement: user-provided data-URL background
           <img src={bg.src} alt="" style={frame} />
         )}
+        {dim > 0 ? (
+          <div
+            className="absolute inset-0"
+            style={{ backgroundColor: `rgba(0, 0, 0, ${dim / 100})` }}
+          />
+        ) : null}
       </div>
     );
   }
@@ -2007,7 +2022,10 @@ export function ProfileView({
               as="h1"
               html={data.name}
               isDark={isDark}
-              className={cn("w-full tracking-tight", textAnimClass(nameStyle))}
+              className={cn(
+                "w-full tracking-tight whitespace-pre-wrap",
+                textAnimClass(nameStyle),
+              )}
               style={styleToCss(nameStyle, isDark)}
             />
           </div>
@@ -2020,7 +2038,7 @@ export function ProfileView({
               html={data.bio}
               isDark={isDark}
               className={cn(
-                "w-full",
+                "w-full whitespace-pre-wrap",
                 !bioStyle.color &&
                   !bioStyle.animation &&
                   "text-muted-foreground",

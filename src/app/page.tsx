@@ -2,22 +2,16 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Button } from "~/components/ui/button";
 
-// Landing page: a full-height hero with a cycling adjective in the sub-headline,
-// followed by a "what you get" section of three equally sized feature panels on
-// a subtle grid backdrop.
-
-// Adjectives the slot cycles through in the sub-headline. All share one look —
-// a shining gradient that sweeps across the text — and they're kept to a
-// similar length so the slot reads cleanly.
-const ADJECTIVES = ["easiest", "fastest", "simplest"];
+// Landing page: a full-height hero, followed by a "what you get" section of
+// three equally sized feature panels on a subtle grid backdrop.
 
 export default function Home() {
   return (
     <main className="flex flex-1 flex-col">
-      {/* Scoped keyframes for the shining gradient on the cycling adjective. */}
+      {/* Scoped keyframes for the shining gradients on the hero adjectives. */}
       {/* biome-ignore lint/security/noDangerouslySetInnerHtml: static, no user input */}
       <style dangerouslySetInnerHTML={{ __html: SLOT_SHINE_CSS }} />
       <section className="relative flex min-h-[calc(100vh-3.5rem)] flex-col items-center justify-center overflow-hidden px-6 py-20 text-center">
@@ -26,7 +20,12 @@ export default function Home() {
             All of you, in one
           </h1>
           <p className="max-w-xl text-lg leading-relaxed text-muted-foreground sm:text-xl">
-            stacked is the <AdjectiveSlot /> way to create your link-in-bio page
+            stacked is the <span className="slot-shine italic">fastest</span>,{" "}
+            <span className="slot-shine font-semibold">easiest</span>, and{" "}
+            <span className="slot-shine font-serif italic text-[1.1em]">
+              most customizable
+            </span>{" "}
+            way to create your link-in-bio page
           </p>
           <div className="flex flex-wrap items-center justify-center gap-4 pt-4">
             <Button asChild size="lg">
@@ -243,13 +242,19 @@ function PageShowcase() {
 }
 
 // A silver base with a bright highlight band that sweeps left→right, giving the
-// text a periodic "shine".
+// text a periodic "shine". Shared by the hero adjectives and "grow" below.
 const SLOT_SHINE_CSS = `
 @keyframes slot-shine {
   from { background-position: 200% center; }
   to { background-position: -200% center; }
 }
 .slot-shine {
+  /* inline-block + a sliver of horizontal padding so the italic glyphs' slant
+     overhang isn't clipped by the background-clip:text box (e.g. the tail of
+     "fastest"). The matching negative margins keep the surrounding spacing. */
+  display: inline-block;
+  padding: 0 0.08em;
+  margin: 0 -0.08em;
   background-image: linear-gradient(100deg, #94a3b8 0%, #94a3b8 40%, #ffffff 50%, #94a3b8 60%, #94a3b8 100%);
   background-size: 200% auto;
   background-clip: text;
@@ -259,79 +264,3 @@ const SLOT_SHINE_CSS = `
   animation: slot-shine 3s linear infinite;
 }
 `;
-
-// A vertical "slot machine" that scrolls through the adjectives.
-//
-// Each word occupies one full-height cell and is centered both ways; the column
-// translates by whole-cell steps and the box clips to a single cell, so only
-// one word shows at a time (neighbours stay outside the clip window).
-//
-// A duplicate of the first word is appended so stepping past the last word
-// slides forward onto that clone; once it settles we snap back to the real
-// first word with the transition disabled, making the wrap invisible.
-const CELL_EM = 1.6;
-const SLIDE_MS = 500;
-const HOLD_MS = 2000;
-const N = ADJECTIVES.length;
-// `align-middle` centres the clipped box on the parent's x-height, which leaves
-// the resting word's baseline sitting ~0.077em below the surrounding text.
-// Everything here is font-size-relative, so this constant em nudge lands the
-// baseline exactly on the sentence's baseline at every breakpoint. It's a
-// visual transform only, so it doesn't disturb the slot's translate math.
-const BASELINE_NUDGE_EM = 0.077;
-
-function AdjectiveSlot() {
-  // `slide` counts up 0..N (the last value lands on the appended clone).
-  const [slide, setSlide] = useState(0);
-  const [animate, setAnimate] = useState(true);
-
-  useEffect(() => {
-    const id = setInterval(() => {
-      setAnimate(true);
-      setSlide((s) => s + 1);
-    }, HOLD_MS);
-    return () => clearInterval(id);
-  }, []);
-
-  // When we land on the appended clone, wait for the slide to finish, then snap
-  // back to the real first word with the transition disabled (invisible wrap).
-  useEffect(() => {
-    if (slide !== N) return;
-    const id = setTimeout(() => {
-      setAnimate(false);
-      setSlide(0);
-    }, SLIDE_MS);
-    return () => clearTimeout(id);
-  }, [slide]);
-
-  const words = [...ADJECTIVES, ADJECTIVES[0]];
-
-  return (
-    <span
-      className="relative inline-flex items-start overflow-hidden align-middle font-semibold"
-      style={{
-        height: `${CELL_EM}em`,
-        transform: `translateY(${-BASELINE_NUDGE_EM}em)`,
-      }}
-    >
-      <span
-        className="flex flex-col"
-        style={{
-          transform: `translateY(-${slide * CELL_EM}em)`,
-          transition: animate ? `transform ${SLIDE_MS}ms ease-in-out` : "none",
-        }}
-      >
-        {words.map((word, i) => (
-          <span
-            // biome-ignore lint/suspicious/noArrayIndexKey: static list, index is stable
-            key={i}
-            className="flex items-center justify-center leading-none"
-            style={{ height: `${CELL_EM}em` }}
-          >
-            <span className="slot-shine whitespace-nowrap">{word}</span>
-          </span>
-        ))}
-      </span>
-    </span>
-  );
-}

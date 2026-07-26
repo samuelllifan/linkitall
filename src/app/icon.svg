@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="stacked">
+  <style>
+    /* Dark mark on light browser chrome; light mark on dark. */
+    .s { stroke: #0c0c0f; }
+    @media (prefers-color-scheme: dark) { .s { stroke: #ffffff; } }
+  </style>
+  <!-- Top sheet: full-strength outline. -->
+  <polygon class="s" points="50,8 88,30 50,52 12,30" fill="none" stroke-width="7" stroke-linejoin="round" />
+  <!-- Lower sheets fade as they recede. -->
+  <polyline class="s" points="12,48 50,70 88,48" fill="none" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" opacity="0.58" />
+  <polyline class="s" points="12,64 50,86 88,64" fill="none" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" opacity="0.3" />
+</svg>

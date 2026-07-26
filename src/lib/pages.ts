@@ -43,6 +43,17 @@ export interface MediaBackground {
   posY: number;
   /** Extra zoom applied on top of the cover fit (1 = fit). */
   zoom: number;
+  /**
+   * Darkening overlay, 0–100 (0 = none, 100 = black). Lets a busy photo/video
+   * sit behind the profile without drowning the text. Optional — pages saved
+   * before this existed read as 0.
+   */
+  dim?: number;
+  /**
+   * Gaussian blur applied to the media, in px (0 = sharp). Optional — pages
+   * saved before this existed read as 0.
+   */
+  blur?: number;
 }
 
 /** Page background. `default` follows the light/dark theme. */

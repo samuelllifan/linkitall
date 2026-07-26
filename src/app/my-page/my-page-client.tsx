@@ -41,7 +41,6 @@ import {
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import {
-  type AvatarEffect,
   type AvatarOutline,
   type Background,
   type BackgroundMemory,
@@ -183,26 +182,49 @@ const FONT_SIZE_MIN = 8;
 const FONT_SIZE_MAX = 200;
 
 /**
- * A typable font-size control: a number input the user can type any size into
- * (clamped to a sane range), with the common presets offered as datalist
- * suggestions. Local text state lets intermediate typing feel natural; the
- * value is clamped and committed on blur / Enter.
+ * A typable font-size control: a text input the user can type any size into
+ * (clamped to a sane range), plus a chevron that opens a preset-size menu.
+ *
+ * The presets are a custom popover rather than a native `<datalist>`: the
+ * native suggestion popup isn't shown for number inputs on Chromium/Windows,
+ * and even on a text input the browser anchors it to the top window — inside an
+ * embedded preview it renders detached, floating in a seemingly random place.
+ * A self-positioned popover is consistent on every platform.
  */
 function FontSizeInput({
   value,
   onChange,
   ariaLabel = "Text size",
-  listId,
 }: {
   value: number;
   onChange: (size: number) => void;
   ariaLabel?: string;
-  listId: string;
 }) {
   const [text, setText] = useState(String(value));
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
 
   // Re-sync when the external value changes (switching fields/links, reset).
   useEffect(() => setText(String(value)), [value]);
+
+  // Close the preset menu on outside click / Escape.
+  useEffect(() => {
+    if (!open) return;
+    function onDown(e: MouseEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
 
   function commit(raw: string) {
     const n = Number.parseInt(raw, 10);
@@ -214,15 +236,13 @@ function FontSizeInput({
   }
 
   return (
-    <>
+    <div ref={wrapRef} className="relative flex items-center">
       <input
-        type="number"
+        type="text"
         inputMode="numeric"
-        min={FONT_SIZE_MIN}
-        max={FONT_SIZE_MAX}
+        pattern="[0-9]*"
         value={text}
         aria-label={ariaLabel}
-        list={listId}
         onChange={(e) => {
           setText(e.target.value);
           // Live-preview in-range values while typing.
@@ -235,14 +255,57 @@ function FontSizeInput({
         onKeyDown={(e) => {
           if (e.key === "Enter") commit((e.target as HTMLInputElement).value);
         }}
-        className="h-8 w-14 rounded-md border border-input bg-transparent px-2 text-sm outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+        className="h-8 w-14 rounded-md border border-input bg-transparent py-1 pr-5 pl-2 text-sm outline-none"
       />
-      <datalist id={listId}>
-        {FONT_SIZES.map((s) => (
-          <option key={s} value={s} />
-        ))}
-      </datalist>
-    </>
+      <button
+        type="button"
+        aria-label="Preset sizes"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        tabIndex={-1}
+        onClick={() => setOpen((o) => !o)}
+        className="absolute right-1 flex size-4 items-center justify-center text-muted-foreground hover:text-foreground"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2.5}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+          className="size-3"
+        >
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </button>
+      {open ? (
+        <div
+          role="listbox"
+          aria-label="Preset text sizes"
+          className="absolute top-full right-0 z-50 mt-1 max-h-52 w-14 animate-pop overflow-y-auto rounded-md border border-border bg-popover p-1 shadow-lg"
+        >
+          {FONT_SIZES.map((s) => (
+            <button
+              key={s}
+              type="button"
+              role="option"
+              aria-selected={s === value}
+              onClick={() => {
+                commit(String(s));
+                setOpen(false);
+              }}
+              className={cn(
+                "flex w-full items-center justify-center rounded px-2 py-1 text-sm hover:bg-muted",
+                s === value && "bg-muted font-medium",
+              )}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -631,13 +694,23 @@ function RichTextField({
         onInput(el.innerHTML);
       }}
       onKeyDown={(e) => {
-        if (e.key === "Enter") e.preventDefault();
+        // Enter starts a new line. Insert an explicit <br> (an allowed tag)
+        // rather than letting the browser wrap lines in <div>/<p>, which the
+        // sanitizer would strip — collapsing the break.
+        if (e.key === "Enter") {
+          e.preventDefault();
+          document.execCommand("insertLineBreak");
+        }
       }}
       onPaste={(e) => {
-        // Paste as plain text so foreign markup can't leak into the content.
+        // Paste as plain text so foreign markup can't leak in, but preserve the
+        // line breaks as <br> so multi-line pastes keep their rows.
         e.preventDefault();
-        const text = e.clipboardData.getData("text/plain").replace(/\n/g, " ");
-        document.execCommand("insertText", false, text);
+        const text = e.clipboardData.getData("text/plain");
+        text.split(/\r?\n/).forEach((line, i) => {
+          if (i > 0) document.execCommand("insertLineBreak");
+          if (line) document.execCommand("insertText", false, line);
+        });
       }}
       style={style}
       className={className}
@@ -934,7 +1007,6 @@ function TextStyleEditor({
         <FontSizeInput
           value={style.fontSize ?? defaultSize}
           onChange={(size) => onChange({ fontSize: size })}
-          listId="link-font-sizes"
         />
       </div>
       <div className="flex items-center justify-between gap-2 text-sm">
@@ -1018,7 +1090,7 @@ function TextStyleEditor({
 }
 
 /** Small paintbrush icon for the per-element "customize box" affordance. */
-/** A rounded square framing three sparkles (the name/bio box-style affordance). */
+/** Three sparkles (the name/bio box-style affordance) — no frame, star only. */
 function SparklesIcon({ className }: { className?: string }) {
   return (
     <svg
@@ -1031,10 +1103,9 @@ function SparklesIcon({ className }: { className?: string }) {
       aria-hidden="true"
       className={className}
     >
-      <rect x="3" y="3" width="18" height="18" rx="4" />
-      <path d="M15 8.2c0 1.6 1.1 2.7 2.7 2.7-1.6 0-2.7 1.1-2.7 2.7 0-1.6-1.1-2.7-2.7-2.7 1.6 0 2.7-1.1 2.7-2.7Z" />
-      <path d="M8.7 6.6c0 1 .7 1.7 1.7 1.7-1 0-1.7.7-1.7 1.7 0-1-.7-1.7-1.7-1.7 1 0 1.7-.7 1.7-1.7Z" />
-      <path d="M9 13.4c0 1.2.9 2.1 2.1 2.1-1.2 0-2.1.9-2.1 2.1 0-1.2-.9-2.1-2.1-2.1 1.2 0 2.1-.9 2.1-2.1Z" />
+      <path d="M14 4.5c0 2.4 1.6 4 4 4-2.4 0-4 1.6-4 4 0-2.4-1.6-4-4-4 2.4 0 4-1.6 4-4Z" />
+      <path d="M7 12.5c0 1.5 1 2.5 2.5 2.5C8 15 7 16 7 17.5 7 16 6 15 4.5 15 6 15 7 14 7 12.5Z" />
+      <path d="M14.5 15c0 1.2.8 2 2 2-1.2 0-2 .8-2 2 0-1.2-.8-2-2-2 1.2 0 2-.8 2-2Z" />
     </svg>
   );
 }
@@ -1059,51 +1130,20 @@ function FontIcon({ className }: { className?: string }) {
   );
 }
 
-/** Animated text-effect picker (None / Gradient / Rainbow / Shine). */
-function TextEffectSelect({
-  value,
-  onChange,
-}: {
-  value: TextStyle["animation"];
-  onChange: (v: TextStyle["animation"]) => void;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-3 text-sm">
-      <span className="text-muted-foreground">Effect</span>
-      <select
-        value={value ?? "none"}
-        onChange={(e) => onChange(e.target.value as TextStyle["animation"])}
-        aria-label="Text effect"
-        className="h-8 rounded-md border border-input bg-transparent px-2 text-sm outline-none"
-      >
-        <option value="none">None</option>
-        <option value="gradient">Gradient</option>
-        <option value="rainbow">Rainbow</option>
-        <option value="shine">Shine</option>
-      </select>
-    </div>
-  );
-}
-
 /**
  * A "customize box" button that opens a popover with the box-style controls,
- * placed on the element it styles (the name/bio card, or a link card). When
- * `onAnimation` is provided, the text-effect picker is shown too.
+ * placed on the element it styles (the name/bio card, or a link card).
  */
 function BoxStylePopover({
   box,
   onChange,
   label,
   align = "right",
-  animation,
-  onAnimation,
 }: {
   box: BoxStyle;
   onChange: (patch: Partial<BoxStyle>) => void;
   label: string;
   align?: "left" | "right";
-  animation?: TextStyle["animation"];
-  onAnimation?: (v: TextStyle["animation"]) => void;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
@@ -1144,12 +1184,6 @@ function BoxStylePopover({
           )}
         >
           <BoxStyleEditor box={box} onChange={onChange} />
-          {onAnimation ? (
-            <>
-              <div className="my-3 border-t border-border" />
-              <TextEffectSelect value={animation} onChange={onAnimation} />
-            </>
-          ) : null}
         </div>
       ) : null}
     </div>
@@ -1166,15 +1200,11 @@ function LinkStylePopover({
   onBox,
   onApplyAll,
   align = "left",
-  animation,
-  onAnimation,
 }: {
   box: BoxStyle;
   onBox: (patch: Partial<BoxStyle>) => void;
   onApplyAll: () => void;
   align?: "left" | "right";
-  animation?: TextStyle["animation"];
-  onAnimation?: (v: TextStyle["animation"]) => void;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
@@ -1215,12 +1245,6 @@ function LinkStylePopover({
           )}
         >
           <BoxStyleEditor box={box} onChange={onBox} />
-          {onAnimation ? (
-            <>
-              <div className="my-3 border-t border-border" />
-              <TextEffectSelect value={animation} onChange={onAnimation} />
-            </>
-          ) : null}
           <div className="my-3 border-t border-border" />
           <Button
             variant="outline"
@@ -1236,53 +1260,16 @@ function LinkStylePopover({
   );
 }
 
-/** A labelled 1–10 range slider used by the profile-picture effect controls. */
-function FxSlider({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  onChange: (n: number) => void;
-}) {
-  return (
-    <label className="flex flex-col gap-1.5 text-sm">
-      <span className="flex justify-between text-muted-foreground">
-        <span>{label}</span>
-        <span className="tabular-nums">{value}/10</span>
-      </span>
-      <input
-        type="range"
-        min={1}
-        max={10}
-        step={1}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        aria-label={label}
-        className="w-full"
-      />
-    </label>
-  );
-}
-
 /**
  * The profile-picture customization menu (opened by the sparkles button next to
- * the avatar): an effect picker (None / Particles / Shine) with per-effect
- * controls, plus a togglable outline.
+ * the avatar): a togglable outline.
  */
 function AvatarFxPopover({
-  effect,
   outline,
-  onEffect,
-  onEffectPatch,
   onOutline,
   onOutlineColor,
 }: {
-  effect?: AvatarEffect;
   outline?: AvatarOutline;
-  onEffect: (type: AvatarEffect["type"]) => void;
-  onEffectPatch: (patch: Record<string, unknown>) => void;
   onOutline: () => void;
   onOutlineColor: (color: string) => void;
 }) {
@@ -1305,7 +1292,6 @@ function AvatarFxPopover({
     };
   }, [open]);
 
-  const type = effect?.type ?? "none";
   const outlineOn = outline?.enabled ?? false;
 
   return (
@@ -1313,7 +1299,7 @@ function AvatarFxPopover({
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        aria-label="Profile picture effects"
+        aria-label="Profile picture options"
         aria-expanded={open}
         className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
       >
@@ -1322,74 +1308,11 @@ function AvatarFxPopover({
       {open ? (
         <div
           role="menu"
-          aria-label="Profile picture effects"
+          aria-label="Profile picture options"
           className="absolute top-full left-1/2 z-50 mt-2 w-64 -translate-x-1/2 origin-top animate-pop rounded-lg border border-border bg-popover p-3 text-popover-foreground shadow-lg"
         >
           <p className="mb-2 text-sm font-medium">Profile picture</p>
           <div className="flex flex-col gap-3">
-            <div className="grid grid-cols-3 gap-2">
-              {(
-                [
-                  ["none", "None"],
-                  ["particles", "Particles"],
-                  ["shine", "Shine"],
-                ] as [AvatarEffect["type"], string][]
-              ).map(([t, label]) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => onEffect(t)}
-                  className={cn(
-                    "flex h-9 items-center justify-center rounded-md border text-xs transition-colors",
-                    type === t
-                      ? "border-ring bg-muted text-foreground"
-                      : "border-input text-muted-foreground hover:bg-muted",
-                  )}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            {effect?.type === "particles" ? (
-              <>
-                <div className="flex items-center justify-between gap-3 text-sm">
-                  <span className="text-muted-foreground">Color</span>
-                  <ColorPicker
-                    value={effect.color}
-                    onChange={(c) => onEffectPatch({ color: c })}
-                    ariaLabel="Particle color"
-                  />
-                </div>
-                <FxSlider
-                  label="Speed"
-                  value={effect.speed}
-                  onChange={(n) => onEffectPatch({ speed: n })}
-                />
-                <FxSlider
-                  label="Size"
-                  value={effect.size}
-                  onChange={(n) => onEffectPatch({ size: n })}
-                />
-                <FxSlider
-                  label="Amount"
-                  value={effect.amount}
-                  onChange={(n) => onEffectPatch({ amount: n })}
-                />
-              </>
-            ) : effect?.type === "shine" ? (
-              <FxSlider
-                label="Speed"
-                value={effect.speed}
-                onChange={(n) => onEffectPatch({ speed: n })}
-              />
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                No effect on the profile picture.
-              </p>
-            )}
-
-            <div className="my-1 border-t border-border" />
             <div className="flex items-center justify-between gap-3 text-sm">
               <span className="font-medium">Outline</span>
               <Toggle
@@ -1413,143 +1336,6 @@ function AvatarFxPopover({
       ) : null}
     </div>
   );
-}
-
-function LayoutIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      className={className}
-    >
-      <rect x="3" y="3" width="18" height="18" rx="2" />
-      <path d="M3 9h18" />
-      <path d="M9 21V9" />
-    </svg>
-  );
-}
-
-/** A one-click page look: background + fonts + link box color. */
-interface Template {
-  key: string;
-  label: string;
-  background: Background;
-  /** Font applied to both name and bio. */
-  font: string;
-  /** Box color applied to every link (undefined = default theme surface). */
-  linkColor?: string;
-  /** CSS `background` for the preview swatch. */
-  preview: string;
-}
-
-const TEMPLATES: Template[] = [
-  {
-    key: "minimal",
-    label: "Minimal",
-    background: { type: "default" },
-    font: "inter",
-    linkColor: undefined,
-    preview: "linear-gradient(135deg,#fafafa,#d4d4d8)",
-  },
-  {
-    key: "violet",
-    label: "Violet Dream",
-    background: {
-      type: "gradient",
-      from: "#3b82f6",
-      to: "#ec4899",
-      direction: "vertical",
-      distribution: 50,
-    },
-    font: "poppins",
-    linkColor: "#312e81",
-    preview: "linear-gradient(135deg,#3b82f6,#8b5cf6,#ec4899)",
-  },
-  {
-    key: "grid",
-    label: "Grid",
-    background: {
-      type: "grid",
-      baseColor: "#0a0a0a",
-      lineColor: "#2a2a2a",
-      size: 32,
-      thickness: 1,
-    },
-    font: "mono",
-    linkColor: "#1e293b",
-    preview:
-      "linear-gradient(to right,#2a2a2a 1px,transparent 1px) 0 0/12px 12px, linear-gradient(to bottom,#2a2a2a 1px,transparent 1px) 0 0/12px 12px, #0a0a0a",
-  },
-  {
-    key: "sunset",
-    label: "Sunset",
-    background: {
-      type: "gradient",
-      from: "#f97316",
-      to: "#db2777",
-      direction: "vertical",
-      distribution: 50,
-    },
-    font: "poppins",
-    linkColor: "#7c2d12",
-    preview: "linear-gradient(#f97316,#db2777)",
-  },
-  {
-    key: "ocean",
-    label: "Ocean",
-    background: {
-      type: "gradient",
-      from: "#0ea5e9",
-      to: "#14b8a6",
-      direction: "vertical",
-      distribution: 50,
-    },
-    font: "lora",
-    linkColor: "#0c4a6e",
-    preview: "linear-gradient(#0ea5e9,#14b8a6)",
-  },
-  {
-    key: "noir",
-    label: "Noir",
-    background: { type: "custom", color: "#0a0a0a" },
-    font: "playfair",
-    linkColor: "#262626",
-    preview: "#0a0a0a",
-  },
-];
-
-/** Background memory patch so a template's background restores on type-switch. */
-function templateMemory(bg: Background): BackgroundMemory {
-  if (bg.type === "custom") return { custom: bg.color };
-  if (bg.type === "gradient") {
-    return {
-      gradient: {
-        from: bg.from,
-        to: bg.to,
-        direction: bg.direction,
-        distribution: bg.distribution,
-      },
-    };
-  }
-  if (bg.type === "grid")
-    return {
-      grid: {
-        baseColor: bg.baseColor,
-        lineColor: bg.lineColor,
-        size: bg.size,
-        thickness: bg.thickness,
-      },
-    };
-  if (bg.type === "aurora")
-    return {
-      aurora: { color: bg.color, baseColor: bg.baseColor, speed: bg.speed },
-    };
-  return {};
 }
 
 export function MyPageClient({
@@ -1580,9 +1366,6 @@ export function MyPageClient({
   // Background picker dropdown.
   const [bgMenu, setBgMenu] = useState(false);
   const bgMenuRef = useRef<HTMLDivElement | null>(null);
-  // Template picker dropdown.
-  const [tplMenu, setTplMenu] = useState(false);
-  const tplMenuRef = useRef<HTMLDivElement | null>(null);
   // Panel dropdown (background panel behind the whole profile block).
   const [boxMenu, setBoxMenu] = useState(false);
   const boxMenuRef = useRef<HTMLDivElement | null>(null);
@@ -1721,7 +1504,6 @@ export function MyPageClient({
   const cropModal = usePresence(cropSrc, 200);
   const avatarModal = usePresence(avatarMenu, 200);
   const bgMenuP = usePresence(bgMenu, 200);
-  const tplMenuP = usePresence(tplMenu, 200);
   const boxMenuP = usePresence(boxMenu, 200);
   const mediaCropModal = usePresence(mediaCrop, 200);
 
@@ -1795,28 +1577,6 @@ export function MyPageClient({
       document.removeEventListener("mousedown", onDown);
     };
   }, [bgMenu, mediaCrop]);
-
-  // Close the template dropdown on Escape or an outside click.
-  useEffect(() => {
-    if (!tplMenu) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setTplMenu(false);
-    };
-    const onDown = (e: MouseEvent) => {
-      if (
-        tplMenuRef.current &&
-        !tplMenuRef.current.contains(e.target as Node)
-      ) {
-        setTplMenu(false);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    document.addEventListener("mousedown", onDown);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      document.removeEventListener("mousedown", onDown);
-    };
-  }, [tplMenu]);
 
   // Close the boxes dropdown on Escape or an outside click.
   useEffect(() => {
@@ -1984,6 +1744,8 @@ export function MyPageClient({
           posX: draft.background.posX,
           posY: draft.background.posY,
           zoom: draft.background.zoom,
+          dim: draft.background.dim,
+          blur: draft.background.blur,
         }
       : draft.bgMemory?.media;
 
@@ -2211,40 +1973,6 @@ export function MyPageClient({
     setDraft((prev) => ({ ...prev, panelOrientation: orientation }));
   }
 
-  // Profile-picture effect + outline. Switching effect type seeds sensible
-  // defaults (and keeps the current settings when returning to a type).
-  function chooseAvatarEffect(type: AvatarEffect["type"]) {
-    setDraft((prev) => {
-      const cur = prev.avatarEffect;
-      let next: AvatarEffect;
-      if (type === "particles") {
-        next =
-          cur?.type === "particles"
-            ? cur
-            : {
-                type: "particles",
-                color: "#ffffff",
-                speed: 5,
-                size: 5,
-                amount: 5,
-              };
-      } else if (type === "shine") {
-        next = cur?.type === "shine" ? cur : { type: "shine", speed: 5 };
-      } else {
-        next = { type: "none" };
-      }
-      return { ...prev, avatarEffect: next };
-    });
-  }
-
-  function updateAvatarEffect(patch: Record<string, unknown>) {
-    setDraft((prev) => {
-      const cur = prev.avatarEffect;
-      if (!cur || cur.type === "none") return prev;
-      return { ...prev, avatarEffect: { ...cur, ...patch } as AvatarEffect };
-    });
-  }
-
   function toggleAvatarOutline() {
     setDraft((prev) => {
       const cur = prev.avatarOutline;
@@ -2263,20 +1991,6 @@ export function MyPageClient({
       ...prev,
       avatarOutline: { enabled: prev.avatarOutline?.enabled ?? true, color },
     }));
-  }
-
-  // Apply a template's look: background, fonts, and link box color. Leaves the
-  // name/bio text and other per-field styles (size, bold, alignment) intact.
-  function applyTemplate(t: Template) {
-    setDraft((prev) => ({
-      ...prev,
-      background: t.background,
-      bgMemory: { ...prev.bgMemory, ...templateMemory(t.background) },
-      nameStyle: { ...prev.nameStyle, fontFamily: t.font },
-      bioStyle: { ...prev.bioStyle, fontFamily: t.font },
-      links: prev.links.map((l) => ({ ...l, color: t.linkColor })),
-    }));
-    setTplMenu(false);
   }
 
   // Read a file's bytes as a data URL (used for imported background media).
@@ -2371,12 +2085,18 @@ export function MyPageClient({
 
   function applyMediaCrop() {
     if (!mediaCrop) return;
+    // Carry the current dim/blur through a reframe so adjusting position/zoom
+    // doesn't reset the look.
+    const prevMedia =
+      draft.background?.type === "media" ? draft.background : media;
     const next: MediaBackground = {
       kind: mediaCrop.kind,
       src: mediaCrop.src,
       posX: Math.round(mediaPos.x),
       posY: Math.round(mediaPos.y),
       zoom: Math.round(mediaZoom * 100) / 100,
+      dim: prevMedia?.dim,
+      blur: prevMedia?.blur,
     };
     setDraft((prev) => ({
       ...prev,
@@ -2384,6 +2104,16 @@ export function MyPageClient({
       bgMemory: { ...prev.bgMemory, media: next },
     }));
     setMediaCrop(null);
+  }
+
+  function updateMedia(patch: Partial<MediaBackground>) {
+    if (!media) return;
+    const next = { ...media, ...patch };
+    setDraft((prev) => ({
+      ...prev,
+      background: { type: "media", ...next },
+      bgMemory: { ...prev.bgMemory, media: next },
+    }));
   }
 
   // Cancel the crop without applying — leaves the background dropdown open
@@ -2817,7 +2547,6 @@ export function MyPageClient({
           value={activeStyle.fontSize ?? 16}
           onChange={(size) => setActiveStyle({ fontSize: size })}
           ariaLabel="Font size"
-          listId="text-font-sizes"
         />
       </div>
 
@@ -3027,8 +2756,6 @@ export function MyPageClient({
                   onBox={(patch) => updateLinkBox(link.id, patch)}
                   onApplyAll={() => applyLinkStyleToAll(link.id)}
                   align="left"
-                  animation={linkTextStyle(link).animation}
-                  onAnimation={(a) => updateLinkText(link.id, { animation: a })}
                 />
               ) : null}
               {/* Per-link text/font settings (italic-T). */}
@@ -3131,10 +2858,7 @@ export function MyPageClient({
             {/* Profile picture */}
             {editing ? (
               <div className="flex flex-col items-center gap-2">
-                <AvatarFx
-                  effect={draft.avatarEffect}
-                  outline={draft.avatarOutline}
-                >
+                <AvatarFx effect={undefined} outline={draft.avatarOutline}>
                   <button
                     type="button"
                     onClick={() => {
@@ -3178,19 +2902,13 @@ export function MyPageClient({
                   }}
                 />
                 <AvatarFxPopover
-                  effect={draft.avatarEffect}
                   outline={draft.avatarOutline}
-                  onEffect={chooseAvatarEffect}
-                  onEffectPatch={updateAvatarEffect}
                   onOutline={toggleAvatarOutline}
                   onOutlineColor={setAvatarOutlineColor}
                 />
               </div>
             ) : saved.avatar ? (
-              <AvatarFx
-                effect={saved.avatarEffect}
-                outline={saved.avatarOutline}
-              >
+              <AvatarFx effect={undefined} outline={saved.avatarOutline}>
                 {/* biome-ignore lint/performance/noImgElement: small inline data-URL avatar; next/image adds no value */}
                 <img
                   src={saved.avatar}
@@ -3199,10 +2917,7 @@ export function MyPageClient({
                 />
               </AvatarFx>
             ) : (
-              <AvatarFx
-                effect={saved.avatarEffect}
-                outline={saved.avatarOutline}
-              >
+              <AvatarFx effect={undefined} outline={saved.avatarOutline}>
                 <div className="flex size-24 items-center justify-center rounded-full bg-muted text-3xl font-semibold text-muted-foreground">
                   {saved.name.charAt(0).toUpperCase() || "?"}
                 </div>
@@ -3225,13 +2940,6 @@ export function MyPageClient({
                       onChange={updateNameBox}
                       label="Customize name box"
                       align="left"
-                      animation={nameStyle.animation}
-                      onAnimation={(a) =>
-                        setDraft((prev) => ({
-                          ...prev,
-                          nameStyle: { ...prev.nameStyle, animation: a },
-                        }))
-                      }
                     />
                     <button
                       type="button"
@@ -3283,7 +2991,7 @@ export function MyPageClient({
                     html={saved.name}
                     isDark={isDark}
                     className={cn(
-                      "w-full tracking-tight",
+                      "w-full tracking-tight whitespace-pre-wrap",
                       textAnimClass(savedNameStyle),
                     )}
                     style={styleToCss(savedNameStyle, isDark)}
@@ -3306,13 +3014,6 @@ export function MyPageClient({
                       onChange={updateBioBox}
                       label="Customize description box"
                       align="left"
-                      animation={bioStyle.animation}
-                      onAnimation={(a) =>
-                        setDraft((prev) => ({
-                          ...prev,
-                          bioStyle: { ...prev.bioStyle, animation: a },
-                        }))
-                      }
                     />
                     <button
                       type="button"
@@ -3367,7 +3068,7 @@ export function MyPageClient({
                     html={saved.bio}
                     isDark={isDark}
                     className={cn(
-                      "w-full",
+                      "w-full whitespace-pre-wrap",
                       !savedBioStyle.color &&
                         !savedBioStyle.animation &&
                         "text-muted-foreground",
@@ -3850,58 +3551,6 @@ export function MyPageClient({
         </Button>
       </div>
 
-      {/* Template picker — top-right, edit mode only */}
-      {editing ? (
-        <div ref={tplMenuRef} className="fixed top-20 right-6 z-40">
-          <Button
-            variant="outline"
-            onClick={() => setTplMenu((o) => !o)}
-            aria-haspopup="menu"
-            aria-expanded={tplMenu}
-            className="bg-background shadow-md dark:bg-background"
-          >
-            <LayoutIcon className="size-4" />
-            Templates
-            <ChevronDownIcon
-              className={cn(
-                "size-4 text-muted-foreground transition-transform",
-                tplMenu && "rotate-180",
-              )}
-            />
-          </Button>
-
-          {tplMenuP.value ? (
-            <div
-              role="menu"
-              aria-label="Templates"
-              className={cn(
-                "absolute top-full right-0 mt-2 w-72 origin-top-right rounded-lg border border-border bg-popover p-3 text-popover-foreground shadow-lg",
-                tplMenuP.visible ? "animate-pop" : "animate-pop-out",
-              )}
-            >
-              <div className="grid grid-cols-2 gap-3">
-                {TEMPLATES.map((t) => (
-                  <button
-                    key={t.key}
-                    type="button"
-                    onClick={() => applyTemplate(t)}
-                    className="flex flex-col items-center gap-1.5"
-                  >
-                    <span
-                      style={{ background: t.preview }}
-                      className="h-14 w-full rounded-md border border-border transition-shadow hover:ring-2 hover:ring-ring hover:ring-offset-2 hover:ring-offset-popover"
-                    />
-                    <span className="text-xs text-muted-foreground">
-                      {t.label}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-
       {/* Background picker — top-left, edit mode only */}
       {editing ? (
         <div ref={bgMenuRef} className="fixed top-20 left-6 z-40">
@@ -4323,36 +3972,77 @@ export function MyPageClient({
                   </label>
                 </div>
               ) : bgType === "media" ? (
-                <div className="mt-3 flex animate-slide-up items-center justify-between gap-1 border-t border-border pt-3">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={adjustMedia}
-                    className="text-muted-foreground"
-                  >
-                    <WrenchIcon className="size-4" />
-                    Adjust
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setMediaError(null);
-                      bgFileInputRef.current?.click();
-                    }}
-                    className="text-muted-foreground"
-                  >
-                    <UploadIcon className="size-4" />
-                    Replace
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={removeMedia}
-                    className={DESTRUCTIVE_GHOST}
-                  >
-                    Remove
-                  </Button>
+                <div className="mt-3 flex animate-slide-up flex-col gap-3 border-t border-border pt-3">
+                  {/* Dim — a black overlay so busy media doesn't overwhelm the
+                      profile content sitting on top of it. */}
+                  <label className="flex flex-col gap-1.5 text-sm">
+                    <span className="flex justify-between text-muted-foreground">
+                      <span>Dim</span>
+                      <span className="tabular-nums">{media?.dim ?? 0}%</span>
+                    </span>
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      step={5}
+                      value={media?.dim ?? 0}
+                      onChange={(e) =>
+                        updateMedia({ dim: Number(e.target.value) })
+                      }
+                      aria-label="Background dim"
+                      className="w-full"
+                    />
+                  </label>
+                  {/* Blur — soften the media into a backdrop. */}
+                  <label className="flex flex-col gap-1.5 text-sm">
+                    <span className="flex justify-between text-muted-foreground">
+                      <span>Blur</span>
+                      <span className="tabular-nums">{media?.blur ?? 0}px</span>
+                    </span>
+                    <input
+                      type="range"
+                      min={0}
+                      max={24}
+                      step={1}
+                      value={media?.blur ?? 0}
+                      onChange={(e) =>
+                        updateMedia({ blur: Number(e.target.value) })
+                      }
+                      aria-label="Background blur"
+                      className="w-full"
+                    />
+                  </label>
+                  <div className="flex items-center justify-between gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={adjustMedia}
+                      className="text-muted-foreground"
+                    >
+                      <WrenchIcon className="size-4" />
+                      Adjust
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setMediaError(null);
+                        bgFileInputRef.current?.click();
+                      }}
+                      className="text-muted-foreground"
+                    >
+                      <UploadIcon className="size-4" />
+                      Replace
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={removeMedia}
+                      className={DESTRUCTIVE_GHOST}
+                    >
+                      Remove
+                    </Button>
+                  </div>
                 </div>
               ) : null}
             </div>

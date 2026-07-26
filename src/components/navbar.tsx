@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { StackedMark } from "~/components/stacked-mark";
 import { createClient } from "~/lib/supabase/client";
 import { useUnsavedGuard } from "~/lib/unsaved-guard";
 import { cn } from "~/lib/utils";
@@ -127,8 +128,9 @@ export function Navbar({
         <Link
           href="/"
           onClick={guardedClick}
-          className="font-semibold tracking-tight"
+          className="flex items-center gap-2 font-semibold tracking-tight"
         >
+          <StackedMark className="size-5" />
           stacked
         </Link>
         <div className="flex gap-4">

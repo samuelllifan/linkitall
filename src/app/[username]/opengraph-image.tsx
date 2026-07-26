@@ -5,12 +5,16 @@ import type { Background } from "~/lib/pages";
 import { plainText } from "~/lib/text";
 
 export const runtime = "nodejs";
+// Regenerate on every request so the card reflects the page's current
+// background, avatar, name, and bio the moment an owner saves a change —
+// without this, Next.js caches the first render and the preview goes stale.
+export const dynamic = "force-dynamic";
 export const alt = "Profile on stacked";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
 // The card's default fill when a page has no custom background (or one Satori
-// can't render, like grid/video) — matches the app's dark theme.
+// can't render, like a video) — matches the app's dark theme.
 const DEFAULT_BG =
   "linear-gradient(135deg, #140b2e 0%, #0b0b12 55%, #1a0f2e 100%)";
 
@@ -38,6 +42,33 @@ function resolveBackground(bg?: Background): {
       fg: readableText(bg.from),
     };
   }
+  if (bg?.type === "grid") {
+    const t = Math.max(0, bg.thickness);
+    // Solid base color with two tiled line layers (vertical + horizontal),
+    // mirroring PageBackground's grid. Satori tiles gradients via
+    // background-size, but doesn't support the page's radial fade mask, so the
+    // lines stay uniform across the card.
+    return {
+      style: {
+        backgroundColor: bg.baseColor,
+        backgroundImage: `linear-gradient(to right, ${bg.lineColor} ${t}px, transparent ${t}px), linear-gradient(to bottom, ${bg.lineColor} ${t}px, transparent ${t}px)`,
+        backgroundSize: `${bg.size}px ${bg.size}px, ${bg.size}px ${bg.size}px`,
+      },
+      fg: readableText(bg.baseColor),
+    };
+  }
+  if (bg?.type === "aurora") {
+    // Approximate the animated glow with a static radial bloom from the
+    // top-center fading into the base color — Satori can't run the WebGL
+    // shader, but this captures the look for a still share card.
+    return {
+      style: {
+        backgroundColor: bg.baseColor,
+        backgroundImage: `radial-gradient(ellipse 90% 70% at 50% 0%, ${bg.color}, transparent 70%)`,
+      },
+      fg: readableText(bg.baseColor),
+    };
+  }
   if (
     bg?.type === "media" &&
     bg.kind === "image" &&
@@ -52,7 +83,7 @@ function resolveBackground(bg?: Background): {
       fg: "#ffffff",
     };
   }
-  // default, grid, and video (which Satori can't rasterize) fall back.
+  // default and video (which Satori can't rasterize) fall back.
   return { style: { backgroundImage: DEFAULT_BG }, fg: "#ffffff" };
 }
 

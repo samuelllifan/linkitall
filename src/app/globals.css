@@ -365,24 +365,10 @@
   pointer-events: none;
 }
 
-/* Respect users who prefer reduced motion. */
-@media (prefers-reduced-motion: reduce) {
-  .animate-pop,
-  .animate-fade,
-  .animate-slide-up,
-  .animate-pop-out,
-  .animate-fade-out,
-  .animate-slide-down,
-  .avatar-particle,
-  .avatar-shine::before,
-  .text-anim-gradient,
-  .text-anim-rainbow,
-  .text-anim-shine {
-    animation: none;
-  }
-  *,
-  ::before,
-  ::after {
-    transition-duration: 0ms;
-  }
-}
+/* NOTE: We intentionally do NOT gate the app's motion behind
+   `prefers-reduced-motion: reduce`. Windows maps its system "Show animations"
+   toggle (commonly off, and always off under VMs / Remote Desktop) onto that
+   query, which previously silenced every entrance animation, hover transition,
+   profile-picture effect, and animated-text effect for those users — the
+   product's core, opt-in visual features. Motion here is deliberate and
+   user-chosen (avatar effects, text effects), so it always plays. */

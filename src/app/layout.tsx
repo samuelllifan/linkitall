@@ -10,9 +10,24 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://stacked.page"),
   title: "stacked",
   description:
-    "Build a fully customizable link-in-bio in minutes. Made for online creators.",
+    "stacked is the fastest, easiest, and most customizable way to create your link-in-bio page.",
+  openGraph: {
+    title: "stacked",
+    description:
+      "stacked is the fastest, easiest, and most customizable way to create your link-in-bio page.",
+    url: "https://stacked.page",
+    siteName: "stacked",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "stacked",
+    description:
+      "stacked is the fastest, easiest, and most customizable way to create your link-in-bio page.",
+  },
 };
 
 export default async function RootLayout({
