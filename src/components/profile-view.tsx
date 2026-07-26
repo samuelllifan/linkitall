@@ -256,10 +256,10 @@ export function boxCss(box: BoxStyle, fill?: string): CSSProperties {
   // border. Without it, Windows Chromium (notably at fractional display
   // scaling) leaves a bright hairline / square-looking artifact at the corners.
   if (box.enabled === false) {
-    // Background turned off → a fully transparent surface (no fill, no outline).
+    // Background turned off → no fill, but the outline can still be shown.
     return {
       backgroundColor: "transparent",
-      border: "1px solid transparent",
+      border: `1px solid ${box.outline ? box.outlineColor : "transparent"}`,
       backgroundClip: "padding-box",
     };
   }

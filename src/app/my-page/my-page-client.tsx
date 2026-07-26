@@ -925,25 +925,25 @@ function BoxStyleEditor({
               className="w-full"
             />
           </label>
-          <div className="flex items-center justify-between gap-3 text-sm">
-            <span className="text-muted-foreground">Outline</span>
-            <div className="flex items-center gap-2">
-              {box.outline ? (
-                <ColorPicker
-                  value={box.outlineColor}
-                  onChange={(c) => onChange({ outlineColor: c })}
-                  ariaLabel="Outline color"
-                />
-              ) : null}
-              <Toggle
-                checked={box.outline}
-                onChange={() => onChange({ outline: !box.outline })}
-                ariaLabel="Toggle outline"
-              />
-            </div>
-          </div>
         </>
       ) : null}
+      <div className="flex items-center justify-between gap-3 text-sm">
+        <span className="font-medium">Outline</span>
+        <div className="flex items-center gap-2">
+          {box.outline ? (
+            <ColorPicker
+              value={box.outlineColor}
+              onChange={(c) => onChange({ outlineColor: c })}
+              ariaLabel="Outline color"
+            />
+          ) : null}
+          <Toggle
+            checked={box.outline}
+            onChange={() => onChange({ outline: !box.outline })}
+            ariaLabel="Toggle outline"
+          />
+        </div>
+      </div>
     </div>
   );
 }
@@ -1068,7 +1068,7 @@ function SparklesIcon({ className }: { className?: string }) {
   return (
     <svg
       viewBox="0 0 24 24"
-      fill="none"
+      fill="currentColor"
       stroke="currentColor"
       strokeWidth={1.6}
       strokeLinecap="round"
@@ -2481,6 +2481,9 @@ export function MyPageClient({
                 onAnimationEnd={() =>
                   setFlashLinkIds((ids) => ids.filter((id) => id !== link.id))
                 }
+                // Focusing the link/URL field closes the text settings — they
+                // only apply to the display label, not the URL.
+                onFocus={() => setFontOpen(null)}
                 placeholder="Discord username"
                 aria-label="Discord username"
                 className={cn(
@@ -2515,6 +2518,9 @@ export function MyPageClient({
               onAnimationEnd={() =>
                 setFlashLinkIds((ids) => ids.filter((id) => id !== link.id))
               }
+              // Focusing the URL field closes the text settings — they only
+              // apply to the display label, not the URL.
+              onFocus={() => setFontOpen(null)}
               placeholder="https://..."
               className={cn(flashLinkIds.includes(link.id) && "animate-flash")}
             />
