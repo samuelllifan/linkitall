@@ -33,6 +33,13 @@
 
 /* OKLCH Design Tokens — dark only (zinc). */
 :root {
+  /* The app is dark-only. Declaring the scheme makes the browser render every
+     NATIVE surface in dark mode too — scrollbars, <select> popups, number
+     spinners, <input type=color>, focus/autofill chrome. Without this, Windows
+     & Linux Chromium paint those in light mode (a bright scrollbar and light
+     dropdowns on the dark page); macOS's overlay scrollbars hide the gap, which
+     is why the site looked broken on Windows but fine on a Mac. */
+  color-scheme: dark;
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
   --muted: oklch(0.269 0 0);
@@ -62,6 +69,11 @@
        navbar bounce down over the fixed edit-mode controls (Background /
        Templates) when scrolling up fast, causing a brief overlap. */
     overscroll-behavior-y: none;
+    /* Reserve the scrollbar gutter so the always-visible classic scrollbar on
+       Windows/Linux doesn't shift the centered layout sideways when moving
+       between a scrolling and a non-scrolling page. (No-op with macOS overlay
+       scrollbars.) */
+    scrollbar-gutter: stable;
   }
   body {
     @apply bg-background text-foreground;

@@ -1429,7 +1429,14 @@ void main() { gl_Position = vec4(a_pos, 0.0, 1.0); }
 `;
 
 const AURORA_FRAG = `
+// Prefer highp for smooth noise/gradients, but fall back to mediump on GPUs
+// that don't advertise fragment highp (some older Windows/Intel ANGLE configs);
+// hardcoding highp there makes the shader fail to compile and the aurora vanish.
+#ifdef GL_FRAGMENT_PRECISION_HIGH
 precision highp float;
+#else
+precision mediump float;
+#endif
 uniform vec2 u_resolution;
 uniform float u_time;
 uniform vec3 u_light;
