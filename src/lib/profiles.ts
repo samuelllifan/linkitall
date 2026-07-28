@@ -61,29 +61,29 @@ export async function queryUsername(
   return (data?.username as string | null) ?? null;
 }
 
-/** Set the current user's username. Throws a friendly error if invalid/taken. */
+/**
+ * Set the current user's username. Throws a friendly Error if invalid/taken/not
+ * signed in.
+ *
+ * Goes through the `set_username` SECURITY DEFINER RPC rather than a direct
+ * table upsert: the write then isn't subject to client-side RLS write quirks,
+ * and the function raises clear messages we can show verbatim (a direct upsert
+ * returned an opaque PostgrestError that surfaced only as "Couldn't save
+ * changes.", soft-locking account creation).
+ */
 export async function setUsername(username: string): Promise<void> {
   const trimmed = username.trim();
+  // Fast local feedback; the RPC re-validates authoritatively server-side.
   const invalid = usernameError(trimmed);
   if (invalid) throw new Error(invalid);
 
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("You must be signed in to set a username.");
-
-  const { error } = await supabase
-    .from("profiles")
-    .upsert(
-      { id: user.id, username: trimmed, updated_at: new Date().toISOString() },
-      { onConflict: "id" },
-    );
+  const { error } = await supabase.rpc("set_username", {
+    new_username: trimmed,
+  });
   if (error) {
-    // 23505 = unique violation on the case-insensitive username index.
-    if (error.code === "23505") {
-      throw new Error("That username is already taken.");
-    }
-    throw error;
+    // The RPC raises friendly, user-facing messages (taken / invalid / signed
+    // out); surface them directly, with a generic fallback just in case.
+    throw new Error(error.message || "Couldn't set username.");
   }
 }

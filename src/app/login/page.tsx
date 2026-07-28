@@ -306,9 +306,20 @@ export default function LoginPage() {
     let hasSession = Boolean(sessionData.session);
 
     if (!hasSession) {
-      // If email confirmation is disabled, a session is returned and the user
-      // is signed in immediately; otherwise they must confirm via email.
-      const { data, error } = await supabase.auth.signUp({ email, password });
+      // Pass the chosen username as user metadata so the sign-up trigger claims
+      // it server-side immediately — even when email confirmation is on and no
+      // session is returned yet. This way a confirmed account already has its
+      // username and skips the "set a username" Settings step. The confirmation
+      // link routes back through /auth/callback so the session is established
+      // and the user lands on their page.
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { username: username.trim() },
+          emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectTo)}`,
+        },
+      });
       if (error) {
         reportAuthError(error.message);
         setLoading(false);

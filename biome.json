@@ -1,7 +1,13 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.4.8/schema.json",
   "files": {
-    "includes": ["**", "!.next", "!.agents", "!.claude/worktrees"]
+    "includes": [
+      "**",
+      "!.next",
+      "!.agents",
+      "!.claude/worktrees",
+      "!supabase/templates"
+    ]
   },
   "assist": {
     "actions": {

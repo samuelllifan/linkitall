@@ -243,6 +243,11 @@ otp_expiry = 3600
 # admin_email = "admin@email.com"
 # sender_name = "Admin"
 
+# On-brand sign-up confirmation email (dark, minimal — matches stacked.page).
+[auth.email.template.confirmation]
+subject = "Confirm your email · stacked"
+content_path = "./supabase/templates/confirmation.html"
+
 # Uncomment to customize email template
 # [auth.email.template.invite]
 # subject = "You have been invited"
