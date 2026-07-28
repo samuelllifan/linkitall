@@ -43,6 +43,40 @@ function ChevronDownIcon({ className }: { className?: string }) {
   );
 }
 
+function MenuIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M4 6h16M4 12h16M4 18h16" />
+    </svg>
+  );
+}
+
+function CloseIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M18 6 6 18M6 6l12 12" />
+    </svg>
+  );
+}
+
 function Avatar() {
   return (
     <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
@@ -64,6 +98,8 @@ export function Navbar({
   const router = useRouter();
   const [signingOut, setSigningOut] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  // Mobile nav drawer (the inline page links collapse into this below `sm`).
+  const [mobileOpen, setMobileOpen] = useState(false);
   const prevEmailRef = useRef(userEmail);
 
   if (prevEmailRef.current !== userEmail) {
@@ -71,6 +107,7 @@ export function Navbar({
     if (signingOut) setSigningOut(false);
   }
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const mobileNavRef = useRef<HTMLDivElement | null>(null);
 
   // Close the account menu on outside click or Escape.
   useEffect(() => {
@@ -90,6 +127,34 @@ export function Navbar({
       document.removeEventListener("keydown", onKeyDown);
     };
   }, [menuOpen]);
+
+  // Close the mobile nav drawer on outside click or Escape.
+  useEffect(() => {
+    if (!mobileOpen) return;
+    function onPointerDown(e: MouseEvent) {
+      if (
+        mobileNavRef.current &&
+        !mobileNavRef.current.contains(e.target as Node)
+      ) {
+        setMobileOpen(false);
+      }
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setMobileOpen(false);
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [mobileOpen]);
+
+  // Close the mobile drawer whenever the route changes (a link was followed).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: close on navigation
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
 
   const guard = useUnsavedGuard();
 
@@ -123,8 +188,11 @@ export function Navbar({
   }
 
   return (
-    <nav className="sticky top-0 z-50 border-b border-border bg-background">
-      <div className="flex h-14 w-full items-center gap-6 px-6">
+    <nav
+      ref={mobileNavRef}
+      className="sticky top-0 z-50 border-b border-border bg-background"
+    >
+      <div className="flex h-14 w-full items-center gap-3 px-4 sm:gap-6 sm:px-6">
         <Link
           href="/"
           onClick={guardedClick}
@@ -133,14 +201,15 @@ export function Navbar({
           <StackedMark className="size-5" />
           stacked
         </Link>
-        <div className="flex gap-4">
+        {/* Inline page links — collapsed into the mobile drawer below `sm`. */}
+        <div className="hidden gap-4 sm:flex">
           {links.map((link) => (
             <Link
               key={link.href}
               href={link.href}
               onClick={guardedClick}
               className={cn(
-                "text-sm transition-colors hover:text-foreground",
+                "whitespace-nowrap text-sm transition-colors hover:text-foreground",
                 pathname === link.href
                   ? "text-foreground"
                   : "text-muted-foreground",
@@ -151,7 +220,24 @@ export function Navbar({
           ))}
         </div>
 
-        <div className="ml-auto flex items-center gap-3">
+        <div className="ml-auto flex items-center gap-1 sm:gap-3">
+          {/* Hamburger — reveals the page links on mobile only. */}
+          <button
+            type="button"
+            onClick={() => setMobileOpen((o) => !o)}
+            aria-haspopup="menu"
+            aria-expanded={mobileOpen}
+            aria-controls="mobile-nav"
+            aria-label={mobileOpen ? "Close menu" : "Open menu"}
+            className="flex size-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:hidden"
+          >
+            {mobileOpen ? (
+              <CloseIcon className="size-5" />
+            ) : (
+              <MenuIcon className="size-5" />
+            )}
+          </button>
+
           {userEmail ? (
             <div className="relative z-50" ref={menuRef}>
               <button
@@ -248,6 +334,33 @@ export function Navbar({
           )}
         </div>
       </div>
+
+      {/* Mobile drawer — the page links, shown only below `sm`. */}
+      {mobileOpen ? (
+        <div
+          id="mobile-nav"
+          className="animate-slide-up border-t border-border bg-background px-2 py-2 sm:hidden"
+        >
+          {links.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              onClick={(e) => {
+                guardedClick(e);
+                if (!guard.dirty) setMobileOpen(false);
+              }}
+              className={cn(
+                "block rounded-md px-4 py-3 text-base transition-colors hover:bg-muted",
+                pathname === link.href
+                  ? "font-medium text-foreground"
+                  : "text-muted-foreground",
+              )}
+            >
+              {link.label}
+            </Link>
+          ))}
+        </div>
+      ) : null}
     </nav>
   );
 }

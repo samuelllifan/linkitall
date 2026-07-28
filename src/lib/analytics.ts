@@ -69,21 +69,35 @@ function normalizeDevice(device: string | null): DeviceType {
 }
 
 /**
- * Fire-and-forget: record a public view of `username`'s profile. Errors are
- * swallowed so tracking can never break the visitor's page.
+ * POST an event to our own /api/track route. Going through the server (rather
+ * than calling the RPC directly from the browser) lets the server attach the
+ * visitor's country from the request's geo headers — the browser can't see it.
+ * `keepalive` lets a click still send while the page navigates away.
  */
-export async function recordView(username: string): Promise<void> {
+async function sendEvent(payload: Record<string, string>): Promise<void> {
   try {
-    const supabase = createClient();
-    await supabase.rpc("record_analytics_event", {
-      page_username: username,
-      event_kind: "view",
-      visitor: getVisitorId(),
-      device_type: detectDevice(),
+    await fetch("/api/track", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+      keepalive: true,
     });
   } catch {
     // Ignore — analytics are non-critical.
   }
+}
+
+/**
+ * Fire-and-forget: record a public view of `username`'s profile. Errors are
+ * swallowed so tracking can never break the visitor's page.
+ */
+export async function recordView(username: string): Promise<void> {
+  await sendEvent({
+    username,
+    kind: "view",
+    visitor: getVisitorId(),
+    device: detectDevice(),
+  });
 }
 
 /** Fire-and-forget: record a click on one of `username`'s links. */
@@ -92,19 +106,14 @@ export async function recordClick(
   linkId: string,
   linkLabel: string,
 ): Promise<void> {
-  try {
-    const supabase = createClient();
-    await supabase.rpc("record_analytics_event", {
-      page_username: username,
-      event_kind: "click",
-      visitor: getVisitorId(),
-      device_type: detectDevice(),
-      link_id: linkId,
-      link_label: linkLabel,
-    });
-  } catch {
-    // Ignore — analytics are non-critical.
-  }
+  await sendEvent({
+    username,
+    kind: "click",
+    visitor: getVisitorId(),
+    device: detectDevice(),
+    linkId,
+    linkLabel,
+  });
 }
 
 interface RawEvent {

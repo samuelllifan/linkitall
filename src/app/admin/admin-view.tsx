@@ -1,5 +1,8 @@
 import type { TimelinePoint } from "~/lib/analytics";
+import { countryFlag, countryName } from "~/lib/countries";
+import { getCountryPaths } from "~/lib/world-map";
 import { CHART_COLORS, PieChart, ViewsLineChart } from "../dashboard/charts";
+import { LocationMap } from "./location-map";
 
 export interface AdminUserRow {
   id: string;
@@ -18,6 +21,8 @@ export interface AdminOverview {
   totals: { users: number; views: number; clicks: number };
   /** Site-wide view counts grouped by the visitor's device. */
   devices: { device: string; views: number }[];
+  /** Site-wide view counts grouped by the visitor's country ("ZZ" = unknown). */
+  locations: { country: string; views: number }[];
   daily: { date: string; views: number; clicks: number }[];
 }
 
@@ -70,7 +75,20 @@ function StatCard({ label, value }: { label: string; value: number }) {
 }
 
 export function AdminView({ overview }: { overview: AdminOverview }) {
+  // `locations` defaults to [] so the page still renders if the analytics
+  // backend predates the location migration.
   const { users, totals, devices, daily } = overview;
+  const locations = overview.locations ?? [];
+
+  // Country outlines are projected on the server; the client map only colors
+  // them. The ranked list below is fully static (no interactivity needed).
+  const countryPaths = getCountryPaths();
+  const locationTotal = locations.reduce((sum, l) => sum + l.views, 0);
+  const topLocations = locations
+    .slice()
+    .sort((a, b) => b.views - a.views)
+    .slice(0, 12);
+  const locationMax = Math.max(1, ...topLocations.map((l) => l.views));
 
   // Site-wide views over the last 30 days, shaped for the shared line chart.
   const timeline: TimelinePoint[] = daily.map((d) => {
@@ -117,6 +135,56 @@ export function AdminView({ overview }: { overview: AdminOverview }) {
           <PieChart slices={deviceSlices} />
         </section>
       </div>
+
+      <section className="mt-8 rounded-xl border border-border bg-card p-5">
+        <h2 className="mb-4 text-sm font-semibold text-muted-foreground">
+          Where in the world · {locationTotal.toLocaleString()} views
+        </h2>
+        {locationTotal === 0 ? (
+          <p className="text-sm text-muted-foreground">No views yet.</p>
+        ) : (
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+            <div className="lg:col-span-2">
+              <LocationMap paths={countryPaths} locations={locations} />
+            </div>
+            <ul className="flex flex-col gap-2.5">
+              {topLocations.map((l) => {
+                const isUnknown = !l.country || l.country === "ZZ";
+                const label = isUnknown ? "Unknown" : countryName(l.country);
+                const flag = isUnknown ? "🌐" : countryFlag(l.country);
+                const share =
+                  locationTotal > 0
+                    ? Math.round((l.views / locationTotal) * 100)
+                    : 0;
+                return (
+                  <li
+                    key={l.country}
+                    className="flex items-center gap-3 text-sm"
+                  >
+                    <span className="w-5 shrink-0 text-base leading-none">
+                      {flag}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="truncate">{label}</span>
+                        <span className="shrink-0 tabular-nums text-muted-foreground">
+                          {l.views.toLocaleString()} ({share}%)
+                        </span>
+                      </div>
+                      <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                        <div
+                          className="h-full rounded-full bg-[#3b82f6]"
+                          style={{ width: `${(l.views / locationMax) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
+      </section>
 
       <section className="mt-8">
         <h2 className="mb-3 text-sm font-semibold text-muted-foreground">

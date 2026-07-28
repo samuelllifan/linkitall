@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import { Footer } from "~/components/footer";
 import { Navbar } from "~/components/navbar";
@@ -28,6 +28,16 @@ export const metadata: Metadata = {
     description:
       "stacked is the fastest, easiest, and most customizable way to create your link-in-bio page.",
   },
+};
+
+// The app is dark-only: pin the mobile browser chrome (address bar, status bar)
+// to the page background so it blends in instead of flashing white. Zoom is left
+// enabled — pinch-to-zoom is an accessibility affordance, not something to lock.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: "#0a0a0a",
+  colorScheme: "dark",
 };
 
 export default async function RootLayout({

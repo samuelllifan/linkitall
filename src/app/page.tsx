@@ -130,25 +130,25 @@ function HowItWorks() {
             "radial-gradient(ellipse 100% 95% at 50% 48%, #000 45%, transparent 96%)",
         }}
       />
-      <div className="relative z-10 mx-auto w-full max-w-[100rem] px-8 py-20 sm:px-12 lg:px-20">
-        <h2 className="mb-16 text-balance text-center text-4xl font-bold tracking-tight sm:text-5xl">
+      <div className="relative z-10 mx-auto w-full max-w-[100rem] px-6 py-16 sm:px-12 sm:py-20 lg:px-20">
+        <h2 className="mb-10 text-balance text-center text-3xl font-bold tracking-tight sm:mb-16 sm:text-5xl">
           Everything you need to{" "}
           <span className="slot-shine font-serif font-medium italic">grow</span>{" "}
           your audience
         </h2>
-        <div className="grid gap-10 md:grid-cols-3 lg:gap-14">
+        <div className="grid gap-6 md:grid-cols-3 lg:gap-14">
           {FEATURES.map((feature) => (
             <div
               key={feature.title}
-              className="group flex flex-col rounded-2xl border border-border bg-background/85 p-12 backdrop-blur-sm transition duration-300 ease-out hover:-translate-y-1 hover:border-white/20 hover:bg-background hover:shadow-xl hover:shadow-black/40 lg:p-14"
+              className="group flex flex-col rounded-2xl border border-border bg-background/85 p-8 backdrop-blur-sm transition duration-300 ease-out hover:-translate-y-1 hover:border-white/20 hover:bg-background hover:shadow-xl hover:shadow-black/40 sm:p-10 lg:p-14"
             >
-              <div className="mb-8 flex size-16 items-center justify-center rounded-xl bg-primary text-primary-foreground transition-transform duration-300 ease-out group-hover:scale-105">
+              <div className="mb-6 flex size-14 items-center justify-center rounded-xl bg-primary text-primary-foreground transition-transform duration-300 ease-out group-hover:scale-105 sm:mb-8 sm:size-16">
                 {feature.icon}
               </div>
-              <h3 className="mb-4 text-2xl font-semibold tracking-tight">
+              <h3 className="mb-3 text-xl font-semibold tracking-tight sm:mb-4 sm:text-2xl">
                 {feature.title}
               </h3>
-              <p className="text-lg leading-relaxed text-muted-foreground">
+              <p className="text-base leading-relaxed text-muted-foreground sm:text-lg">
                 {feature.description}
               </p>
             </div>
@@ -183,8 +183,8 @@ function PageShowcase() {
 
   return (
     <section className="relative overflow-hidden border-t border-border bg-background">
-      <div className="relative z-10 mx-auto w-full max-w-[100rem] px-8 py-24 sm:px-12 lg:px-20">
-        <div className="mx-auto mb-14 max-w-2xl text-center">
+      <div className="relative z-10 mx-auto w-full max-w-[100rem] px-6 py-16 sm:px-12 sm:py-24 lg:px-20">
+        <div className="mx-auto mb-10 max-w-2xl text-center sm:mb-14">
           <h2 className="text-balance text-4xl font-bold tracking-tight sm:text-5xl">
             Join us now.
           </h2>
@@ -213,7 +213,7 @@ function PageShowcase() {
 
         <form
           onSubmit={handleClaim}
-          className="mx-auto mt-16 flex w-full max-w-lg flex-col gap-3 sm:flex-row"
+          className="mx-auto mt-10 flex w-full max-w-lg flex-col gap-3 sm:mt-16 sm:flex-row"
         >
           {/* URL-style field: a fixed "stacked.page/" prefix in front of the
               editable username, matching the sign-up form's address preview. */}
@@ -229,7 +229,7 @@ function PageShowcase() {
               autoComplete="off"
               spellCheck={false}
               maxLength={30}
-              className="h-full w-full flex-1 bg-transparent pr-3 text-sm outline-none placeholder:text-muted-foreground/60"
+              className="h-full w-full flex-1 bg-transparent pr-3 text-base outline-none placeholder:text-muted-foreground/60 sm:text-sm"
             />
           </div>
           <Button type="submit" size="lg" className="h-12">

@@ -1764,7 +1764,17 @@ export function MyPageClient({
   }
 
   function removeMedia() {
-    setDraft((prev) => ({ ...prev, background: { type: "default" } }));
+    // Drop the imported media entirely: clear the active background AND the
+    // remembered copy in bgMemory, so the Import slot goes back to empty
+    // instead of re-offering the just-removed image.
+    setDraft((prev) => {
+      const { media: _removed, ...restMemory } = prev.bgMemory ?? {};
+      return {
+        ...prev,
+        background: { type: "default" },
+        bgMemory: restMemory,
+      };
+    });
   }
 
   // Box surfaces. The name box, the bio box, and each link carry their own box
@@ -2878,7 +2888,7 @@ export function MyPageClient({
               className={cn(
                 "flex w-full",
                 horizontal
-                  ? "flex-wrap items-center justify-center gap-4"
+                  ? "flex-nowrap items-center justify-center gap-3 sm:gap-5"
                   : "flex-col gap-3",
               )}
             >
@@ -2924,7 +2934,7 @@ export function MyPageClient({
                           zIndex: isDragging ? 30 : undefined,
                         }}
                         className={cn(
-                          "flex size-11 touch-none items-center justify-center rounded-md",
+                          "flex aspect-square w-11 min-w-8 shrink touch-none items-center justify-center rounded-md",
                           isDragging
                             ? "cursor-grabbing"
                             : "cursor-grab hover:scale-110",
@@ -2981,7 +2991,11 @@ export function MyPageClient({
                   variant="outline"
                   onClick={() => setShowPicker(true)}
                   aria-label="Add link"
-                  className={horizontal ? "size-11 rounded-md p-0" : "w-full"}
+                  className={
+                    horizontal
+                      ? "aspect-square w-11 min-w-8 shrink rounded-md p-0"
+                      : "w-full"
+                  }
                 >
                   {horizontal ? "+" : "Add link"}
                 </Button>
@@ -3259,11 +3273,13 @@ export function MyPageClient({
         </main>
       </div>
 
-      {/* Unsaved-changes bar — subtle pill, doesn't cover the page */}
+      {/* Unsaved-changes bar — subtle pill, doesn't cover the page. Sits above
+          the fixed Edit/View button on mobile (where both would otherwise share
+          the bottom-right corner); returns to bottom-center from `sm`. */}
       {unsavedBar.value ? (
         <div
           className={cn(
-            "pointer-events-none fixed inset-x-0 bottom-6 z-40 flex justify-center px-4",
+            "pointer-events-none fixed inset-x-0 bottom-20 z-40 flex justify-center px-4 sm:bottom-6",
             unsavedBar.visible ? "animate-slide-up" : "animate-slide-down",
           )}
         >
@@ -3275,8 +3291,9 @@ export function MyPageClient({
               flashing && "animate-flash",
             )}
           >
-            <span className="text-sm text-muted-foreground">
-              You have unsaved changes
+            <span className="whitespace-nowrap text-sm text-muted-foreground">
+              <span className="sm:hidden">Unsaved changes</span>
+              <span className="hidden sm:inline">You have unsaved changes</span>
             </span>
             <div className="flex items-center gap-2">
               <Button variant="ghost" size="sm" onClick={reset}>

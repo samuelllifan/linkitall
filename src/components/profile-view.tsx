@@ -1369,8 +1369,11 @@ export function LinkIconAnchor({
       {link.label.charAt(0).toUpperCase() || "?"}
     </span>
   );
+  // `aspect-square w-11` (instead of a fixed `size-11`) so the icon can shrink
+  // to fit when the row is set to nowrap on narrow screens while staying a
+  // square — the icons never wrap to a second row (see the row containers).
   const iconClassName =
-    "flex size-11 items-center justify-center rounded-md transition duration-300 ease-out hover:-translate-y-1 hover:scale-110 hover:shadow-xl hover:shadow-black/40 active:translate-y-0 active:scale-95 active:duration-75";
+    "flex aspect-square w-11 min-w-8 shrink items-center justify-center rounded-md transition duration-300 ease-out hover:-translate-y-1 hover:scale-110 hover:shadow-xl hover:shadow-black/40 active:translate-y-0 active:scale-95 active:duration-75";
 
   // Discord: copy the username instead of navigating, with a confirmation.
   if (isDiscordLink(link.href)) {
@@ -2058,7 +2061,7 @@ export function ProfileView({
 
         {data.links.length > 0 ? (
           horizontal ? (
-            <div className="flex w-full flex-wrap items-center justify-center gap-5">
+            <div className="flex w-full flex-nowrap items-center justify-center gap-3 sm:gap-5">
               {data.links.map((link) => (
                 <LinkIconAnchor
                   key={link.id}
