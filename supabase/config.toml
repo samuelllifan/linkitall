@@ -233,15 +233,18 @@ otp_length = 6
 # Number of seconds before the email OTP expires (defaults to 1 hour).
 otp_expiry = 3600
 
-# Use a production-ready SMTP server
-# [auth.email.smtp]
-# enabled = true
-# host = "smtp.sendgrid.net"
-# port = 587
-# user = "apikey"
-# pass = "env(SENDGRID_API_KEY)"
-# admin_email = "admin@email.com"
-# sender_name = "Admin"
+# Use a production-ready SMTP server (Resend). The password is a Resend API key and
+# must NOT be committed — it is read from the RESEND_SMTP_PASSWORD env var. Production
+# credentials are still governed by the Supabase dashboard (Auth -> Emails -> SMTP);
+# this block keeps local/CI config in sync and documents the intended sender.
+[auth.email.smtp]
+enabled = true
+host = "smtp.resend.com"
+port = 465
+user = "resend"
+pass = "env(RESEND_SMTP_PASSWORD)"
+admin_email = "noreply@stacked.page"
+sender_name = "stacked"
 
 # On-brand sign-up confirmation email (dark, minimal — matches stacked.page).
 [auth.email.template.confirmation]

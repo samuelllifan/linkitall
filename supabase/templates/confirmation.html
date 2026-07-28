@@ -87,37 +87,18 @@
                   Confirm your email
                 </h1>
 
-                <!-- Body -->
+                <!-- Body / CTA: "here" is the confirmation link. -->
                 <p
-                  style="margin: 12px 0 0 0; font-size: 15px; line-height: 1.6; color: #a1a1aa;"
+                  style="margin: 16px 0 0 0; font-size: 16px; line-height: 1.6; color: #ededed;"
                 >
-                  You're one tap away. Confirm your email and your page at
-                  <span style="color: #ededed;">stacked.page</span> is ready to
-                  build.
+                  <a
+                    href="{{ .ConfirmationURL }}"
+                    target="_blank"
+                    style="color: #8b8bf5; font-weight: 600; text-decoration: underline;"
+                    >Click here</a
+                  >
+                  to finish signing up for stacked and start creating your page.
                 </p>
-
-                <!-- CTA button -->
-                <table
-                  role="presentation"
-                  cellpadding="0"
-                  cellspacing="0"
-                  style="margin: 28px 0 0 0;"
-                >
-                  <tr>
-                    <td
-                      align="center"
-                      bgcolor="#ffffff"
-                      style="border-radius: 10px;"
-                    >
-                      <a
-                        href="{{ .ConfirmationURL }}"
-                        target="_blank"
-                        style="display: inline-block; padding: 13px 24px; font-size: 15px; font-weight: 600; line-height: 1; color: #09090b; text-decoration: none; border-radius: 10px;"
-                        >Confirm email</a
-                      >
-                    </td>
-                  </tr>
-                </table>
 
                 <!-- Fallback link -->
                 <p
