@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { ProfileView } from "~/components/profile-view";
 import { ShareButton } from "~/components/share-button";
+import { isLinkLive } from "~/lib/pages";
 import {
   getPageServer,
   getPublicPageServer,
@@ -118,10 +119,18 @@ export default async function UserPage({
   const page = await getPublicPageServer(username);
   if (!page) notFound();
 
+  // Hide scheduled links that aren't live yet (or have expired) from visitors.
+  // The owner still sees them in their editor. Rendered on the server so hidden
+  // links never reach the client — no flash, no hydration mismatch.
+  const publicData = {
+    ...page.data,
+    links: page.data.links.filter((link) => isLinkLive(link)),
+  };
+
   return (
     <main className="relative mx-auto flex min-h-[calc(100vh-3.5rem)] w-full flex-col items-center justify-center px-6 pt-16 pb-28">
       <ShareButton />
-      <ProfileView data={page.data} username={page.username} />
+      <ProfileView data={publicData} username={page.username} />
     </main>
   );
 }

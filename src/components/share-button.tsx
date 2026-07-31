@@ -60,6 +60,37 @@ function CheckIcon({ className }: { className?: string }) {
   );
 }
 
+function DownloadIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M12 3v12" />
+      <path d="m7 12 5 5 5-5" />
+      <path d="M5 21h14" />
+    </svg>
+  );
+}
+
+/** A tidy download filename for the QR PNG, derived from the page URL. */
+function qrFilename(url: string): string {
+  let slug = "page";
+  try {
+    const path = new URL(url).pathname.replace(/^\/+|\/+$/g, "");
+    if (path) slug = path.replace(/[^a-z0-9-]+/gi, "-").toLowerCase();
+  } catch {
+    // Keep the default slug for a malformed URL.
+  }
+  return `stacked-${slug}-qr.png`;
+}
+
 /** Legacy clipboard copy via a hidden textarea; returns whether it succeeded. */
 function legacyCopy(text: string): boolean {
   try {
@@ -86,11 +117,15 @@ export function ShareButton() {
   const [url, setUrl] = useState("");
   const [qr, setQr] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  // Whether the browser exposes the native share sheet (mainly mobile). Resolved
+  // after mount so the server and client render the same initial markup.
+  const [canShare, setCanShare] = useState(false);
 
   // Resolve the current page URL on the client (avoids threading the origin
   // through from the server).
   useEffect(() => {
     setUrl(window.location.href);
+    setCanShare(typeof navigator !== "undefined" && "share" in navigator);
   }, []);
 
   // Generate the QR once the modal opens and the URL is known.
@@ -134,6 +169,27 @@ export function ShareButton() {
       setTimeout(() => setCopied(false), 2000);
     }
     // If both fail, the URL stays visible for manual copy.
+  }
+
+  // Open the OS share sheet (mobile / supported desktops). A cancelled share
+  // rejects; swallow it so it's a no-op.
+  async function nativeShare() {
+    try {
+      await navigator.share({ title: document.title || "stacked", url });
+    } catch {
+      // User dismissed the sheet, or sharing isn't permitted here.
+    }
+  }
+
+  // Save the generated QR as a PNG via a temporary download anchor.
+  function downloadQr() {
+    if (!qr) return;
+    const a = document.createElement("a");
+    a.href = qr;
+    a.download = qrFilename(url);
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
   }
 
   return (
@@ -204,6 +260,30 @@ export function ShareButton() {
                   </>
                 )}
               </button>
+            </div>
+
+            {/* Secondary actions: save the QR, and (where supported) open the
+                native share sheet. */}
+            <div className="mt-3 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={downloadQr}
+                disabled={!qr}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-border bg-transparent px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-50"
+              >
+                <DownloadIcon className="size-4" />
+                Download QR
+              </button>
+              {canShare ? (
+                <button
+                  type="button"
+                  onClick={nativeShare}
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-border bg-transparent px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                >
+                  <ShareIcon className="size-4" />
+                  Share…
+                </button>
+              ) : null}
             </div>
           </div>
         </div>

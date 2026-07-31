@@ -38,6 +38,7 @@ import {
   styleToCss,
   textAnimClass,
 } from "~/components/profile-view";
+import { ShareButton } from "~/components/share-button";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import {
@@ -46,6 +47,9 @@ import {
   type BackgroundMemory,
   type BoxStyle,
   type LinkItem,
+  type LinkSchedule,
+  type LinkScheduleStatus,
+  linkScheduleStatus,
   type MediaBackground,
   type PageData,
   type PanelStyle,
@@ -584,6 +588,42 @@ function isBlankHref(href: string): boolean {
 }
 
 /**
+ * ISO-8601 timestamp → the value a `<input type="datetime-local">` expects: the
+ * local wall-clock time at minute precision. Empty for missing / unparseable
+ * input so a bad value just shows a blank field.
+ */
+function isoToLocalInput(iso?: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
+    d.getHours(),
+  )}:${pad(d.getMinutes())}`;
+}
+
+/** A datetime-local value (local wall-clock) → an ISO-8601 UTC string. */
+function localInputToIso(value: string): string | undefined {
+  if (!value) return undefined;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return undefined;
+  return d.toISOString();
+}
+
+/** Compact, human date+time for schedule status lines (e.g. "Aug 3, 2:30 PM"). */
+function formatScheduleDate(iso?: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+/**
  * Read an image file and return a downscaled PNG data URL. Downscaling keeps
  * the stored value small since logos are persisted inline in the page JSON.
  */
@@ -1103,6 +1143,25 @@ function FontIcon({ className }: { className?: string }) {
   );
 }
 
+/** A clock — the "schedule this link" affordance. */
+function ClockIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className={className}
+    >
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7.5V12l3 2" />
+    </svg>
+  );
+}
+
 /**
  * A "customize box" button that opens a popover with the box-style controls,
  * placed on the element it styles (the name/bio card, or a link card).
@@ -1227,6 +1286,168 @@ function LinkStylePopover({
           >
             Apply to all links
           </Button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * The per-link "schedule" popover (opened by the clock button): an optional
+ * start and/or end time. On public pages the link is hidden before it starts
+ * and after it ends; the owner always sees it here. A status line spells out
+ * what's currently in effect.
+ */
+function LinkSchedulePopover({
+  schedule,
+  onChange,
+  align = "left",
+}: {
+  schedule: LinkSchedule | undefined;
+  onChange: (schedule: LinkSchedule | undefined) => void;
+  align?: "left" | "right";
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node))
+        setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const start = schedule?.start;
+  const end = schedule?.end;
+  const scheduled = Boolean(start || end);
+  const status: LinkScheduleStatus = linkScheduleStatus({
+    id: "",
+    label: "",
+    href: "",
+    schedule,
+  });
+
+  // Build the next schedule from a changed bound, collapsing an all-empty
+  // window back to `undefined` so the link stops being "scheduled".
+  function patchBound(which: "start" | "end", iso: string | undefined) {
+    const next: LinkSchedule = { start, end, [which]: iso };
+    onChange(next.start || next.end ? next : undefined);
+  }
+
+  const statusLine = !scheduled
+    ? "Always visible."
+    : status === "scheduled"
+      ? `Hidden until ${formatScheduleDate(start)}.`
+      : status === "ended"
+        ? `Ended ${formatScheduleDate(end)} — hidden from visitors.`
+        : end
+          ? `Live now — hides ${formatScheduleDate(end)}.`
+          : "Live now.";
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-label="Schedule link"
+        aria-expanded={open}
+        className={cn(
+          "flex size-8 items-center justify-center rounded-md transition-colors hover:bg-muted hover:text-foreground",
+          scheduled ? "text-foreground" : "text-muted-foreground",
+        )}
+      >
+        <ClockIcon className="size-5" />
+      </button>
+      {open ? (
+        <div
+          className={cn(
+            "absolute bottom-full z-50 mb-1 w-64 animate-pop rounded-md border border-border bg-popover p-3 shadow-lg",
+            align === "right"
+              ? "right-0 origin-bottom-right"
+              : "left-0 origin-bottom-left",
+          )}
+        >
+          <p className="pb-2 font-medium text-sm">Schedule</p>
+          <div className="flex flex-col gap-3">
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-muted-foreground text-xs">Show from</span>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="datetime-local"
+                  value={isoToLocalInput(start)}
+                  onChange={(e) =>
+                    patchBound("start", localInputToIso(e.target.value))
+                  }
+                  aria-label="Show link from"
+                  className="h-8 min-w-0 flex-1 rounded-md border border-input bg-transparent px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
+                {start ? (
+                  <button
+                    type="button"
+                    onClick={() => patchBound("start", undefined)}
+                    aria-label="Clear start time"
+                    className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  >
+                    ×
+                  </button>
+                ) : null}
+              </div>
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-muted-foreground text-xs">Hide after</span>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="datetime-local"
+                  value={isoToLocalInput(end)}
+                  onChange={(e) =>
+                    patchBound("end", localInputToIso(e.target.value))
+                  }
+                  aria-label="Hide link after"
+                  className="h-8 min-w-0 flex-1 rounded-md border border-input bg-transparent px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
+                {end ? (
+                  <button
+                    type="button"
+                    onClick={() => patchBound("end", undefined)}
+                    aria-label="Clear end time"
+                    className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  >
+                    ×
+                  </button>
+                ) : null}
+              </div>
+            </label>
+            <div className="flex items-center justify-between gap-2 border-border border-t pt-2">
+              <span
+                className={cn(
+                  "text-xs",
+                  status === "live"
+                    ? "text-muted-foreground"
+                    : "text-foreground",
+                )}
+              >
+                {statusLine}
+              </span>
+              {scheduled ? (
+                <button
+                  type="button"
+                  onClick={() => onChange(undefined)}
+                  className="shrink-0 rounded px-1.5 py-0.5 text-muted-foreground text-xs transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  Clear
+                </button>
+              ) : null}
+            </div>
+          </div>
         </div>
       ) : null}
     </div>
@@ -2425,6 +2646,8 @@ export function MyPageClient({
     const isCustom = !getPlatform(link.href);
     const shift = dragShiftFor(link.id, index);
     const isDragging = dragId === link.id;
+    // Whether this link is currently shown to visitors (schedule-aware).
+    const scheduleStatus = linkScheduleStatus(link);
     return (
       <div
         key={`${link.id}:${linkFlashTick}`}
@@ -2586,6 +2809,21 @@ export function MyPageClient({
                   <FontIcon className="size-5" />
                 </button>
               ) : null}
+              {/* Publish schedule — available in both layouts (a link's
+                  timing applies to icons too). */}
+              <LinkSchedulePopover
+                schedule={link.schedule}
+                onChange={(schedule) => updateLink(link.id, { schedule })}
+                align="left"
+              />
+              {/* Only-shows-when-hidden badge so the owner knows a scheduled
+                  link isn't visible to visitors right now. */}
+              {scheduleStatus !== "live" ? (
+                <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border bg-muted/60 px-2 py-0.5 font-medium text-[11px] text-muted-foreground">
+                  <ClockIcon className="size-3" />
+                  {scheduleStatus === "scheduled" ? "Scheduled" : "Ended"}
+                </span>
+              ) : null}
               {!horizontal && (link.box || link.color || link.textStyle) ? (
                 <Button
                   variant="ghost"
@@ -2645,6 +2883,9 @@ export function MyPageClient({
 
   return (
     <>
+      {/* Quick share (copy link / QR / native share) while viewing your own
+          page — hidden while editing so it doesn't crowd the edit canvas. */}
+      {!editing ? <ShareButton /> : null}
       {/* Full-width, content-height wrapper so the absolute page background
           fills the whole page and scrolls with the content (see PageBackground). */}
       <div className="relative flex w-full flex-1 flex-col">

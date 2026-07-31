@@ -13,6 +13,46 @@ export interface LinkItem {
   box?: BoxStyle;
   /** Per-link text styling (font, size, bold/italic/underline, align, color). */
   textStyle?: TextStyle;
+  /**
+   * Optional publish window. On public pages the link is hidden before `start`
+   * and after `end` (see {@link isLinkLive}); the owner always sees it in their
+   * editor. Absent = always visible.
+   */
+  schedule?: LinkSchedule;
+}
+
+/** A link's optional publish window, as ISO-8601 timestamps. */
+export interface LinkSchedule {
+  /** Show the link only from this instant onward (omit = no start bound). */
+  start?: string;
+  /** Hide the link once this instant passes (omit = no end bound). */
+  end?: string;
+}
+
+/** Whether a scheduled link is currently live, waiting to start, or expired. */
+export type LinkScheduleStatus = "live" | "scheduled" | "ended";
+
+/**
+ * Where a link sits relative to its schedule at time `now` (ms since epoch). A
+ * link with no schedule — or with unparseable bounds — is always "live", so a
+ * malformed value can never make a link vanish.
+ */
+export function linkScheduleStatus(
+  link: LinkItem,
+  now: number = Date.now(),
+): LinkScheduleStatus {
+  const schedule = link.schedule;
+  if (!schedule) return "live";
+  const start = schedule.start ? Date.parse(schedule.start) : Number.NaN;
+  const end = schedule.end ? Date.parse(schedule.end) : Number.NaN;
+  if (!Number.isNaN(start) && now < start) return "scheduled";
+  if (!Number.isNaN(end) && now >= end) return "ended";
+  return "live";
+}
+
+/** True when a link should be shown to public visitors right now. */
+export function isLinkLive(link: LinkItem, now: number = Date.now()): boolean {
+  return linkScheduleStatus(link, now) === "live";
 }
 
 /** Google-Docs-style text formatting applied to a single text field. */
