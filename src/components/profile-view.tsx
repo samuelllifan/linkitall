@@ -31,7 +31,6 @@ import type {
   AvatarOutline,
   Background,
   BoxStyle,
-  LinkHighlight,
   LinkItem,
   PageData,
   PanelStyle,
@@ -1063,21 +1062,6 @@ function alignToJustify(
 }
 
 /**
- * Wrapper class for a link's featured animation, or "" when it has none. The
- * animation lives on a wrapper (not the link) so it composes with the link's
- * own hover lift — see `.link-anim` in globals.css. `icon` picks the compact
- * variant used by the logo-only (horizontal) layout.
- */
-export function highlightClass(
-  highlight?: LinkHighlight,
-  icon = false,
-): string {
-  if (!highlight || highlight === "none") return "";
-  const base = icon ? "link-anim link-anim-icon" : "link-anim";
-  return `${base} link-anim-${highlight}`;
-}
-
-/**
  * A single link button. Its surface comes from the link's own `box` style
  * (color, opacity, outline, on/off), falling back to `box` (the page default)
  * then the built-in default. Text styling comes from the link's own `textStyle`
@@ -1262,8 +1246,6 @@ export function LinkAnchor({
       link.label
     );
 
-  const anim = highlightClass(link.highlight);
-
   // Discord: the href holds a username, not a URL. Clicking copies it and
   // flashes a "Link copied!" confirmation instead of navigating.
   if (isDiscordLink(link.href)) {
@@ -1285,7 +1267,7 @@ export function LinkAnchor({
     );
     return (
       <>
-        {anim ? <div className={anim}>{btn}</div> : btn}
+        {btn}
         <CopiedToast show={copied} />
       </>
     );
@@ -1310,12 +1292,10 @@ export function LinkAnchor({
         {labelEl}
       </a>
     );
-    return anim ? <div className={anim}>{anchor}</div> : anchor;
+    return anchor;
   }
 
   // Preview mode: the box toggles a preview card; the card is the real link.
-  // The animation wraps only the trigger button (not this positioned container)
-  // so the preview card stays anchored while a featured link pulses/hops.
   const trigger = (
     <button
       type="button"
@@ -1330,7 +1310,7 @@ export function LinkAnchor({
   );
   return (
     <div ref={wrapRef} className="relative w-full">
-      {anim ? <div className={anim}>{trigger}</div> : trigger}
+      {trigger}
 
       {previewOpen ? (
         <a
@@ -1402,7 +1382,6 @@ export function LinkIconAnchor({
   // square — the icons never wrap to a second row (see the row containers).
   const iconClassName =
     "flex aspect-square w-11 min-w-8 shrink items-center justify-center rounded-md transition duration-300 ease-out hover:-translate-y-1 hover:scale-110 hover:shadow-xl hover:shadow-black/40 active:translate-y-0 active:scale-95 active:duration-75";
-  const anim = highlightClass(link.highlight, true);
 
   // Discord: copy the username instead of navigating, with a confirmation.
   if (isDiscordLink(link.href)) {
@@ -1423,7 +1402,7 @@ export function LinkIconAnchor({
     );
     return (
       <>
-        {anim ? <span className={anim}>{btn}</span> : btn}
+        {btn}
         <CopiedToast show={copied} />
       </>
     );
@@ -1446,7 +1425,7 @@ export function LinkIconAnchor({
       {inner}
     </a>
   );
-  return anim ? <span className={anim}>{anchor}</span> : anchor;
+  return anchor;
 }
 
 // ---------------------------------------------------------------------------

@@ -77,7 +77,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     items: [
       {
         feature: "Redesigned editor",
-        description: "Per-link colors, outlines, and featured animations.",
+        description: "Per-link colors and outlines.",
       },
       {
         feature: "New backgrounds",

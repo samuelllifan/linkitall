@@ -49,7 +49,6 @@ import {
   type Background,
   type BackgroundMemory,
   type BoxStyle,
-  type LinkHighlight,
   type LinkItem,
   type LinkSchedule,
   type LinkScheduleStatus,
@@ -714,24 +713,6 @@ function FontIcon({ className }: { className?: string }) {
   );
 }
 
-/** A pulse/heartbeat waveform — the "animate this link" affordance. */
-function MotionIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      className={className}
-    >
-      <path d="M3 12h4l2.5 7 5-14 2.5 7H21" />
-    </svg>
-  );
-}
-
 /** A clock — the "schedule this link" affordance. */
 function ClockIcon({ className }: { className?: string }) {
   return (
@@ -875,111 +856,6 @@ function LinkStylePopover({
           >
             Apply to all links
           </Button>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-/** Featured-link animation choices, in menu order. */
-const HIGHLIGHT_OPTIONS: { key: LinkHighlight; label: string }[] = [
-  { key: "none", label: "None" },
-  { key: "pulse", label: "Pulse" },
-  { key: "bounce", label: "Bounce" },
-  { key: "wobble", label: "Wobble" },
-  { key: "shake", label: "Shake" },
-];
-
-/**
- * The per-link "animate" popover (opened by the pulse button): pick a looping
- * attention animation for the link, so a "featured" link stands out. Each row
- * shows a tiny live preview of its motion.
- */
-function LinkAnimatePopover({
-  value,
-  onChange,
-  align = "left",
-}: {
-  value: LinkHighlight | undefined;
-  onChange: (highlight: LinkHighlight) => void;
-  align?: "left" | "right";
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node))
-        setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("mousedown", onDown);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
-  const current = value ?? "none";
-  const active = current !== "none";
-  return (
-    <div ref={ref} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-label="Animate link"
-        aria-expanded={open}
-        className={cn(
-          "flex size-8 items-center justify-center rounded-md transition-colors hover:bg-muted hover:text-foreground",
-          active ? "text-foreground" : "text-muted-foreground",
-        )}
-      >
-        <MotionIcon className="size-5" />
-      </button>
-      {open ? (
-        <div
-          className={cn(
-            "absolute bottom-full z-50 mb-1 w-48 animate-pop rounded-md border border-border bg-popover p-2 shadow-lg",
-            align === "right"
-              ? "right-0 origin-bottom-right"
-              : "left-0 origin-bottom-left",
-          )}
-        >
-          <p className="px-1 pb-1.5 font-medium text-muted-foreground text-xs">
-            Animation
-          </p>
-          <div className="flex flex-col gap-0.5">
-            {HIGHLIGHT_OPTIONS.map((o) => {
-              const selected = current === o.key;
-              return (
-                <button
-                  key={o.key}
-                  type="button"
-                  onClick={() => onChange(o.key)}
-                  aria-pressed={selected}
-                  className={cn(
-                    "flex items-center justify-between rounded px-2 py-1.5 text-left text-sm transition-colors hover:bg-muted",
-                    selected && "bg-muted font-medium",
-                  )}
-                >
-                  <span>{o.label}</span>
-                  {o.key === "none" ? (
-                    <span className="text-muted-foreground text-xs">Off</span>
-                  ) : (
-                    <span
-                      aria-hidden
-                      className={cn(
-                        "inline-block size-3 rounded-sm bg-foreground",
-                        `link-anim-${o.key}`,
-                      )}
-                    />
-                  )}
-                </button>
-              );
-            })}
-          </div>
         </div>
       ) : null}
     </div>
@@ -2530,13 +2406,8 @@ export function MyPageClient({
                   <FontIcon className="size-5" />
                 </button>
               ) : null}
-              {/* Featured animation + publish schedule — available in both
-                  layouts (a link's motion and timing apply to icons too). */}
-              <LinkAnimatePopover
-                value={link.highlight}
-                onChange={(highlight) => updateLink(link.id, { highlight })}
-                align="left"
-              />
+              {/* Publish schedule — available in both layouts (timing applies
+                  to icons too). */}
               <LinkSchedulePopover
                 schedule={link.schedule}
                 onChange={(schedule) => updateLink(link.id, { schedule })}

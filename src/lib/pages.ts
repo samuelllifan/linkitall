@@ -15,23 +15,12 @@ export interface LinkItem {
   /** Per-link text styling (font, size, bold/italic/underline, align, color). */
   textStyle?: TextStyle;
   /**
-   * Attention-drawing animation looped on the link button/icon so a "featured"
-   * link stands out. Undefined / "none" = static.
-   */
-  highlight?: LinkHighlight;
-  /**
    * Optional publish window. On public pages the link is hidden before `start`
    * and after `end` (see {@link isLinkLive}); the owner always sees it in their
    * editor. Absent = always visible.
    */
   schedule?: LinkSchedule;
 }
-
-/**
- * A looping animation applied to a link to make it stand out ("featured link").
- * `pulse` breathes, `bounce` hops, `wobble` tilts side to side, `shake` jitters.
- */
-export type LinkHighlight = "none" | "pulse" | "bounce" | "wobble" | "shake";
 
 /** A link's optional publish window, as ISO-8601 timestamps. */
 export interface LinkSchedule {
