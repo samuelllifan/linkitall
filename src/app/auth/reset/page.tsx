@@ -12,6 +12,7 @@ import {
 } from "~/components/ui/card";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
+import { PasswordToggle } from "~/components/ui/password-toggle";
 import { createClient } from "~/lib/supabase/client";
 import { cn } from "~/lib/utils";
 
@@ -109,15 +110,12 @@ export default function ResetPasswordPage() {
                     autoComplete="new-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="pr-16"
+                    className="pr-10"
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((v) => !v)}
-                    className="absolute inset-y-0 right-0 flex items-center pr-3 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
-                  >
-                    {showPassword ? "Hide" : "Show"}
-                  </button>
+                  <PasswordToggle
+                    visible={showPassword}
+                    onToggle={() => setShowPassword((v) => !v)}
+                  />
                 </div>
                 <ul className="mt-1 flex flex-col gap-1">
                   {reqs.map((r) => (

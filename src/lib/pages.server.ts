@@ -1,3 +1,4 @@
+import type { MusicConfig } from "~/lib/music";
 import {
   type AvatarEffect,
   type AvatarOutline,
@@ -29,6 +30,12 @@ export interface PublicPage {
   /** Canonical username (original casing) that owns the page. */
   username: string;
   data: PageData;
+  /**
+   * Whether the owner allows this page to be indexed by search engines. Defaults
+   * to true (discoverable) when the flag is absent — e.g. before the
+   * search-visibility migration is applied.
+   */
+  indexable: boolean;
 }
 
 /**
@@ -67,9 +74,11 @@ export async function getPublicPageServer(
     panelOrientation?: "vertical" | "horizontal";
     avatarOutline?: AvatarOutline;
     avatarEffect?: AvatarEffect;
+    music?: MusicConfig;
   };
   return {
     username: row.username as string,
+    indexable: (row.indexable as boolean | null) ?? true,
     data: {
       name: (row.name as string | null) ?? "",
       bio: (row.bio as string | null) ?? "",
@@ -86,6 +95,7 @@ export async function getPublicPageServer(
       panelOrientation: styles.panelOrientation,
       avatarOutline: styles.avatarOutline,
       avatarEffect: styles.avatarEffect,
+      music: styles.music,
     },
   };
 }

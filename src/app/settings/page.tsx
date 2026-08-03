@@ -15,10 +15,18 @@ export default async function SettingsPage() {
 
   const { data } = await supabase
     .from("profiles")
-    .select("username")
+    .select("username, search_indexable")
     .eq("id", user.id)
     .maybeSingle();
   const username = (data?.username as string | null) ?? null;
+  const searchIndexable = (data?.search_indexable as boolean | null) ?? true;
 
-  return <SettingsClient userEmail={user.email ?? ""} username={username} />;
+  return (
+    <SettingsClient
+      userId={user.id}
+      userEmail={user.email ?? ""}
+      username={username}
+      searchIndexable={searchIndexable}
+    />
+  );
 }

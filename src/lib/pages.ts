@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { MusicConfig } from "~/lib/music";
 import { createClient } from "~/lib/supabase/client";
 
 export interface LinkItem {
@@ -14,12 +15,23 @@ export interface LinkItem {
   /** Per-link text styling (font, size, bold/italic/underline, align, color). */
   textStyle?: TextStyle;
   /**
+   * Attention-drawing animation looped on the link button/icon so a "featured"
+   * link stands out. Undefined / "none" = static.
+   */
+  highlight?: LinkHighlight;
+  /**
    * Optional publish window. On public pages the link is hidden before `start`
    * and after `end` (see {@link isLinkLive}); the owner always sees it in their
    * editor. Absent = always visible.
    */
   schedule?: LinkSchedule;
 }
+
+/**
+ * A looping animation applied to a link to make it stand out ("featured link").
+ * `pulse` breathes, `bounce` hops, `wobble` tilts side to side, `shake` jitters.
+ */
+export type LinkHighlight = "none" | "pulse" | "bounce" | "wobble" | "shake";
 
 /** A link's optional publish window, as ISO-8601 timestamps. */
 export interface LinkSchedule {
@@ -262,6 +274,8 @@ export interface PageData {
    * avatar + name/bio on the left, links on the right.
    */
   panelOrientation?: "vertical" | "horizontal";
+  /** Optional music player (a song that plays on the page). Absent = no music. */
+  music?: MusicConfig;
 }
 
 /** Shape of the `styles` jsonb column. */
@@ -278,6 +292,7 @@ interface StoredStyles {
   panelOrientation?: "vertical" | "horizontal";
   avatarOutline?: AvatarOutline;
   avatarEffect?: AvatarEffect;
+  music?: MusicConfig;
 }
 
 /**
@@ -323,6 +338,7 @@ export async function queryPage(
     panelOrientation: styles.panelOrientation,
     avatarOutline: styles.avatarOutline,
     avatarEffect: styles.avatarEffect,
+    music: styles.music,
   };
 }
 
@@ -426,6 +442,34 @@ async function uploadPageAssets(
   }
   next.links = links;
 
+  // Music assets: an uploaded audio file and/or a custom album cover. Moving
+  // them to Storage keeps large audio out of the page's JSON. Spotify covers are
+  // already hosted URLs, so persistAsset returns them unchanged.
+  if (page.music) {
+    const music = { ...page.music };
+    const albumArt = await persistAsset(
+      supabase,
+      userId,
+      page.music.meta.albumArt,
+      cache,
+    );
+    if (albumArt !== page.music.meta.albumArt) {
+      music.meta = { ...page.music.meta, albumArt };
+    }
+    if (page.music.audio.kind === "file") {
+      const src = await persistAsset(
+        supabase,
+        userId,
+        page.music.audio.src,
+        cache,
+      );
+      if (src && src !== page.music.audio.src) {
+        music.audio = { ...page.music.audio, src };
+      }
+    }
+    next.music = music;
+  }
+
   return next;
 }
 
@@ -455,6 +499,7 @@ export async function savePage(pageInput: PageData): Promise<void> {
     panelOrientation: page.panelOrientation,
     avatarOutline: page.avatarOutline,
     avatarEffect: page.avatarEffect,
+    music: page.music,
   };
 
   const { error } = await supabase.from("pages").upsert(

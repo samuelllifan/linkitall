@@ -2,19 +2,9 @@
 
 import type { TimelinePoint } from "~/lib/analytics";
 
-/** Distinct, theme-neutral slice colors for the pie charts. */
-export const CHART_COLORS = [
-  "#3b82f6",
-  "#ec4899",
-  "#f59e0b",
-  "#22c55e",
-  "#8b5cf6",
-  "#06b6d4",
-  "#f43f5e",
-  "#84cc16",
-  "#a855f7",
-  "#14b8a6",
-];
+// CHART_COLORS moved to ~/lib/chart-colors so Server Components can import it as
+// real data (a "use client" module only exposes client references to the
+// server, which left the admin pie chart with undefined colors → black).
 
 /**
  * Views-over-time line chart. y-axis is the view count (a few ticks on the
@@ -92,6 +82,118 @@ export function ViewsLineChart({ data }: { data: TimelinePoint[] }) {
             </span>
           ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+export interface LineSeries {
+  /** Legend name for this line. */
+  name: string;
+  /** Stroke color. */
+  color: string;
+  /** One value per bucket; must line up with `labels`. */
+  values: number[];
+}
+
+/**
+ * Multi-series line chart sharing a single y-axis (scaled to the largest value
+ * across every series) and one set of x-axis labels. Same 0–100 SVG space and
+ * non-scaling stroke as {@link ViewsLineChart}; used where two measures move
+ * together over the same buckets (e.g. views vs. clicks).
+ */
+export function MultiLineChart({
+  labels,
+  series,
+}: {
+  labels: string[];
+  series: LineSeries[];
+}) {
+  if (labels.length === 0 || series.every((s) => s.values.length === 0)) {
+    return <p className="text-sm text-muted-foreground">No data yet.</p>;
+  }
+  const max = Math.max(1, ...series.flatMap((s) => s.values));
+  const ticks = [max, Math.round(max / 2), 0].filter(
+    (v, i, a) => a.indexOf(v) === i,
+  );
+  const labelStep = Math.ceil(labels.length / 12);
+
+  // Build an SVG path for one series, flattening a single bucket to a line.
+  const pathFor = (values: number[]) => {
+    const pts =
+      values.length === 1
+        ? [
+            { x: 0, y: 100 - (values[0] / max) * 100 },
+            { x: 100, y: 100 - (values[0] / max) * 100 },
+          ]
+        : values.map((v, i) => ({
+            x: (i / (values.length - 1)) * 100,
+            y: 100 - (v / max) * 100,
+          }));
+    return pts
+      .map(
+        (p, i) => `${i === 0 ? "M" : "L"} ${p.x.toFixed(2)} ${p.y.toFixed(2)}`,
+      )
+      .join(" ");
+  };
+
+  return (
+    <div>
+      <div className="flex gap-2">
+        {/* y-axis ticks */}
+        <div className="flex h-44 flex-col justify-between text-right text-[10px] tabular-nums text-muted-foreground">
+          {ticks.map((t) => (
+            <span key={t}>{t}</span>
+          ))}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="h-44 border-b border-l border-border">
+            <svg
+              viewBox="0 0 100 100"
+              preserveAspectRatio="none"
+              className="size-full"
+              role="img"
+              aria-label={`${series.map((s) => s.name).join(" and ")} over time`}
+            >
+              {series.map((s) => (
+                <path
+                  key={s.name}
+                  d={pathFor(s.values)}
+                  fill="none"
+                  stroke={s.color}
+                  strokeWidth={2}
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
+                  vectorEffect="non-scaling-stroke"
+                />
+              ))}
+            </svg>
+          </div>
+          {/* x-axis labels */}
+          <div className="flex gap-[3px]">
+            {labels.map((label, i) => (
+              <span
+                // biome-ignore lint/suspicious/noArrayIndexKey: buckets are positional and fixed for a range
+                key={i}
+                className="h-3 min-w-0 flex-1 truncate text-center text-[9px] text-muted-foreground"
+              >
+                {i % labelStep === 0 ? label : ""}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+      {/* legend */}
+      <div className="mt-3 flex flex-wrap gap-4 pl-6 text-xs text-muted-foreground">
+        {series.map((s) => (
+          <span key={s.name} className="flex items-center gap-1.5">
+            <span
+              className="h-0.5 w-4 rounded-full"
+              style={{ backgroundColor: s.color }}
+            />
+            {s.name}
+          </span>
+        ))}
       </div>
     </div>
   );

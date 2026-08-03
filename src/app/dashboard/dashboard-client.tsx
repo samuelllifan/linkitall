@@ -9,14 +9,10 @@ import {
   getAnalytics,
   TIME_RANGES,
 } from "~/lib/analytics";
+import { CHART_COLORS } from "~/lib/chart-colors";
 import type { LinkItem } from "~/lib/pages";
 import { cn } from "~/lib/utils";
-import {
-  CHART_COLORS,
-  PieChart,
-  type PieSlice,
-  ViewsLineChart,
-} from "./charts";
+import { PieChart, type PieSlice, ViewsLineChart } from "./charts";
 
 /** A titled stat container. */
 function Card({
@@ -95,6 +91,24 @@ export function DashboardClient({
 
   const range = TIME_RANGES.find((r) => r.key === rangeKey) ?? TIME_RANGES[2];
 
+  // Restore the last-used range + graph tab (persisted in the click handlers
+  // below). localStorage is client-only, so reconcile after mount rather than
+  // during SSR to avoid a hydration mismatch on the active pill.
+  useEffect(() => {
+    const savedRange = localStorage.getItem("dashboard:range");
+    if (savedRange && TIME_RANGES.some((r) => r.key === savedRange)) {
+      setRangeKey(savedRange);
+    }
+    const savedTab = localStorage.getItem("dashboard:graphTab");
+    if (
+      savedTab === "views" ||
+      savedTab === "devices" ||
+      savedTab === "links"
+    ) {
+      setGraphTab(savedTab);
+    }
+  }, []);
+
   useEffect(() => {
     let active = true;
     setLoading(true);
@@ -159,7 +173,7 @@ export function DashboardClient({
   }));
 
   return (
-    <main className="mx-auto w-full max-w-3xl px-6 pt-10 pb-24">
+    <main className="mx-auto w-full max-w-3xl flex-1 px-6 pt-10 pb-24">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
@@ -181,14 +195,17 @@ export function DashboardClient({
         </div>
 
         {/* Time-range selector */}
-        <div className="flex flex-wrap gap-1 rounded-lg border border-border bg-card p-1">
+        <div className="flex w-full gap-1 overflow-x-auto rounded-lg border border-border bg-card p-1 sm:w-auto sm:overflow-visible">
           {TIME_RANGES.map((r) => (
             <button
               key={r.key}
               type="button"
-              onClick={() => setRangeKey(r.key)}
+              onClick={() => {
+                setRangeKey(r.key);
+                localStorage.setItem("dashboard:range", r.key);
+              }}
               className={cn(
-                "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                "shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
                 r.key === rangeKey
                   ? "bg-foreground text-background"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground",
@@ -322,9 +339,12 @@ export function DashboardClient({
               <button
                 key={key}
                 type="button"
-                onClick={() => setGraphTab(key)}
+                onClick={() => {
+                  setGraphTab(key);
+                  localStorage.setItem("dashboard:graphTab", key);
+                }}
                 className={cn(
-                  "rounded-md px-3 py-1 text-sm font-medium transition-colors",
+                  "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
                   graphTab === key
                     ? "bg-foreground text-background"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground",

@@ -245,6 +245,7 @@ export function Navbar({
                 onClick={() => setMenuOpen((o) => !o)}
                 aria-haspopup="menu"
                 aria-expanded={menuOpen}
+                aria-label="Account menu"
                 className="flex items-center gap-2 rounded-full py-1 pr-2 pl-1 transition-colors hover:bg-muted"
               >
                 <Avatar />

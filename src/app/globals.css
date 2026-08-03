@@ -355,6 +355,103 @@
   }
 }
 
+/* Featured-link attention animations. Applied to a WRAPPER around a link (not
+   the link itself) so the looping transform composes with the link's own hover
+   lift, which transforms the inner element — the two never fight over
+   `transform`. Like the rest of the app's motion, these are user-chosen and so
+   are intentionally not gated behind `prefers-reduced-motion` (see note below). */
+.link-anim {
+  display: block;
+  width: 100%;
+  transform-origin: center;
+  will-change: transform;
+}
+/* In the icon (horizontal) layout the wrapper hugs a single square icon. */
+.link-anim-icon {
+  display: inline-flex;
+  width: auto;
+}
+.link-anim-pulse {
+  animation: link-pulse 1.8s ease-in-out infinite;
+}
+.link-anim-bounce {
+  animation: link-bounce 1.7s ease-in-out infinite;
+}
+.link-anim-wobble {
+  animation: link-wobble 2s ease-in-out infinite;
+}
+.link-anim-shake {
+  animation: link-shake 2.6s ease-in-out infinite;
+}
+@keyframes link-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.035);
+  }
+}
+@keyframes link-bounce {
+  0%,
+  35%,
+  70%,
+  100% {
+    transform: translateY(0);
+  }
+  15% {
+    transform: translateY(-16%);
+  }
+  50% {
+    transform: translateY(-7%);
+  }
+}
+@keyframes link-wobble {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  15% {
+    transform: rotate(-2.6deg);
+  }
+  30% {
+    transform: rotate(2.2deg);
+  }
+  45% {
+    transform: rotate(-1.7deg);
+  }
+  60% {
+    transform: rotate(1.2deg);
+  }
+  75% {
+    transform: rotate(-0.7deg);
+  }
+}
+/* Mostly still, with a short jitter burst near the end of each cycle so it
+   reads as an occasional "look at me" nudge rather than constant vibration. */
+@keyframes link-shake {
+  0%,
+  62%,
+  100% {
+    transform: translateX(0);
+  }
+  67% {
+    transform: translateX(-3px);
+  }
+  72% {
+    transform: translateX(3px);
+  }
+  77% {
+    transform: translateX(-3px);
+  }
+  82% {
+    transform: translateX(2px);
+  }
+  87% {
+    transform: translateX(-2px);
+  }
+}
+
 /* Media background — full-viewport uploaded image/video. Framing (object
    position + zoom) is applied inline per background. */
 .media-layer {
@@ -375,6 +472,157 @@
   content: attr(data-placeholder);
   color: var(--muted-foreground);
   pointer-events: none;
+}
+
+/* Music player — a clean entrance: the card fades up and settles. Slightly
+   longer/softer than the popup entrances so a widget that plays audio doesn't
+   feel abrupt on page load. */
+@keyframes music-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.animate-music-in {
+  animation: music-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Progress + volume sliders for the music player — styled like Spotify's:
+   a thin, full-width rounded bar whose played portion is drawn by an inline
+   `background` gradient (accent up to the value, faint track after). The thumb
+   is a small white dot hidden by default and revealed on hover/focus, and the
+   bar thickens slightly on hover — exactly the Spotify feel. `display: block`
+   keeps the range from sitting inline (where it kept its intrinsic ~129px
+   width instead of stretching to 100%). */
+.player-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 0.3125rem;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.24);
+  outline: none;
+  cursor: pointer;
+  touch-action: none;
+  transition: height 0.12s ease-out;
+}
+.player-slider:hover {
+  height: 0.375rem;
+}
+/* WebKit thumb — hidden until the bar is hovered/focused. */
+.player-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 0.75rem;
+  width: 0.75rem;
+  border-radius: 9999px;
+  background: #ffffff;
+  border: none;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  transition: opacity 0.12s ease-out;
+}
+.player-slider:hover::-webkit-slider-thumb,
+.player-slider:focus-visible::-webkit-slider-thumb,
+.player-slider:active::-webkit-slider-thumb {
+  opacity: 1;
+}
+/* Firefox thumb. */
+.player-slider::-moz-range-thumb {
+  height: 0.75rem;
+  width: 0.75rem;
+  border-radius: 9999px;
+  background: #ffffff;
+  border: none;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  transition: opacity 0.12s ease-out;
+}
+.player-slider:hover::-moz-range-thumb,
+.player-slider:focus-visible::-moz-range-thumb,
+.player-slider:active::-moz-range-thumb {
+  opacity: 1;
+}
+.player-slider::-moz-range-track {
+  background: transparent;
+}
+
+/* Instagram-style clip picker — a draggable selection window over the whole
+   song, in the music editor. The track is a rounded bar (the album cover shows
+   faintly behind a faux-waveform hatch); the window is a highlighted box you
+   slide/resize with pointer drags. Uses the app's design tokens. */
+.clip-track {
+  position: relative;
+  height: 2.75rem;
+  border-radius: 0.625rem;
+  background-color: var(--muted);
+  background-size: cover;
+  background-position: center;
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+}
+/* Faux-waveform hatch + a scrim so the cover stays subtle behind the window. */
+.clip-track::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: repeating-linear-gradient(
+    90deg,
+    rgba(0, 0, 0, 0.28) 0 2px,
+    transparent 2px 7px
+  );
+}
+.clip-track::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+}
+.clip-window {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 1;
+  box-sizing: border-box;
+  border: 2px solid var(--foreground);
+  border-radius: 0.625rem;
+  background: color-mix(in oklch, var(--foreground) 20%, transparent);
+  cursor: grab;
+  touch-action: none;
+}
+.clip-window:active {
+  cursor: grabbing;
+}
+.clip-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  width: 1.375rem;
+  align-items: center;
+  justify-content: center;
+  cursor: ew-resize;
+  touch-action: none;
+}
+.clip-handle-l {
+  left: -2px;
+}
+.clip-handle-r {
+  right: -2px;
+}
+.clip-handle::after {
+  content: "";
+  width: 0.375rem;
+  height: 1.375rem;
+  border-radius: 9999px;
+  background: var(--foreground);
+  box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.35);
 }
 
 /* NOTE: We intentionally do NOT gate the app's motion behind

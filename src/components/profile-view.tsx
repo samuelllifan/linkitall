@@ -24,12 +24,14 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
+import { MusicPlayer } from "~/components/music-player";
 import { recordClick, recordView } from "~/lib/analytics";
 import type {
   AvatarEffect,
   AvatarOutline,
   Background,
   BoxStyle,
+  LinkHighlight,
   LinkItem,
   PageData,
   PanelStyle,
@@ -1061,6 +1063,21 @@ function alignToJustify(
 }
 
 /**
+ * Wrapper class for a link's featured animation, or "" when it has none. The
+ * animation lives on a wrapper (not the link) so it composes with the link's
+ * own hover lift — see `.link-anim` in globals.css. `icon` picks the compact
+ * variant used by the logo-only (horizontal) layout.
+ */
+export function highlightClass(
+  highlight?: LinkHighlight,
+  icon = false,
+): string {
+  if (!highlight || highlight === "none") return "";
+  const base = icon ? "link-anim link-anim-icon" : "link-anim";
+  return `${base} link-anim-${highlight}`;
+}
+
+/**
  * A single link button. Its surface comes from the link's own `box` style
  * (color, opacity, outline, on/off), falling back to `box` (the page default)
  * then the built-in default. Text styling comes from the link's own `textStyle`
@@ -1245,25 +1262,30 @@ export function LinkAnchor({
       link.label
     );
 
+  const anim = highlightClass(link.highlight);
+
   // Discord: the href holds a username, not a URL. Clicking copies it and
   // flashes a "Link copied!" confirmation instead of navigating.
   if (isDiscordLink(link.href)) {
     const username = discordUsername(link.href);
+    const btn = (
+      <button
+        type="button"
+        aria-label={`Copy Discord username ${username}`}
+        onClick={() => {
+          copy(username);
+          if (trackUsername) recordClick(trackUsername, link.id, link.label);
+        }}
+        style={boxStyle}
+        className={cn(boxClassName, "cursor-pointer")}
+      >
+        {iconEl}
+        {labelEl}
+      </button>
+    );
     return (
       <>
-        <button
-          type="button"
-          aria-label={`Copy Discord username ${username}`}
-          onClick={() => {
-            copy(username);
-            if (trackUsername) recordClick(trackUsername, link.id, link.label);
-          }}
-          style={boxStyle}
-          className={cn(boxClassName, "cursor-pointer")}
-        >
-          {iconEl}
-          {labelEl}
-        </button>
+        {anim ? <div className={anim}>{btn}</div> : btn}
         <CopiedToast show={copied} />
       </>
     );
@@ -1271,7 +1293,7 @@ export function LinkAnchor({
 
   // Default behavior: the box is a plain link that opens in a new tab.
   if (!enablePreview) {
-    return (
+    const anchor = (
       <a
         href={link.href}
         target="_blank"
@@ -1288,21 +1310,27 @@ export function LinkAnchor({
         {labelEl}
       </a>
     );
+    return anim ? <div className={anim}>{anchor}</div> : anchor;
   }
 
   // Preview mode: the box toggles a preview card; the card is the real link.
+  // The animation wraps only the trigger button (not this positioned container)
+  // so the preview card stays anchored while a featured link pulses/hops.
+  const trigger = (
+    <button
+      type="button"
+      aria-expanded={previewOpen}
+      onClick={() => setPreviewOpen((v) => !v)}
+      style={boxStyle}
+      className={cn(boxClassName, "cursor-pointer")}
+    >
+      {iconEl}
+      {labelEl}
+    </button>
+  );
   return (
     <div ref={wrapRef} className="relative w-full">
-      <button
-        type="button"
-        aria-expanded={previewOpen}
-        onClick={() => setPreviewOpen((v) => !v)}
-        style={boxStyle}
-        className={cn(boxClassName, "cursor-pointer")}
-      >
-        {iconEl}
-        {labelEl}
-      </button>
+      {anim ? <div className={anim}>{trigger}</div> : trigger}
 
       {previewOpen ? (
         <a
@@ -1374,30 +1402,34 @@ export function LinkIconAnchor({
   // square — the icons never wrap to a second row (see the row containers).
   const iconClassName =
     "flex aspect-square w-11 min-w-8 shrink items-center justify-center rounded-md transition duration-300 ease-out hover:-translate-y-1 hover:scale-110 hover:shadow-xl hover:shadow-black/40 active:translate-y-0 active:scale-95 active:duration-75";
+  const anim = highlightClass(link.highlight, true);
 
   // Discord: copy the username instead of navigating, with a confirmation.
   if (isDiscordLink(link.href)) {
     const username = discordUsername(link.href);
+    const btn = (
+      <button
+        type="button"
+        aria-label={`Copy Discord username ${username}`}
+        title={link.label}
+        onClick={() => {
+          copy(username);
+          if (trackUsername) recordClick(trackUsername, link.id, link.label);
+        }}
+        className={cn(iconClassName, "cursor-pointer")}
+      >
+        {inner}
+      </button>
+    );
     return (
       <>
-        <button
-          type="button"
-          aria-label={`Copy Discord username ${username}`}
-          title={link.label}
-          onClick={() => {
-            copy(username);
-            if (trackUsername) recordClick(trackUsername, link.id, link.label);
-          }}
-          className={cn(iconClassName, "cursor-pointer")}
-        >
-          {inner}
-        </button>
+        {anim ? <span className={anim}>{btn}</span> : btn}
         <CopiedToast show={copied} />
       </>
     );
   }
 
-  return (
+  const anchor = (
     <a
       href={link.href}
       target="_blank"
@@ -1414,6 +1446,7 @@ export function LinkIconAnchor({
       {inner}
     </a>
   );
+  return anim ? <span className={anim}>{anchor}</span> : anchor;
 }
 
 // ---------------------------------------------------------------------------
@@ -1987,6 +2020,8 @@ export function ProfileView({
   // "horizontal" keeps everything centered and stacked, but lays the links out
   // as a row of logo-only icons instead of full-width buttons.
   const horizontal = data.panelOrientation === "horizontal";
+  // Only render music when it's enabled and actually has something to show/play.
+  const music = data.music?.enabled ? data.music : undefined;
 
   return (
     <>
@@ -2087,7 +2122,25 @@ export function ProfileView({
             </div>
           )
         ) : null}
+
+        {/* Integrated: the player sits inside the profile panel, full-width. */}
+        {music && music.display === "integrated" && (
+          <MusicPlayer config={music} className="w-full max-w-none" />
+        )}
       </div>
+
+      {/* Own panel: a standalone player card below the profile block, matching
+          the profile panel's width. */}
+      {music && music.display === "panel" && (
+        <div className="relative mx-auto mt-6 w-full max-w-lg">
+          <MusicPlayer config={music} className="w-full max-w-none" />
+        </div>
+      )}
+
+      {/* Hidden: audio plays with only a small floating play/mute control. */}
+      {music && music.display === "hidden" && (
+        <MusicPlayer config={music} variant="mini" />
+      )}
     </>
   );
 }

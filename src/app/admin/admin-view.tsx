@@ -1,8 +1,11 @@
 import type { TimelinePoint } from "~/lib/analytics";
+import { CHART_COLORS } from "~/lib/chart-colors";
 import { countryFlag, countryName } from "~/lib/countries";
 import { getCountryPaths } from "~/lib/world-map";
-import { CHART_COLORS, PieChart, ViewsLineChart } from "../dashboard/charts";
+import { MultiLineChart, PieChart, ViewsLineChart } from "../dashboard/charts";
 import { LocationMap } from "./location-map";
+import { TimeFramePicker } from "./time-frame-picker";
+import { type RangeCurrent, rangeLabel } from "./time-range";
 
 export interface AdminUserRow {
   id: string;
@@ -18,12 +21,25 @@ export interface AdminUserRow {
 
 export interface AdminOverview {
   users: AdminUserRow[];
-  totals: { users: number; views: number; clicks: number };
+  totals: {
+    users: number;
+    views: number;
+    clicks: number;
+    /** Distinct visitor browsers across all views ("people", not page loads). */
+    uniqueVisitors: number;
+  };
+  /** Time-series bucket size chosen for the window: "hour" or "day". */
+  granularity: "hour" | "day";
   /** Site-wide view counts grouped by the visitor's device. */
   devices: { device: string; views: number }[];
   /** Site-wide view counts grouped by the visitor's country ("ZZ" = unknown). */
   locations: { country: string; views: number }[];
-  daily: { date: string; views: number; clicks: number }[];
+  /** Most-clicked links site-wide, by denormalized label. */
+  topLinks: { label: string; clicks: number }[];
+  /** Zero-filled views/clicks series across the window (label pre-formatted). */
+  trend: { label: string; views: number; clicks: number }[];
+  /** Zero-filled new-accounts series across the window. */
+  signups: { label: string; count: number }[];
 }
 
 /** "desktop" → "Desktop", "unknown" → "Unknown", etc. */
@@ -63,22 +79,58 @@ function formatDate(iso: string | null): string {
   });
 }
 
-function StatCard({ label, value }: { label: string; value: number }) {
+function StatCard({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  /** Preformatted (e.g. "3.2%") or numeric — numbers get thousands grouping. */
+  value: number | string;
+  /** Optional secondary line, e.g. recent-window activity. */
+  hint?: string;
+}) {
   return (
     <div className="rounded-xl border border-border bg-card p-5">
       <div className="text-sm text-muted-foreground">{label}</div>
       <div className="mt-1 text-3xl font-bold tabular-nums">
-        {value.toLocaleString()}
+        {typeof value === "number" ? value.toLocaleString() : value}
       </div>
+      {hint ? (
+        <div className="mt-1 text-xs text-muted-foreground tabular-nums">
+          {hint}
+        </div>
+      ) : null}
     </div>
   );
 }
 
-export function AdminView({ overview }: { overview: AdminOverview }) {
-  // `locations` defaults to [] so the page still renders if the analytics
-  // backend predates the location migration.
-  const { users, totals, devices, daily } = overview;
+export function AdminView({
+  overview,
+  range,
+}: {
+  overview: AdminOverview;
+  range: RangeCurrent;
+}) {
+  // New fields default so the page still renders if the analytics backend
+  // predates a given migration.
+  const { users, totals, devices } = overview;
   const locations = overview.locations ?? [];
+  const topLinks = overview.topLinks ?? [];
+  const trend = overview.trend ?? [];
+  const signups = overview.signups ?? [];
+  const granularity = overview.granularity ?? "day";
+  const uniqueVisitors = totals.uniqueVisitors ?? 0;
+
+  // Click-through rate across all traffic. Guard against divide-by-zero.
+  const ctr = totals.views > 0 ? (totals.clicks / totals.views) * 100 : 0;
+
+  // Top links, ranked and shaped for the horizontal bar list below.
+  const rankedLinks = topLinks
+    .slice()
+    .sort((a, b) => b.clicks - a.clicks)
+    .slice(0, 10);
+  const linkMax = Math.max(1, ...rankedLinks.map((l) => l.clicks));
 
   // Country outlines are projected on the server; the client map only colors
   // them. The ranked list below is fully static (no interactivity needed).
@@ -90,14 +142,18 @@ export function AdminView({ overview }: { overview: AdminOverview }) {
     .slice(0, 12);
   const locationMax = Math.max(1, ...topLocations.map((l) => l.views));
 
-  // Site-wide views over the last 30 days, shaped for the shared line chart.
-  const timeline: TimelinePoint[] = daily.map((d) => {
-    const date = new Date(d.date);
-    const label = Number.isNaN(date.getTime())
-      ? d.date
-      : date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-    return { label, count: d.views };
-  });
+  // Trend labels come pre-formatted from the server (hour or day, per the
+  // window). The two series share this one axis.
+  const trendLabels = trend.map((d) => d.label);
+  const granularityNote = granularity === "hour" ? "by hour" : "by day";
+
+  // New signups over the window, shaped for the shared line chart.
+  const signupTimeline: TimelinePoint[] = signups.map((s) => ({
+    label: s.label,
+    count: s.count,
+  }));
+
+  const rangeText = rangeLabel(range);
 
   // Device split, shaped for the shared pie chart.
   const deviceSlices = devices.map((d, i) => ({
@@ -108,31 +164,99 @@ export function AdminView({ overview }: { overview: AdminOverview }) {
 
   return (
     <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-10">
-      <header className="mb-8">
-        <h1 className="text-2xl font-bold tracking-tight">Admin</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Every account and site-wide activity. Visible only to you.
-        </p>
+      <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Admin</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Every account and site-wide activity. Visible only to you.
+          </p>
+        </div>
+        <TimeFramePicker current={range} />
       </header>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="mb-4 text-sm text-muted-foreground">
+        Showing <span className="text-foreground">{rangeText}</span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
         <StatCard label="Users" value={totals.users} />
-        <StatCard label="Total views" value={totals.views} />
-        <StatCard label="Total clicks" value={totals.clicks} />
+        <StatCard label="Unique visitors" value={uniqueVisitors} />
+        <StatCard label="Views" value={totals.views} />
+        <StatCard label="Clicks" value={totals.clicks} />
+        <StatCard label="Click-through rate" value={`${ctr.toFixed(1)}%`} />
       </div>
 
       <div className="mt-8 grid grid-cols-1 gap-4 lg:grid-cols-3">
         <section className="rounded-xl border border-border bg-card p-5 lg:col-span-2">
           <h2 className="mb-4 text-sm font-semibold text-muted-foreground">
-            Views · last 30 days
+            Views &amp; clicks · {granularityNote}
           </h2>
-          <ViewsLineChart data={timeline} />
+          <MultiLineChart
+            labels={trendLabels}
+            series={[
+              {
+                name: "Views",
+                color: CHART_COLORS[0],
+                values: trend.map((d) => d.views),
+              },
+              {
+                name: "Clicks",
+                color: CHART_COLORS[1],
+                values: trend.map((d) => d.clicks),
+              },
+            ]}
+          />
         </section>
         <section className="rounded-xl border border-border bg-card p-5">
           <h2 className="mb-4 text-sm font-semibold text-muted-foreground">
             Devices
           </h2>
           <PieChart slices={deviceSlices} />
+        </section>
+      </div>
+
+      <div className="mt-8 grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <section className="rounded-xl border border-border bg-card p-5 lg:col-span-2">
+          <h2 className="mb-4 text-sm font-semibold text-muted-foreground">
+            New users · {granularityNote}
+          </h2>
+          <ViewsLineChart data={signupTimeline} />
+        </section>
+        <section className="rounded-xl border border-border bg-card p-5">
+          <h2 className="mb-4 text-sm font-semibold text-muted-foreground">
+            Top links · by clicks
+          </h2>
+          {rankedLinks.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No clicks yet.</p>
+          ) : (
+            <ul className="flex flex-col gap-2.5">
+              {rankedLinks.map((l, i) => (
+                <li
+                  // biome-ignore lint/suspicious/noArrayIndexKey: labels can repeat across pages; rank order is stable
+                  key={`${l.label}-${i}`}
+                  className="flex items-center gap-3 text-sm"
+                >
+                  <span className="w-4 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+                    {i + 1}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="truncate">{l.label}</span>
+                      <span className="shrink-0 tabular-nums text-muted-foreground">
+                        {l.clicks.toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                      <div
+                        className="h-full rounded-full bg-[#ec4899]"
+                        style={{ width: `${(l.clicks / linkMax) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
       </div>
 

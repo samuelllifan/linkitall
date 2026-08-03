@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import { Footer } from "~/components/footer";
 import { Navbar } from "~/components/navbar";
 import { SessionGuard } from "~/components/session-guard";
+import { WhatsNewDialog } from "~/components/whats-new-dialog";
 import { createClient } from "~/lib/supabase/server";
 import { UnsavedGuardProvider } from "~/lib/unsaved-guard";
 import "./globals.css";
@@ -75,6 +76,9 @@ export default async function RootLayout({
           />
           {children}
           <Footer />
+          {/* Mounted globally so the footer "What's new" link works on every
+              page; auto-shows only on the owner's own page (see the component). */}
+          <WhatsNewDialog ownUsername={username} />
         </UnsavedGuardProvider>
       </body>
     </html>

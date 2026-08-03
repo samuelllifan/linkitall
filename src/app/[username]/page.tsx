@@ -70,6 +70,10 @@ export async function generateMetadata({
     // display name, so it stays stable regardless of what the page is named.
     title: `@${page.username} · stacked`,
     description,
+    // Honour the owner's search-visibility setting. When off, ask crawlers not
+    // to index the page (it stays reachable by direct link). When on, leave
+    // robots unset so the site-wide default applies.
+    robots: page.indexable ? undefined : { index: false, follow: false },
     openGraph: {
       type: "profile",
       title: name,

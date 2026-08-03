@@ -120,7 +120,7 @@ export default function ContactPage() {
               autoComplete="name"
             />
             {errors.name && (
-              <p className="text-sm text-destructive">{errors.name}</p>
+              <p className="text-sm text-red-400">{errors.name}</p>
             )}
           </div>
 
@@ -136,7 +136,7 @@ export default function ContactPage() {
               autoComplete="email"
             />
             {errors.email && (
-              <p className="text-sm text-destructive">{errors.email}</p>
+              <p className="text-sm text-red-400">{errors.email}</p>
             )}
           </div>
 
@@ -150,7 +150,7 @@ export default function ContactPage() {
               aria-invalid={Boolean(errors.subject)}
             />
             {errors.subject && (
-              <p className="text-sm text-destructive">{errors.subject}</p>
+              <p className="text-sm text-red-400">{errors.subject}</p>
             )}
           </div>
 
@@ -165,22 +165,20 @@ export default function ContactPage() {
               aria-invalid={Boolean(errors.message)}
               className={cn(
                 "w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground md:text-sm dark:bg-input/30",
-                "focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                "focus-visible:border-ring/70 focus-visible:ring-2 focus-visible:ring-ring/20",
                 "aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40",
               )}
             />
             {errors.message && (
-              <p className="text-sm text-destructive">{errors.message}</p>
+              <p className="text-sm text-red-400">{errors.message}</p>
             )}
           </div>
 
-          {submitError && (
-            <p className="text-sm text-destructive">{submitError}</p>
-          )}
+          {submitError && <p className="text-sm text-red-400">{submitError}</p>}
 
           <div>
             <Button type="submit" disabled={submitting}>
-              {submitting ? "Sending…" : "Send Message"}
+              {submitting ? "Sending…" : "Send message"}
             </Button>
           </div>
         </form>
