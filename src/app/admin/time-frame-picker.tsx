@@ -116,41 +116,47 @@ export function TimeFramePicker({ current }: { current: RangeCurrent }) {
   const customActive = current.preset === "custom";
 
   return (
-    <div ref={containerRef} className="relative flex flex-wrap gap-1.5">
-      {PRESETS.map((p) => {
-        const active = current.preset === p.key;
-        return (
-          <button
-            key={p.key}
-            type="button"
-            onClick={() => router.push(p.href)}
-            className={cn(
-              "rounded-lg border px-3 py-1.5 text-sm transition-colors",
-              active
-                ? "border-foreground bg-foreground text-background"
-                : "border-border text-muted-foreground hover:bg-muted/50",
-            )}
-          >
-            {p.label}
-          </button>
-        );
-      })}
+    <div ref={containerRef} className="relative">
+      {/* Segmented control — visually matches the dashboard's time-range picker
+          (src/app/dashboard/dashboard-client.tsx). Custom is one more segment. */}
+      <div className="flex w-full gap-1 overflow-x-auto rounded-lg border border-border bg-card p-1 sm:w-auto sm:overflow-visible">
+        {PRESETS.map((p) => {
+          const active = current.preset === p.key;
+          return (
+            <button
+              key={p.key}
+              type="button"
+              onClick={() => router.push(p.href)}
+              aria-pressed={active}
+              className={cn(
+                "shrink-0 whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                active
+                  ? "bg-foreground text-background"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
+              )}
+            >
+              {p.label}
+            </button>
+          );
+        })}
 
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        aria-controls={popoverId}
-        className={cn(
-          "rounded-lg border px-3 py-1.5 text-sm transition-colors",
-          customActive
-            ? "border-foreground bg-foreground text-background"
-            : "border-border text-muted-foreground hover:bg-muted/50",
-        )}
-      >
-        {customActive ? rangeLabel(current) : "Custom"}
-      </button>
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          aria-controls={popoverId}
+          aria-pressed={customActive}
+          className={cn(
+            "shrink-0 whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium transition-colors",
+            customActive
+              ? "bg-foreground text-background"
+              : "text-muted-foreground hover:bg-muted hover:text-foreground",
+          )}
+        >
+          {customActive ? rangeLabel(current) : "Custom"}
+        </button>
+      </div>
 
       {open ? (
         <div
