@@ -6,6 +6,7 @@ import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { PasswordToggle } from "~/components/ui/password-toggle";
+import { Requirement } from "~/components/ui/requirement";
 import { setUsername as saveUsername } from "~/lib/profiles";
 import { createClient } from "~/lib/supabase/client";
 import { useUnsavedGuard } from "~/lib/unsaved-guard";
@@ -99,6 +100,8 @@ function AccountSection({
   setShowPassword,
   editingPassword,
   setEditingPassword,
+  passwordReqs,
+  pwAttempted,
   onDelete,
 }: {
   usernameInput: string;
@@ -111,6 +114,8 @@ function AccountSection({
   setShowPassword: (v: boolean | ((p: boolean) => boolean)) => void;
   editingPassword: boolean;
   setEditingPassword: (v: boolean) => void;
+  passwordReqs: { label: string; met: boolean }[];
+  pwAttempted: boolean;
   onDelete: () => void;
 }) {
   return (
@@ -146,8 +151,8 @@ function AccountSection({
           className="max-w-xs"
         />
         <p className="text-xs text-muted-foreground">
-          Changing this sends a confirmation link to the new address; it stays
-          the same until you confirm.
+          We'll email the new address a confirmation link; it stays the same
+          until you confirm.
         </p>
       </div>
 
@@ -167,7 +172,7 @@ function AccountSection({
             }}
             onChange={(e) => setPassword(e.target.value)}
             autoComplete="new-password"
-            minLength={6}
+            minLength={8}
             className="pr-10"
           />
           <PasswordToggle
@@ -175,9 +180,19 @@ function AccountSection({
             onToggle={() => setShowPassword((v: boolean) => !v)}
           />
         </div>
-        <p className="text-xs text-muted-foreground">
-          Enter a new password (at least 6 characters) to change it.
-        </p>
+        {editingPassword ? (
+          <ul className="mt-1 flex flex-col gap-1">
+            {passwordReqs.map((r) => (
+              <Requirement key={r.label} met={r.met} attempted={pwAttempted}>
+                {r.label}
+              </Requirement>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            Enter a new password to change it.
+          </p>
+        )}
       </div>
 
       {/* Delete account — lives at the bottom of Account, set apart by a
@@ -289,7 +304,7 @@ function AccessibilitySection({
         <p className="max-w-md text-muted-foreground text-xs">
           When on, the What's New dialog pops up every time you open your own
           page — not just once per update. You can always reopen it from the
-          "What's new" link in the footer.
+          "What's New" link in the footer.
         </p>
       </div>
     </div>
@@ -335,6 +350,9 @@ export function SettingsClient({
   const [password, setPassword] = useState(PASSWORD_PLACEHOLDER);
   const [showPassword, setShowPassword] = useState(false);
   const [editingPassword, setEditingPassword] = useState(false);
+  // Turns the password checklist red only after a save is attempted with an
+  // unmet requirement (mirrors the sign-up form).
+  const [pwAttempted, setPwAttempted] = useState(false);
   const [indexable, setIndexable] = useState(searchIndexable);
   const [baselineIndexable, setBaselineIndexable] = useState(searchIndexable);
 
@@ -368,7 +386,17 @@ export function SettingsClient({
   const emailTrimmed = emailInput.trim();
   const emailChanged =
     emailTrimmed.toLowerCase() !== baselineEmail.toLowerCase();
-  const passwordChanged = editingPassword && password.length >= 6;
+  // Password rules match the sign-up / reset forms (see ~/components/ui/
+  // requirement usage there) so the policy is consistent across the app.
+  const passwordReqs = [
+    { label: "At least 8 characters", met: password.length >= 8 },
+    { label: "Contains a letter", met: /[A-Za-z]/.test(password) },
+    { label: "Contains a number", met: /[0-9]/.test(password) },
+  ];
+  const passwordOk = passwordReqs.every((r) => r.met);
+  // "Changed" the moment they type into the (cleared) field, so the unsaved bar
+  // appears; validity is enforced separately on save via passwordOk.
+  const passwordChanged = editingPassword && password.length > 0;
   const indexableChanged = indexable !== baselineIndexable;
   const dirty =
     usernameChanged || emailChanged || passwordChanged || indexableChanged;
@@ -414,24 +442,44 @@ export function SettingsClient({
     setPassword(PASSWORD_PLACEHOLDER);
     setShowPassword(false);
     setEditingPassword(false);
+    setPwAttempted(false);
     setIndexable(baselineIndexable);
     setMsg(null);
     setConfirming(false);
   }
 
   function handleSave() {
+    // Block the save if a new password was typed but doesn't meet the policy —
+    // surface the checklist in red instead of opening the confirm dialog.
+    if (passwordChanged && !passwordOk) {
+      setPwAttempted(true);
+      return;
+    }
     setConfirming(true);
   }
 
   // The type-to-confirm input in the delete dialog — focused on open so the
   // user can start typing the confirmation immediately.
   const deleteInputRef = useRef<HTMLInputElement | null>(null);
+  // The Confirm button in the save dialog — focused on open so Enter/Space
+  // confirms straight away (parity with the delete dialog's autofocus).
+  const confirmBtnRef = useRef<HTMLButtonElement | null>(null);
+
+  // A ref holding the latest confirmSave so the keydown listener below can call
+  // it without listing an ever-changing closure as a dependency.
+  const confirmSaveActionRef = useRef(confirmSave);
+  confirmSaveActionRef.current = confirmSave;
 
   // Close whichever dialog is open on Escape (matches the share modal and the
-  // navbar menus). The delete dialog stays put while a deletion is in flight.
+  // navbar menus), and let Enter confirm the save dialog. The delete dialog
+  // stays put while a deletion is in flight.
   useEffect(() => {
     if (!confirming && !deleteOpen) return;
     function onKey(e: KeyboardEvent) {
+      if (e.key === "Enter" && confirming) {
+        confirmSaveActionRef.current();
+        return;
+      }
       if (e.key !== "Escape") return;
       if (confirming) setConfirming(false);
       else if (deleteOpen && !deleting) setDeleteOpen(false);
@@ -440,10 +488,14 @@ export function SettingsClient({
     return () => document.removeEventListener("keydown", onKey);
   }, [confirming, deleteOpen, deleting]);
 
-  // Focus the confirmation field when the delete dialog opens.
+  // Focus the confirmation field when the delete dialog opens, and the Confirm
+  // button when the save dialog opens.
   useEffect(() => {
     if (deleteOpen) deleteInputRef.current?.focus();
   }, [deleteOpen]);
+  useEffect(() => {
+    if (confirming) confirmBtnRef.current?.focus();
+  }, [confirming]);
 
   async function confirmSave() {
     setSaving(true);
@@ -589,6 +641,8 @@ export function SettingsClient({
               setShowPassword={setShowPassword}
               editingPassword={editingPassword}
               setEditingPassword={setEditingPassword}
+              passwordReqs={passwordReqs}
+              pwAttempted={pwAttempted}
               onDelete={openDelete}
             />
           )}
@@ -641,7 +695,12 @@ export function SettingsClient({
               You have unsaved changes
             </span>
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" onClick={reset}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={reset}
+                disabled={saving}
+              >
                 Reset
               </Button>
               <Button size="sm" onClick={handleSave} disabled={saving}>
@@ -671,11 +730,10 @@ export function SettingsClient({
                 variant="ghost"
                 size="sm"
                 onClick={() => setConfirming(false)}
-                className="text-red-400 hover:bg-red-400/10 hover:text-red-400 dark:hover:bg-red-400/10"
               >
                 Cancel
               </Button>
-              <Button size="sm" onClick={confirmSave}>
+              <Button ref={confirmBtnRef} size="sm" onClick={confirmSave}>
                 Confirm
               </Button>
             </div>

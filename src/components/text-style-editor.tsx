@@ -89,7 +89,7 @@ export function FontSizeInput({
         onKeyDown={(e) => {
           if (e.key === "Enter") commit((e.target as HTMLInputElement).value);
         }}
-        className="h-8 w-14 rounded-md border border-input bg-transparent py-1 pr-5 pl-2 text-sm outline-none"
+        className="h-8 w-14 rounded-md border border-input bg-transparent py-1 pr-5 pl-2 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring md:text-sm"
       />
       <button
         type="button"
@@ -262,7 +262,9 @@ export function ColorPicker({
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-label={ariaLabel}
-        className="size-8 rounded-md border border-input p-1"
+        aria-haspopup="true"
+        aria-expanded={open}
+        className="size-8 rounded-md border border-input p-1 outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         {isNone ? (
           <NoTintGlyph className="size-full" />
@@ -348,7 +350,7 @@ export function TextStyleEditor({
           value={style.fontFamily ?? "inter"}
           onChange={(e) => onChange({ fontFamily: e.target.value })}
           aria-label="Text font"
-          className="h-8 rounded-md border border-input bg-transparent px-2 text-sm outline-none"
+          className="h-8 rounded-md border border-input bg-transparent px-2 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring md:text-sm"
         >
           {Object.entries(FONTS).map(([key, f]) => (
             <option key={key} value={key}>

@@ -491,7 +491,9 @@ export function MusicPlayer({
     <audio
       ref={audioRef}
       src={audioSrc}
-      preload="auto"
+      // Only prefetch the whole track when it's set to autoplay; otherwise fetch
+      // just metadata so a muted-by-default player doesn't burn mobile data.
+      preload={config.autoplay ? "auto" : "metadata"}
       onPlay={() => setPlaying(true)}
       onPause={() => setPlaying(false)}
       onTimeUpdate={(e) => {
@@ -563,7 +565,7 @@ export function MusicPlayer({
     return (
       <div
         className={cn(
-          "animate-music-in fixed bottom-4 left-4 z-40 flex items-center gap-2 rounded-full border border-white/10 bg-black/60 py-1.5 pr-3 pl-1.5 text-white shadow-2xl backdrop-blur-xl",
+          "animate-music-in fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-[max(1rem,env(safe-area-inset-left))] z-40 flex items-center gap-2 rounded-full border border-white/10 bg-black/60 py-1.5 pr-3 pl-1.5 text-white shadow-2xl backdrop-blur-xl",
           className,
         )}
       >
@@ -767,7 +769,7 @@ export function MusicPlayer({
               disabled={!hasAudio}
               onChange={(e) => onSeek(Number(e.target.value))}
               aria-label="Seek"
-              className="player-slider disabled:cursor-default disabled:opacity-70"
+              className="player-slider disabled:cursor-default disabled:opacity-40"
               style={
                 {
                   background: sliderFill(progressPct, ACCENT),

@@ -257,7 +257,8 @@ export function PieChart({ slices }: { slices: PieSlice[] }) {
             />
             <span className="min-w-0 flex-1 truncate">{s.label}</span>
             <span className="shrink-0 tabular-nums text-muted-foreground">
-              {s.value} ({total > 0 ? Math.round((s.value / total) * 100) : 0}%)
+              {s.value.toLocaleString()} (
+              {total > 0 ? Math.round((s.value / total) * 100) : 0}%)
             </span>
           </li>
         ))}

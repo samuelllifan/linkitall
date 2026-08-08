@@ -13,9 +13,9 @@ import {
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { PasswordToggle } from "~/components/ui/password-toggle";
+import { Requirement } from "~/components/ui/requirement";
 import { setUsername, usernameError } from "~/lib/profiles";
 import { createClient } from "~/lib/supabase/client";
-import { cn } from "~/lib/utils";
 
 type Mode = "signin" | "signup" | "reset";
 
@@ -39,58 +39,6 @@ function GoogleIcon({ className }: { className?: string }) {
         d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1A11 11 0 0 0 2.18 7.06l3.66 2.84C6.71 7.3 9.14 5.38 12 5.38Z"
       />
     </svg>
-  );
-}
-
-function CheckIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="3"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden="true"
-    >
-      <path d="M20 6 9 17l-5-5" />
-    </svg>
-  );
-}
-
-/** A single requirement row: green when met, red when not. */
-function Requirement({
-  met,
-  attempted,
-  children,
-}: {
-  met: boolean;
-  // Only tint unmet requirements red once the user has tried to submit;
-  // before that they stay neutral so the form doesn't look angry on load.
-  attempted: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <li
-      className={cn(
-        "flex items-center gap-2 text-xs transition-colors duration-200",
-        met
-          ? "text-green-500"
-          : attempted
-            ? "text-red-400"
-            : "text-muted-foreground",
-      )}
-    >
-      <span className="flex size-3.5 shrink-0 items-center justify-center">
-        {met ? (
-          <CheckIcon className="size-3.5 animate-pop" />
-        ) : (
-          <span className="size-1 rounded-full bg-current" />
-        )}
-      </span>
-      {children}
-    </li>
   );
 }
 
@@ -152,12 +100,13 @@ export function LoginClient() {
   // Basic email shape check — enough to gate the button until it looks valid.
   const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 
-  // Focus the email field on load so you can start typing straight away. The
-  // initial mode is only ever sign-in/sign-up (both render `#email`); the reset
-  // tab is reached by a click, when focus is already where the user put it.
+  // Focus the first field on load and whenever the tab changes, so keyboard
+  // users always land in the new form: the reset tab renders `#reset-email`,
+  // sign in / sign up render `#email` (email comes before the username field).
   useEffect(() => {
-    document.getElementById("email")?.focus();
-  }, []);
+    const id = mode === "reset" ? "reset-email" : "email";
+    document.getElementById(id)?.focus();
+  }, [mode]);
 
   function switchMode(next: Mode) {
     setMode(next);

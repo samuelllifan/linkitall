@@ -1,7 +1,7 @@
 "use client";
 
 import QRCode from "qrcode";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "~/lib/utils";
 
 function ShareIcon({ className }: { className?: string }) {
@@ -154,6 +154,17 @@ export function ShareButton() {
     return () => document.removeEventListener("keydown", onKey);
   }, [open]);
 
+  // While open: move focus into the dialog (the Copy button) and restore it to
+  // the share trigger on close, so keyboard users aren't dropped back at the top.
+  const copyBtnRef = useRef<HTMLButtonElement>(null);
+  const prevFocusRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    prevFocusRef.current = document.activeElement as HTMLElement | null;
+    copyBtnRef.current?.focus();
+    return () => prevFocusRef.current?.focus?.();
+  }, [open]);
+
   async function copyLink() {
     let ok = false;
     try {
@@ -239,6 +250,7 @@ export function ShareButton() {
                 {url}
               </span>
               <button
+                ref={copyBtnRef}
                 type="button"
                 onClick={copyLink}
                 className={cn(

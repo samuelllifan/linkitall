@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { StackedMark } from "~/components/stacked-mark";
 import { Button } from "~/components/ui/button";
 
 // Root error boundary. Replaces Next.js's unstyled default with an on-brand
@@ -20,7 +21,11 @@ export default function RootError({
 
   return (
     <main className="flex flex-1 flex-col items-center justify-center px-6 py-20 text-center">
-      <h1 className="text-balance text-3xl font-bold tracking-tight sm:text-4xl">
+      <StackedMark className="size-12 text-muted-foreground" />
+      <p className="mt-6 text-sm font-medium uppercase tracking-widest text-muted-foreground">
+        Error
+      </p>
+      <h1 className="mt-2 text-balance text-3xl font-bold tracking-tight sm:text-4xl">
         Something went wrong
       </h1>
       <p className="mt-3 max-w-md text-balance leading-relaxed text-muted-foreground">
@@ -37,6 +42,11 @@ export default function RootError({
           <a href="/">Back home</a>
         </Button>
       </div>
+      {error.digest ? (
+        <p className="mt-6 text-xs text-muted-foreground">
+          Reference: {error.digest}
+        </p>
+      ) : null}
     </main>
   );
 }

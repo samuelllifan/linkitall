@@ -58,7 +58,7 @@ export function PasswordToggle({
       aria-label={visible ? "Hide password" : "Show password"}
       aria-pressed={visible}
       className={cn(
-        "absolute inset-y-0 right-0 flex items-center pr-3 text-muted-foreground transition-colors hover:text-foreground",
+        "absolute inset-y-0 right-0 flex items-center pr-3 pl-3 text-muted-foreground transition-colors hover:text-foreground",
         className,
       )}
     >

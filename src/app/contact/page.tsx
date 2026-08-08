@@ -82,8 +82,7 @@ export default function ContactPage() {
         Contact Us
       </h1>
       <p className="mt-3 text-sm text-muted-foreground">
-        Have a question or feedback? Fill out the form below and we'll get back
-        to you.
+        Have a question or feedback? We'll get back to you.
       </p>
 
       {submitted ? (
@@ -102,6 +101,23 @@ export default function ContactPage() {
             </a>
             .
           </p>
+          <div className="mt-4">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setSubmitted(false);
+                setName("");
+                setEmail("");
+                setSubject("");
+                setMessage("");
+                setErrors({});
+                setSubmitError(null);
+              }}
+            >
+              Send another message
+            </Button>
+          </div>
         </div>
       ) : (
         <form

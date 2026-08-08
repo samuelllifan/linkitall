@@ -248,8 +248,11 @@ export function AdminView({
                     </div>
                     <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted">
                       <div
-                        className="h-full rounded-full bg-[#ec4899]"
-                        style={{ width: `${(l.clicks / linkMax) * 100}%` }}
+                        className="h-full rounded-full"
+                        style={{
+                          width: `${(l.clicks / linkMax) * 100}%`,
+                          backgroundColor: CHART_COLORS[1],
+                        }}
                       />
                     </div>
                   </div>
@@ -297,8 +300,11 @@ export function AdminView({
                       </div>
                       <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted">
                         <div
-                          className="h-full rounded-full bg-[#3b82f6]"
-                          style={{ width: `${(l.views / locationMax) * 100}%` }}
+                          className="h-full rounded-full"
+                          style={{
+                            width: `${(l.views / locationMax) * 100}%`,
+                            backgroundColor: CHART_COLORS[0],
+                          }}
                         />
                       </div>
                     </div>

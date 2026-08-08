@@ -958,7 +958,7 @@ function LinkSchedulePopover({
                     patchBound("start", localInputToIso(e.target.value))
                   }
                   aria-label="Show link from"
-                  className="h-8 min-w-0 flex-1 rounded-md border border-input bg-transparent px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="h-8 min-w-0 flex-1 rounded-md border border-input bg-transparent px-2 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring md:text-sm"
                 />
                 {start ? (
                   <button
@@ -982,7 +982,7 @@ function LinkSchedulePopover({
                     patchBound("end", localInputToIso(e.target.value))
                   }
                   aria-label="Hide link after"
-                  className="h-8 min-w-0 flex-1 rounded-md border border-input bg-transparent px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="h-8 min-w-0 flex-1 rounded-md border border-input bg-transparent px-2 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring md:text-sm"
                 />
                 {end ? (
                   <button
@@ -1171,6 +1171,12 @@ export function MyPageClient({
   const [linkFlashTick, setLinkFlashTick] = useState(0);
   const [saving, setSaving] = useState(false);
   const [confirmingSave, setConfirmingSave] = useState(false);
+  // Inline save feedback: an error message shown by the unsaved bar (replaces a
+  // native alert() on failure), and a brief "Saved" confirmation pill.
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [justSaved, setJustSaved] = useState(false);
+  // Focused when the save-confirm dialog opens so Enter/Space confirms at once.
+  const confirmSaveBtnRef = useRef<HTMLButtonElement>(null);
   // Which element's font/text settings extension is open: "name", "bio", or a
   // link id. Only one is open at a time.
   const [fontOpen, setFontOpen] = useState<string | null>(null);
@@ -2157,6 +2163,7 @@ export function MyPageClient({
   }
 
   function save() {
+    setSaveError(null);
     // Require a URL in every link box — flash the empty ones instead of saving.
     const blankIds = draft.links
       .filter((l) => isBlankHref(l.href))
@@ -2164,6 +2171,7 @@ export function MyPageClient({
     if (blankIds.length > 0) {
       setFlashLinkIds(blankIds);
       setLinkFlashTick((t) => t + 1);
+      setSaveError("Add a URL to every link before saving.");
       return;
     }
 
@@ -2173,20 +2181,43 @@ export function MyPageClient({
   async function confirmSave() {
     setConfirmingSave(false);
     setSaving(true);
+    setSaveError(null);
     try {
       await savePage(draft);
       setSaved(draft);
+      // Brief confirmation; the unsaved bar itself slides away as dirty clears.
+      setJustSaved(true);
+      window.setTimeout(() => setJustSaved(false), 2000);
     } catch (err) {
       console.error("Failed to save page:", err);
       const message =
         err instanceof Error && err.message
           ? err.message
           : "Couldn't save your changes. Please try again.";
-      alert(message);
+      // Inline error near the save bar — consistent with mediaError/logoError,
+      // and unlike a native alert() it matches the app's dark styling.
+      setSaveError(message);
     } finally {
       setSaving(false);
     }
   }
+
+  // Save-confirm dialog keyboard: focus the Confirm button on open, Escape
+  // cancels, Enter confirms. A ref holds the latest confirmSave so the listener
+  // stays subscribed only to `confirmingSave` (confirmSave is a fresh closure
+  // each render, and the dialog blocks edits so nothing it reads goes stale).
+  const confirmSaveRef = useRef(confirmSave);
+  confirmSaveRef.current = confirmSave;
+  useEffect(() => {
+    if (!confirmingSave) return;
+    confirmSaveBtnRef.current?.focus();
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setConfirmingSave(false);
+      else if (e.key === "Enter") confirmSaveRef.current();
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [confirmingSave]);
 
   function reset() {
     setDraft(clone(saved));
@@ -2307,6 +2338,7 @@ export function MyPageClient({
                 onChange={(e) => {
                   updateLink(link.id, { href: `discord:${e.target.value}` });
                   setFlashLinkIds((ids) => ids.filter((id) => id !== link.id));
+                  setSaveError(null);
                 }}
                 onAnimationEnd={() =>
                   setFlashLinkIds((ids) => ids.filter((id) => id !== link.id))
@@ -2342,8 +2374,10 @@ export function MyPageClient({
               value={link.href}
               onChange={(e) => {
                 updateLink(link.id, { href: e.target.value });
-                // Clear the blank-flash flag as soon as they start typing.
+                // Clear the blank-flash flag (and the inline save hint) as soon
+                // as they start typing.
                 setFlashLinkIds((ids) => ids.filter((id) => id !== link.id));
+                setSaveError(null);
               }}
               onAnimationEnd={() =>
                 setFlashLinkIds((ids) => ids.filter((id) => id !== link.id))
@@ -2351,7 +2385,7 @@ export function MyPageClient({
               // Focusing the URL field closes the text settings — they only
               // apply to the display label, not the URL.
               onFocus={() => setFontOpen(null)}
-              placeholder="https://..."
+              placeholder="https://…"
               className={cn(flashLinkIds.includes(link.id) && "animate-flash")}
             />
           )}
@@ -2434,7 +2468,7 @@ export function MyPageClient({
                   }
                   className="text-muted-foreground"
                 >
-                  Reset
+                  Reset style
                 </Button>
               ) : null}
             </div>
@@ -3153,10 +3187,15 @@ export function MyPageClient({
       {unsavedBar.value ? (
         <div
           className={cn(
-            "pointer-events-none fixed inset-x-0 bottom-20 z-40 flex justify-center px-4 sm:bottom-6",
+            "pointer-events-none fixed inset-x-0 bottom-20 z-40 flex flex-col items-center gap-2 px-4 sm:bottom-6",
             unsavedBar.visible ? "animate-slide-up" : "animate-slide-down",
           )}
         >
+          {saveError ? (
+            <div className="pointer-events-auto max-w-xs rounded-lg border border-red-400/30 bg-background px-4 py-2 text-center text-sm text-red-400 shadow-lg">
+              {saveError}
+            </div>
+          ) : null}
           <div
             key={flashKey}
             onAnimationEnd={() => setFlashing(false)}
@@ -3181,6 +3220,28 @@ export function MyPageClient({
         </div>
       ) : null}
 
+      {/* Brief "Saved" confirmation. The unsaved bar slides away as `dirty`
+          clears on save, so this stands in for it to confirm the write landed. */}
+      {justSaved ? (
+        <div className="pointer-events-none fixed inset-x-0 bottom-20 z-40 flex justify-center px-4 sm:bottom-6">
+          <div className="flex animate-slide-up items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium text-foreground shadow-lg">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2.5}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+              className="size-4 text-green-500"
+            >
+              <path d="M20 6 9 17l-5-5" />
+            </svg>
+            Saved
+          </div>
+        </div>
+      ) : null}
+
       {/* Confirm save dialog */}
       {confirmingSave ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -3200,11 +3261,10 @@ export function MyPageClient({
                 variant="ghost"
                 size="sm"
                 onClick={() => setConfirmingSave(false)}
-                className={DESTRUCTIVE_GHOST}
               >
                 Cancel
               </Button>
-              <Button size="sm" onClick={confirmSave}>
+              <Button ref={confirmSaveBtnRef} size="sm" onClick={confirmSave}>
                 Confirm
               </Button>
             </div>
@@ -3525,7 +3585,7 @@ export function MyPageClient({
               />
 
               {mediaError ? (
-                <p className="mt-3 text-xs text-destructive">{mediaError}</p>
+                <p className="mt-3 text-xs text-red-400">{mediaError}</p>
               ) : null}
 
               {/* Color picker extension */}
@@ -3970,7 +4030,7 @@ export function MyPageClient({
               className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-md file:border file:border-border file:bg-background file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-foreground hover:file:bg-accent"
             />
             {logoError ? (
-              <p className="mt-2 text-xs text-destructive">{logoError}</p>
+              <p className="mt-2 text-xs text-red-400">{logoError}</p>
             ) : null}
             {draft.links.find((l) => l.id === logoModal.value)?.logo ? (
               <Button
@@ -4020,6 +4080,7 @@ export function MyPageClient({
               onPointerDown={onCropPointerDown}
               onPointerMove={onCropPointerMove}
               onPointerUp={onCropPointerUp}
+              onPointerCancel={onCropPointerUp}
             >
               {/* biome-ignore lint/performance/noImgElement: in-memory crop source */}
               <img

@@ -13,7 +13,7 @@ export function WhatsNewLink() {
       onClick={openWhatsNew}
       className="text-left underline-offset-4 hover:text-foreground hover:underline"
     >
-      What's new
+      What's New
     </button>
   );
 }

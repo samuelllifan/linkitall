@@ -229,7 +229,7 @@ export function Navbar({
             aria-expanded={mobileOpen}
             aria-controls="mobile-nav"
             aria-label={mobileOpen ? "Close menu" : "Open menu"}
-            className="flex size-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:hidden"
+            className="flex size-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:hidden"
           >
             {mobileOpen ? (
               <CloseIcon className="size-5" />
@@ -246,7 +246,7 @@ export function Navbar({
                 aria-haspopup="menu"
                 aria-expanded={menuOpen}
                 aria-label="Account menu"
-                className="flex items-center gap-2 rounded-full py-1 pr-2 pl-1 transition-colors hover:bg-muted"
+                className="flex items-center gap-2 rounded-full py-1 pr-3 pl-1 transition-colors hover:bg-muted"
               >
                 <Avatar />
                 <span className="hidden max-w-[12rem] truncate text-sm text-muted-foreground sm:inline">
@@ -328,9 +328,7 @@ export function Navbar({
               className="flex items-center gap-2 rounded-full py-1 pr-3 pl-1 transition-colors hover:bg-muted"
             >
               <Avatar />
-              <span className="text-sm text-muted-foreground">
-                Not signed in
-              </span>
+              <span className="text-sm text-muted-foreground">Sign in</span>
             </Link>
           )}
         </div>

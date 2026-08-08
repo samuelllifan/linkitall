@@ -5,7 +5,7 @@ import { ImageResponse } from "next/og";
 // cache it.
 export const runtime = "nodejs";
 export const alt =
-  "stacked — the fastest, easiest, and most customizable way to create your link-in-bio page";
+  "stacked — the fastest, easiest, and most customizable way to create your link-in-bio page.";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 

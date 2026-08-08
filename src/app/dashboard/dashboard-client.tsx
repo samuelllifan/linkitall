@@ -204,8 +204,9 @@ export function DashboardClient({
                 setRangeKey(r.key);
                 localStorage.setItem("dashboard:range", r.key);
               }}
+              aria-pressed={r.key === rangeKey}
               className={cn(
-                "shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                "shrink-0 whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium transition-colors",
                 r.key === rangeKey
                   ? "bg-foreground text-background"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground",
@@ -343,8 +344,9 @@ export function DashboardClient({
                   setGraphTab(key);
                   localStorage.setItem("dashboard:graphTab", key);
                 }}
+                aria-pressed={graphTab === key}
                 className={cn(
-                  "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                  "rounded-md px-3 py-2 text-sm font-medium transition-colors",
                   graphTab === key
                     ? "bg-foreground text-background"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground",

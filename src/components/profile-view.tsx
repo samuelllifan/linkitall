@@ -1107,9 +1107,10 @@ function useCopied(timeout = 1600) {
 }
 
 /**
- * Bottom-of-screen "Link copied!" toast, styled and animated like the editor's
- * unsaved-changes bar: it slides up on `show`, then slides back down before
- * unmounting so the exit is animated too.
+ * Bottom-of-screen "Username copied!" toast, styled and animated like the
+ * editor's unsaved-changes bar: it slides up on `show`, then slides back down
+ * before unmounting so the exit is animated too. Shown after a Discord username
+ * is copied to the clipboard.
  */
 function CopiedToast({ show }: { show: boolean }) {
   const [mounted, setMounted] = useState(show);
@@ -1153,7 +1154,7 @@ function CopiedToast({ show }: { show: boolean }) {
         >
           <path d="M20 6 9 17l-5-5" />
         </svg>
-        Link copied!
+        Username copied!
       </div>
     </div>,
     document.body,

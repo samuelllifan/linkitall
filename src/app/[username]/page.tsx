@@ -132,7 +132,7 @@ export default async function UserPage({
   };
 
   return (
-    <main className="relative mx-auto flex min-h-[calc(100vh-3.5rem)] w-full flex-col items-center justify-center px-6 pt-16 pb-28">
+    <main className="relative mx-auto flex min-h-[calc(100dvh-3.5rem)] w-full flex-col items-center justify-center px-6 pt-16 pb-28">
       <ShareButton />
       <ProfileView data={publicData} username={page.username} />
     </main>

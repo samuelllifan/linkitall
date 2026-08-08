@@ -454,6 +454,17 @@
 .player-slider::-moz-range-track {
   background: transparent;
 }
+/* Touch devices have no hover state, so the hover-reveal thumb above would stay
+   invisible there — leaving nothing to grab when dragging. Show it permanently
+   on coarse pointers. */
+@media (hover: none) {
+  .player-slider::-webkit-slider-thumb {
+    opacity: 1;
+  }
+  .player-slider::-moz-range-thumb {
+    opacity: 1;
+  }
+}
 
 /* Instagram-style clip picker — a draggable selection window over the whole
    song, in the music editor. The track is a rounded bar (the album cover shows

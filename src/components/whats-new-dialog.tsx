@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "~/components/ui/button";
 import { type ChangelogEntry, latestEntry } from "~/lib/changelog";
@@ -133,6 +133,22 @@ export function WhatsNewDialog({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, close]);
 
+  // While open: lock background scroll, move focus into the dialog ("Got it"),
+  // and restore focus to whatever was focused before on close.
+  const gotItRef = useRef<HTMLButtonElement>(null);
+  const prevFocusRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    prevFocusRef.current = document.activeElement as HTMLElement | null;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    gotItRef.current?.focus();
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      prevFocusRef.current?.focus?.();
+    };
+  }, [open]);
+
   if (!open || !entry || typeof document === "undefined") return null;
 
   return createPortal(
@@ -182,7 +198,7 @@ export function WhatsNewDialog({
 
           <Entry entry={entry} />
 
-          <Button onClick={close} className="mt-6 w-full">
+          <Button ref={gotItRef} onClick={close} className="mt-6 w-full">
             Got it
           </Button>
         </div>

@@ -14,7 +14,7 @@ export default function Home() {
       {/* Scoped keyframes for the shining gradients on the hero adjectives. */}
       {/* biome-ignore lint/security/noDangerouslySetInnerHtml: static, no user input */}
       <style dangerouslySetInnerHTML={{ __html: SLOT_SHINE_CSS }} />
-      <section className="relative flex min-h-[calc(100vh-3.5rem)] flex-col items-center justify-center overflow-hidden px-6 py-20 text-center">
+      <section className="relative flex min-h-[calc(100dvh-3.5rem)] flex-col items-center justify-center overflow-hidden px-6 py-20 text-center">
         <div className="flex max-w-2xl flex-col items-center gap-6">
           <h1 className="text-balance text-5xl font-bold tracking-tight sm:text-6xl lg:text-7xl">
             All of you, in one
@@ -73,7 +73,7 @@ const FEATURES = [
   {
     title: "Customize freely",
     description:
-      "Tweak colors, layout, and backgrounds to make your page truly yours, quickly and easily. Or start from a preset template to match any vibe in seconds.",
+      "Tweak colors, layout, and backgrounds to make your page truly yours, quickly and easily.",
     icon: (
       <svg
         aria-hidden="true"
@@ -186,10 +186,10 @@ function PageShowcase() {
       <div className="relative z-10 mx-auto w-full max-w-[100rem] px-6 py-16 sm:px-12 sm:py-24 lg:px-20">
         <div className="mx-auto mb-10 max-w-2xl text-center sm:mb-14">
           <h2 className="text-balance text-4xl font-bold tracking-tight sm:text-5xl">
-            Join us now.
+            Join us
           </h2>
           <p className="mt-5 text-balance text-lg leading-relaxed text-muted-foreground">
-            Sign up now and make your own, it&apos;s free.
+            Make your own — it&apos;s free.
           </p>
           {/*
             Social proof lands here once there's real momentum. Hold the count
@@ -232,7 +232,12 @@ function PageShowcase() {
               className="h-full w-full flex-1 bg-transparent pr-3 text-base outline-none placeholder:text-muted-foreground/60 sm:text-sm"
             />
           </div>
-          <Button type="submit" size="lg" className="h-12">
+          <Button
+            type="submit"
+            size="lg"
+            className="h-12"
+            disabled={!claim.trim()}
+          >
             Claim Your Page
           </Button>
         </form>
@@ -249,12 +254,16 @@ const SLOT_SHINE_CSS = `
   to { background-position: -200% center; }
 }
 .slot-shine {
-  /* inline-block + a sliver of horizontal padding so the italic glyphs' slant
-     overhang isn't clipped by the background-clip:text box (e.g. the tail of
-     "fastest"). The matching negative margins keep the surrounding spacing. */
+  /* inline-block + a little padding on every side so the glyphs aren't clipped
+     by the background-clip:text box: the horizontal sliver clears the italic
+     slant overhang (e.g. the tail of "fastest"), and the vertical room clears
+     ascenders/descenders — without it the paint box is only line-height tall
+     (== font-size) and descenders fall outside it and render transparent (e.g.
+     the "g" in "grow" was cut off). Matching negative margins on all sides keep
+     the surrounding layout unchanged. */
   display: inline-block;
-  padding: 0 0.08em;
-  margin: 0 -0.08em;
+  padding: 0.12em 0.08em 0.22em;
+  margin: -0.12em -0.08em -0.22em;
   background-image: linear-gradient(100deg, #94a3b8 0%, #94a3b8 40%, #ffffff 50%, #94a3b8 60%, #94a3b8 100%);
   background-size: 200% auto;
   background-clip: text;

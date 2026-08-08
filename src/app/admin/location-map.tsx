@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { CHART_COLORS } from "~/lib/chart-colors";
 import {
   COUNTRIES,
   countryFlag,
@@ -13,8 +14,8 @@ import {
   MAP_WIDTH,
 } from "~/lib/world-map-config";
 
-/** Base map tint — matches CHART_COLORS[0] used elsewhere in the admin view. */
-const ACCENT = "#3b82f6";
+/** Base map tint — shares CHART_COLORS[0] with the rest of the admin view. */
+const ACCENT = CHART_COLORS[0];
 
 export interface LocationDatum {
   /** ISO alpha-2 code, or "ZZ" for unknown. */

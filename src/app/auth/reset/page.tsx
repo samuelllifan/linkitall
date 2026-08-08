@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "~/components/ui/button";
 import {
   Card,
@@ -13,8 +13,8 @@ import {
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { PasswordToggle } from "~/components/ui/password-toggle";
+import { Requirement } from "~/components/ui/requirement";
 import { createClient } from "~/lib/supabase/client";
-import { cn } from "~/lib/utils";
 
 /** Reached from the password-reset email (via /auth/callback, which exchanges
  * the recovery code into a session). The user sets a new password here. */
@@ -38,6 +38,13 @@ export default function ResetPasswordPage() {
       setChecking(false);
     });
   }, []);
+
+  // Focus the password field once the form is shown so the user can type right
+  // away (matches the login form's autofocus behavior).
+  const passwordRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (!checking && hasSession) passwordRef.current?.focus();
+  }, [checking, hasSession]);
 
   const reqs = [
     { label: "At least 8 characters", met: password.length >= 8 },
@@ -105,6 +112,7 @@ export default function ResetPasswordPage() {
                 <Label htmlFor="password">New password</Label>
                 <div className="relative">
                   <Input
+                    ref={passwordRef}
                     id="password"
                     type={showPassword ? "text" : "password"}
                     autoComplete="new-password"
@@ -119,25 +127,13 @@ export default function ResetPasswordPage() {
                 </div>
                 <ul className="mt-1 flex flex-col gap-1">
                   {reqs.map((r) => (
-                    <li
+                    <Requirement
                       key={r.label}
-                      className={cn(
-                        "flex items-center gap-2 text-xs transition-colors duration-200",
-                        r.met
-                          ? "text-green-500"
-                          : attempted
-                            ? "text-red-400"
-                            : "text-muted-foreground",
-                      )}
+                      met={r.met}
+                      attempted={attempted}
                     >
-                      <span
-                        className={cn(
-                          "size-1.5 rounded-full",
-                          r.met ? "bg-green-500" : "bg-current",
-                        )}
-                      />
                       {r.label}
-                    </li>
+                    </Requirement>
                   ))}
                 </ul>
               </div>
