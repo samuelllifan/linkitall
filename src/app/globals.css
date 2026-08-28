@@ -29,6 +29,14 @@
   --radius-md: 0.375rem;
   --radius-lg: 0.5rem;
   --radius-xl: 0.75rem;
+  /* Fonts (wired from next/font in layout.tsx). Inter runs the UI; JetBrains
+     Mono is the technical accent used via `font-mono`. */
+  --font-sans:
+    var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, sans-serif;
+  --font-mono:
+    var(--font-jetbrains), ui-monospace, SFMono-Regular, Menlo, Consolas,
+    monospace;
 }
 
 /* OKLCH Design Tokens — dark only (zinc). */
@@ -44,12 +52,18 @@
   --foreground: oklch(0.985 0 0);
   --muted: oklch(0.269 0 0);
   --muted-foreground: oklch(0.708 0 0);
-  --card: oklch(0.145 0 0);
+  /* Card & popover sit ABOVE the background on the elevation ramp: a touch
+     lighter than --background so raised surfaces read as lifted instead of
+     blending into the page (they used to equal --background, so every card
+     was borderline invisible). Popovers float highest. */
+  --card: oklch(0.185 0 0);
   --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.145 0 0);
+  --popover: oklch(0.205 0 0);
   --popover-foreground: oklch(0.985 0 0);
-  --border: oklch(0.269 0 0);
-  --input: oklch(0.269 0 0);
+  /* Slightly brighter hairline so borders stay legible against the now-lighter
+     card surfaces. */
+  --border: oklch(0.278 0 0);
+  --input: oklch(0.278 0 0);
   --primary: oklch(0.985 0 0);
   --primary-foreground: oklch(0.205 0 0);
   --secondary: oklch(0.269 0 0);
@@ -57,7 +71,80 @@
   --accent: oklch(0.269 0 0);
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.396 0.141 25.723);
-  --ring: oklch(0.556 0 0);
+  --ring: oklch(0.62 0 0);
+
+  /* Motion. Tailwind's own default transition easing is cubic-bezier(0.4,0,0.2,1)
+     — byte-for-byte its `ease-in-out` — but almost every place in this codebase
+     that names a curve explicitly asks for `ease-out`. Since only ~8% of our
+     transitions name one at all, the default was quietly governing nearly
+     everything with a DIFFERENT curve from the few that opted in, so comparable
+     interactions decelerated differently. Pointing the default at ease-out puts
+     the whole app on one curve without touching a single call site.
+     `--ease-exit` is for things leaving; accelerating out reads better than
+     decelerating out. */
+  --default-transition-timing-function: cubic-bezier(0, 0, 0.2, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  /* The house "soft settle": decelerates hard at the end without overshooting,
+     which is what makes a thing read as PLACED rather than merely moved. Used by
+     everything that arrives at section scale — the music card, the click-to-enter
+     splash, the scroll reveals, the landing page's device switch. It was written
+     out by hand in four places before it was a token; keep it a token. */
+  --ease-settle: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Duration tiers, named for their job so new code reaches for an existing one
+     instead of inventing a fourth number. These are the values the codebase
+     already uses most; nothing here is new. */
+  --dur-press: 75ms; /* active/press only, deliberately below the scale */
+  --dur-fast: 150ms; /* colour hovers, focus rings, state-toggle transforms */
+  --dur-enter: 200ms; /* keyframed enter/exit — never a hover */
+  --dur-slow: 300ms; /* transform gestures: things that scale or lift */
+  /* Section-scale arrivals only — a block coming into view, not an interaction.
+     It sits above the tier above on purpose: 300ms over a whole section reads as
+     a twitch, because the eye is tracking a large object rather than a control
+     responding to a click. Not a new number either — it is the duration the
+     music card has always arrived on (`music-in`), promoted to a token. */
+  --dur-reveal: 500ms;
+
+  /* Brand chroma. The UI stays black & white; this rainbow is used as brand /
+     information only — the logo mark, active states, one gradient moment — a
+     spectrum rather than a single key hue (deliberately skips green; green
+     stays functional for Spotify links & success states). */
+  --brand-grad: linear-gradient(
+    100deg,
+    #fbbf24,
+    #fb7185,
+    #f472b6,
+    #a78bfa,
+    #60a5fa,
+    #22d3ee
+  );
+  /* The same spectrum, built to LOOP. Three things make it seamless where
+     --brand-grad can't be:
+       * `repeating-` gives it a fixed period (800px) instead of stretching to
+         whatever box it lands in, so a translation by one period is a no-op;
+       * the stop list is a palindrome, so the wrap from the cool end back to
+         amber runs back through the spectrum instead of cutting across the hue
+         wheel and flashing a dull band at the seam;
+       * it is a flat 90deg. At any other angle a horizontal translation shifts
+         the phase by only cos of the tilt, so one "period" of travel would land
+         slightly off and the mismatch would accumulate into a visible jump.
+     Whoever animates this MUST also set `background-size: 800px 100%`: at the
+     default `auto` the image is box-sized and tiles, and every tile boundary
+     cuts the pattern mid-period -- a static seam that no timing can hide. */
+  --brand-grad-loop: repeating-linear-gradient(
+    90deg,
+    #fbbf24 0px,
+    #fb7185 80px,
+    #f472b6 160px,
+    #a78bfa 240px,
+    #60a5fa 320px,
+    #22d3ee 400px,
+    #60a5fa 480px,
+    #a78bfa 560px,
+    #f472b6 640px,
+    #fb7185 720px,
+    #fbbf24 800px
+  );
 }
 
 @layer base {
@@ -86,20 +173,205 @@
     background-color: var(--popover);
     color: var(--popover-foreground);
   }
-  /* Theme switching: fade surfaces (backgrounds, borders) on one shared clock
-     so boxes flip together instead of in stages. Text and icon colors are
-     deliberately excluded — fading them dips through mid-gray against the
-     also-fading background, which reads as a flash; snapping them keeps text
-     crisp while the surfaces cross-fade underneath. 150ms matches Tailwind's
-     default transition duration, keeping elements that declare their own
-     transition utilities in sync with everything else. */
+  /* Fade surfaces (backgrounds, borders) on one shared clock so boxes flip
+     together instead of in stages. Text and icon colors are deliberately
+     excluded — fading them dips through mid-gray against the also-fading
+     background, which reads as a flash; snapping them keeps text crisp while
+     the surfaces cross-fade underneath.
+     Duration AND curve both match what Tailwind's utilities use by default (see
+     --default-transition-timing-function above), so an element fading via this
+     rule and a sibling fading via `transition-colors` are genuinely in step.
+     They previously shared the duration but not the curve: the CSS keyword
+     `ease-out` is cubic-bezier(0,0,0.58,1), which is not the same thing.
+     CAVEAT: these are three LONGHANDS. Any element that declares the
+     `transition` SHORTHAND resets transition-property and loses all three, so
+     its background/border/outline colors will snap. Use longhands in bespoke
+     rules, or re-list these colors explicitly. */
   *,
   ::before,
   ::after {
     transition-property: background-color, border-color, outline-color;
-    transition-duration: 0.15s;
-    transition-timing-function: ease-out;
+    transition-duration: var(--dur-fast);
+    transition-timing-function: var(--default-transition-timing-function);
   }
+}
+
+/* iOS Safari zooms the whole page in when a focused input / editable element
+   renders below 16px. Our rich-text editor fields (name / bio) and the music
+   card's inline fields carry the owner's chosen size inline, which can be
+   <16px. Mark those editor fields `.no-zoom`: on coarse pointers we floor the
+   rendered size at 16px (never shrinking a larger chosen size, via `max()`),
+   so tapping in to edit no longer jump-zooms. The saved/public page renders
+   the real size on non-editable elements, so WYSIWYG is unchanged there — the
+   nudge only applies while typing on a touch device. `--no-zoom-fs` is set
+   inline to the field's own font-size. */
+@media (pointer: coarse) {
+  .no-zoom {
+    /* biome-ignore lint/complexity/noImportantStyles: must beat the per-field inline font-size to lift it to the 16px iOS-zoom floor */
+    font-size: max(16px, var(--no-zoom-fs, 16px)) !important;
+  }
+}
+
+/* Card / panel elevation: a hairline top highlight + a soft, tight drop shadow
+   so raised surfaces read as lifted off the page. Pairs with the lighter
+   --card / --popover tokens above. */
+.elev-card {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 4px 16px -8px rgba(0, 0, 0, 0.55);
+}
+
+/* The landing wall's marquee rows. Each row renders its card set twice, so a
+   strip is 2 sets wide and 25% of it is half a set: sliding +25% -> -25% travels
+   exactly one full set, which is why the two endpoints look identical and the
+   loop never jumps.
+   Sliding SYMMETRICALLY (rather than 0 -> -50%) is the part that matters. The
+   strip is centred on the hero, so the area covered for the whole cycle is the
+   overlap of every position it passes through. Sweeping 0 -> -50% leaves that
+   overlap sitting on the strip's left half, and the right side of the hero
+   drains out near the end of every cycle before snapping back. Centring the
+   travel centres the covered area too. See the note in pages-wall.tsx. */
+@keyframes wall-marquee {
+  from {
+    transform: translateX(25%);
+  }
+  to {
+    transform: translateX(-25%);
+  }
+}
+
+/* The claim-your-name field on the landing hero.
+   At rest it's a plain neutral hairline like any other input. On focus the brand
+   spectrum arrives as a 1px ring and pans into place once, then holds still --
+   the site's one chromatic moment, spent exactly where a visitor commits to a
+   name. Built with the padding-box/border-box background trick rather than a
+   border-colour change, so the ring can be a gradient and nothing reflows. */
+.claim-field {
+  /* The resting hairline. The fill is OPAQUE on purpose: it sits over the
+     border-box layer, so a translucent fill would let what's behind the field
+     bleed through the middle of it. */
+  --claim-fill: oklch(0.185 0 0);
+  position: relative;
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--claim-fill), var(--claim-fill)) padding-box,
+    linear-gradient(var(--input), var(--input)) border-box;
+  /* Longhands, not the `transition` shorthand: the shorthand would reset
+     transition-property and silently drop the base layer's
+     background/border/outline-color transitions from this element. */
+  transition-property: box-shadow, background-color, border-color;
+  transition-duration: var(--dur-fast);
+  transition-timing-function: var(--default-transition-timing-function);
+}
+
+/* The spectrum ring lives on a pseudo-element so it can FADE.
+   `background-image` is not an interpolable property: swapping the border-box
+   layer from a flat colour to a six-stop gradient is a DISCRETE change, so the
+   colour used to snap into existence and only its position animated. Painting
+   the gradient on an overlay instead means opacity and the sweep both transition
+   normally, and the neutral hairline stays underneath so the edge never jumps.
+   `inset: -1px` because an absolutely-positioned child is placed against the
+   parent's PADDING box -- the extra pixel pushes the ring back out onto the
+   parent's transparent 1px border. */
+.claim-field::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  /* One more pixel than the parent's `rounded-lg`, to match `inset: -1px`. */
+  border-radius: calc(0.5rem + 1px);
+  padding: 1px;
+  background: var(--brand-grad-loop);
+  /* Exactly one period, so tiles butt up against each other with no seam and a
+     translation of 800px is invisible. See --brand-grad-loop. */
+  background-size: 800px 100%;
+  background-position: 0 0;
+  /* Paint only the 1px frame: fill the whole box, then mask the content box out. */
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0;
+  pointer-events: none;
+  /* Only the fade is a transition now -- the colour is a running animation, so
+     it has no resting position to interpolate toward. Fading on the fast tier
+     keeps the ring's arrival in step with the rest of the page, and staying a
+     transition means blurring reverses it instead of cutting out. */
+  transition: opacity var(--dur-fast) var(--default-transition-timing-function);
+}
+
+.claim-field:focus-within::after {
+  opacity: 1;
+  /* One full period per cycle, linear and endless: the colour has to travel at
+     a constant rate or the loop reads as a pulse, and any duration works so
+     long as the distance is exactly one period. */
+  animation: brand-ring-cycle 6s linear infinite;
+}
+
+@keyframes brand-ring-cycle {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 800px 0;
+  }
+}
+
+/* The claim field's cycling ring, generalised: a 1px border painted with the
+   looping brand spectrum. Same recipe, same keyframe, so every ring in the app
+   reads as one idea rather than several near-misses -- fill the box with the
+   gradient, then mask the content box out so only the frame survives.
+   Host requirements: it must establish a positioning context (this sets
+   `relative` itself) and carry its own radius, which the ring inherits. Give the
+   host a TRANSPARENT border too, or its border will sit outside this ring and
+   read as a double outline. */
+.brand-ring {
+  position: relative;
+}
+.brand-ring::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: var(--brand-grad-loop);
+  /* Exactly one period -- see --brand-grad-loop, and do not change one without
+     the other. */
+  background-size: 800px 100%;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  animation: brand-ring-cycle 6s linear infinite;
+}
+
+.claim-field:focus-within {
+  /* Barely-there halo so the field still lifts off the moving wall behind it. */
+  box-shadow: 0 0 0 4px oklch(0.985 0 0 / 0.05);
+}
+
+/* Brand gradient, clipped to text — the wordmark period, hero accent words,
+   share-card titles. The base color is transparent so the gradient shows. */
+.brand-text {
+  background: var(--brand-grad);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+/* Brand gradient as a fill (logo tiles, the active-nav underline, accent bars). */
+.brand-bg {
+  background: var(--brand-grad);
+  background-size: 200% auto;
 }
 
 /* Gentle amber outline flash for the "unsaved changes" bar when a save is
@@ -197,6 +469,103 @@
 }
 .animate-slide-down {
   animation: slide-down 0.25s ease-in forwards;
+}
+
+/* Scroll reveal — the shared arrival for landing-page blocks (reveal.tsx adds
+   `.reveal-in` the first time the element is scrolled into view).
+
+   A transition rather than a keyframe animation, because the trigger is a class
+   toggle from an IntersectionObserver: a keyframe would have to be re-armed, and
+   `animation-fill-mode` would fight the resting state.
+
+   LONGHANDS, not the `transition` shorthand. The base layer puts every element
+   on a shared clock for background/border/outline colour (see @layer base), and
+   the shorthand resets transition-property and silently drops it. Listing
+   opacity + transform here still overrides that clock ON THIS ELEMENT, which is
+   why reveal targets should be headings, copy, and layout wrappers — things with
+   no colour of their own to fade. Put the reveal on the wrapper, not on the
+   button inside it.
+
+   `will-change` is deliberately absent: it would pin a compositor layer for the
+   life of the page for a transition that runs exactly once. */
+.reveal {
+  opacity: 0;
+  transform: translateY(var(--reveal-rise, 1rem));
+  transition-property: opacity, transform;
+  transition-duration: var(--dur-reveal);
+  transition-timing-function: var(--ease-settle);
+  transition-delay: var(--reveal-delay, 0ms);
+}
+.reveal-in {
+  opacity: 1;
+  transform: none;
+}
+/* A child that grows out from its centre when its `.reveal` parent arrives —
+   the brand rule above the closing CTA's heading. Driven off the PARENT's state
+   rather than its own so it can't need a second observer, and so a bar and the
+   heading under it are guaranteed to start on the same frame.
+   The parent owns opacity; this owns transform. Splitting them across two
+   elements is what lets the bar scale while everything else translates: one
+   element cannot hold two different transforms on the same property. Reveal's
+   `rise="0px"` turns the parent's own translate off so the bar doesn't drop in
+   as well as grow. Deliberately the same motion as `animate-step-progress` in
+   how-it-works — both are brand-gradient bars scaling from their origin. */
+.reveal > .reveal-grow {
+  transform: scaleX(0);
+  transition-property: transform;
+  transition-duration: var(--dur-reveal);
+  transition-timing-function: var(--ease-settle);
+  transition-delay: var(--reveal-delay, 0ms);
+}
+.reveal-in > .reveal-grow {
+  transform: scaleX(1);
+}
+@media (scripting: none) {
+  .reveal > .reveal-grow {
+    transform: none;
+  }
+}
+/* Without JS the observer never fires, and a hidden `.reveal` would leave whole
+   sections of the marketing page permanently blank. Show them instead. */
+@media (scripting: none) {
+  .reveal {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Landing "how it works" section (how-it-works.tsx).
+
+   The countdown bar under the active step. `scaleX` rather than `width` so it
+   stays on the compositor, and `linear` because it represents elapsed time —
+   any easing would make it lie about how long is left. Its duration is set
+   inline from STEP_MS, so the two can't drift apart. */
+@keyframes step-progress {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+.animate-step-progress {
+  animation: step-progress linear forwards;
+}
+
+/* Draws a stroked path on, for the sample chart's two lines. Relies on
+   `pathLength="1"` on the path, which normalises the geometry so one keyframe
+   works for any path length. */
+@keyframes draw-line {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+.animate-draw-line {
+  stroke-dasharray: 1;
+  animation: draw-line 1.1s var(--default-transition-timing-function) forwards;
 }
 
 /* Gradient distribution slider — the track shows the gradient itself (set via
@@ -391,7 +760,39 @@
   }
 }
 .animate-music-in {
-  animation: music-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: music-in var(--dur-reveal) var(--ease-settle) both;
+}
+
+/* "Click to enter" splash — the content rises and settles on first paint, then
+   the call-to-action breathes gently (a soft opacity + glow pulse) to read as
+   "tap me" without a jarring blink. */
+@keyframes enter-rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.animate-enter-rise {
+  animation: enter-rise 0.7s var(--ease-settle) both;
+}
+
+@keyframes enter-breathe {
+  0%,
+  100% {
+    opacity: 0.72;
+    text-shadow: 0 0 0 rgba(255, 255, 255, 0);
+  }
+  50% {
+    opacity: 1;
+    text-shadow: 0 0 22px rgba(255, 255, 255, 0.35);
+  }
+}
+.animate-enter-breathe {
+  animation: enter-breathe 2.6s ease-in-out infinite;
 }
 
 /* Progress + volume sliders for the music player — styled like Spotify's:
@@ -546,3 +947,20 @@
    profile-picture effect, and animated-text effect for those users — the
    product's core, opt-in visual features. Motion here is deliberate and
    user-chosen (avatar effects, text effects), so it always plays. */
+
+/* Soft brand "aurora" glow behind the auth / 404 / error screens — a big,
+   blurred, low-opacity gradient blob that slowly wanders so the dark void feels
+   alive but calm. The element supplies its own blur + opacity; this drifts it.
+   CSS-only (no WebGL) so it stays safe on every platform. */
+@keyframes aurora-drift-a {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) scale(1) rotate(0deg);
+  }
+  50% {
+    transform: translate(-44%, -58%) scale(1.18) rotate(10deg);
+  }
+}
+.aurora-a {
+  animation: aurora-drift-a 20s ease-in-out infinite;
+}

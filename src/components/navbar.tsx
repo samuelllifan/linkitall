@@ -77,7 +77,26 @@ function CloseIcon({ className }: { className?: string }) {
   );
 }
 
-function Avatar() {
+// The account avatar mirrors the user's own page: their uploaded picture when
+// set, otherwise the first letter of their page name (matching profile-view's
+// fallback), and a generic icon only for signed-out visitors.
+function Avatar({ src, name }: { src?: string | null; name?: string | null }) {
+  if (src) {
+    return (
+      <span className="size-8 shrink-0 overflow-hidden rounded-full ring-1 ring-white/10">
+        {/* biome-ignore lint/performance/noImgElement: tiny avatar, often a data URL */}
+        <img src={src} alt="" className="size-full object-cover" />
+      </span>
+    );
+  }
+  const initial = (name?.trim().charAt(0) ?? "").toUpperCase();
+  if (initial) {
+    return (
+      <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-semibold text-muted-foreground">
+        {initial}
+      </span>
+    );
+  }
   return (
     <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
       <UserIcon className="size-4" />
@@ -89,10 +108,14 @@ export function Navbar({
   userEmail,
   username,
   isAdmin = false,
+  avatarUrl = null,
+  displayName = null,
 }: {
   userEmail: string | null;
   username: string | null;
   isAdmin?: boolean;
+  avatarUrl?: string | null;
+  displayName?: string | null;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -181,25 +204,39 @@ export function Navbar({
 
   async function signOut() {
     setSigningOut(true);
-    await createClient().auth.signOut();
-    setMenuOpen(false);
-    router.push("/");
-    router.refresh();
+    try {
+      await createClient().auth.signOut();
+      setMenuOpen(false);
+      router.push("/");
+      router.refresh();
+    } catch {
+      // Recover the button if sign-out fails (e.g. offline) instead of leaving
+      // it stuck on "Signing out…" until a manual reload.
+      setSigningOut(false);
+    }
   }
 
   return (
     <nav
       ref={mobileNavRef}
+      // See footer.tsx: two unnamed <nav>s on a page are indistinguishable in a
+      // landmark list. "Main" as a bare noun — AT appends "navigation" itself.
+      aria-label="Main"
       className="sticky top-0 z-50 border-b border-border bg-background"
     >
       <div className="flex h-14 w-full items-center gap-3 px-4 sm:gap-6 sm:px-6">
         <Link
           href="/"
           onClick={guardedClick}
-          className="flex items-center gap-2 font-semibold tracking-tight"
+          className="group flex items-center gap-2 font-semibold tracking-tight"
         >
-          <StackedMark className="size-5" />
-          stacked
+          <StackedMark
+            variant="brand"
+            className="size-5 transition-transform duration-300 group-hover:scale-110"
+          />
+          <span>
+            stacked<span className="brand-text">.</span>
+          </span>
         </Link>
         {/* Inline page links — collapsed into the mobile drawer below `sm`. */}
         <div className="hidden gap-4 sm:flex">
@@ -209,13 +246,20 @@ export function Navbar({
               href={link.href}
               onClick={guardedClick}
               className={cn(
-                "whitespace-nowrap text-sm transition-colors hover:text-foreground",
+                "relative whitespace-nowrap text-sm transition-colors hover:text-foreground",
                 pathname === link.href
                   ? "text-foreground"
                   : "text-muted-foreground",
               )}
             >
               {link.label}
+              {/* Active page gets a short brand-gradient underline. */}
+              {pathname === link.href ? (
+                <span
+                  aria-hidden
+                  className="brand-bg absolute -bottom-1.5 left-1/2 h-[2px] w-4 -translate-x-1/2 rounded-full"
+                />
+              ) : null}
             </Link>
           ))}
         </div>
@@ -248,8 +292,8 @@ export function Navbar({
                 aria-label="Account menu"
                 className="flex items-center gap-2 rounded-full py-1 pr-3 pl-1 transition-colors hover:bg-muted"
               >
-                <Avatar />
-                <span className="hidden max-w-[12rem] truncate text-sm text-muted-foreground sm:inline">
+                <Avatar src={avatarUrl} name={displayName ?? username} />
+                <span className="hidden max-w-[12rem] truncate font-mono text-sm text-muted-foreground sm:inline">
                   {username ? `@${username}` : userEmail}
                 </span>
                 <ChevronDownIcon
@@ -267,7 +311,7 @@ export function Navbar({
                   className="absolute right-0 mt-2 w-72 origin-top-right animate-pop rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-lg"
                 >
                   <div className="px-3 py-2">
-                    <p className="truncate text-sm font-medium">
+                    <p className="truncate font-mono text-sm font-medium">
                       {username ? `@${username}` : "No username yet"}
                     </p>
                     <p className="truncate text-xs text-muted-foreground">

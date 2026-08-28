@@ -1,9 +1,11 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { baseName, readFileAsDataUrl } from "~/components/music-edit-controls";
+import { baseName } from "~/components/music-edit-controls";
 import { Button } from "~/components/ui/button";
+import { InfoTip } from "~/components/ui/info-tip";
 import { Input } from "~/components/ui/input";
+import { readFileAsDataUrl } from "~/lib/files";
 import {
   clamp,
   type MusicConfig,
@@ -42,18 +44,19 @@ function ToggleRow({
   hint?: string;
 }) {
   return (
-    <button
-      type="button"
-      onClick={() => onChange(!checked)}
-      className="flex w-full items-center justify-between gap-3 text-left"
-    >
-      <span className="flex flex-col">
+    // The row is a flex container rather than one big button so the hint's ⓘ
+    // (itself a button) isn't nested inside the switch.
+    <div className="flex w-full items-center justify-between gap-3 text-left">
+      <span className="flex items-center gap-1.5">
         <span className="text-foreground text-sm">{label}</span>
-        {hint ? (
-          <span className="text-muted-foreground text-xs">{hint}</span>
-        ) : null}
+        {hint ? <InfoTip label={hint} /> : null}
       </span>
-      <span
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={label}
+        onClick={() => onChange(!checked)}
         className={cn(
           "relative h-6 w-10 shrink-0 rounded-full transition-colors",
           checked ? "bg-primary" : "bg-input",
@@ -65,8 +68,8 @@ function ToggleRow({
             checked && "translate-x-4",
           )}
         />
-      </span>
-    </button>
+      </button>
+    </div>
   );
 }
 
@@ -106,7 +109,10 @@ export function MusicEditor({
   );
 
   const importSpotify = useCallback(async () => {
-    if (!spotifyUrl.trim()) return;
+    // Guard against a second import while one is in flight — the Add button is
+    // disabled during a fetch, but pressing Enter in the field is not, so
+    // repeated Enters would otherwise fire concurrent /api/spotify calls.
+    if (fetching || !spotifyUrl.trim()) return;
     setFetching(true);
     setFetchError(null);
     setFetchNote(null);
@@ -154,7 +160,7 @@ export function MusicEditor({
     } finally {
       setFetching(false);
     }
-  }, [spotifyUrl, onChange, value]);
+  }, [fetching, spotifyUrl, onChange, value]);
 
   const onAudioFile = useCallback(
     async (file: File | undefined) => {
@@ -208,7 +214,7 @@ export function MusicEditor({
 
         {mode === "spotify" ? (
           <div className="flex flex-col gap-2">
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
               <Input
                 value={spotifyUrl}
                 onChange={(e) => setSpotifyUrl(e.target.value)}
@@ -223,17 +229,13 @@ export function MusicEditor({
               >
                 {fetching ? "Adding…" : "Add"}
               </Button>
+              <InfoTip label="Spotify links play a short preview only. Upload a file for the full track." />
             </div>
             {fetchError ? (
               <p className="text-destructive text-xs">{fetchError}</p>
             ) : fetchNote ? (
               <p className="text-muted-foreground text-xs">{fetchNote}</p>
-            ) : (
-              <p className="text-muted-foreground text-xs">
-                Spotify links play a short preview only. Upload a file for the
-                full track.
-              </p>
-            )}
+            ) : null}
           </div>
         ) : (
           <div className="flex flex-col gap-1.5">
@@ -257,7 +259,7 @@ export function MusicEditor({
 
       {/* Display */}
       <div className="flex flex-col gap-2">
-        <SectionLabel>Where it shows</SectionLabel>
+        <SectionLabel>Visibility</SectionLabel>
         <div className="grid grid-cols-3 gap-1 rounded-lg bg-muted p-1">
           {DISPLAY_OPTIONS.map((o) => (
             <button

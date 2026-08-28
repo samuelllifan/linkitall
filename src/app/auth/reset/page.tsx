@@ -46,6 +46,16 @@ export default function ResetPasswordPage() {
     if (!checking && hasSession) passwordRef.current?.focus();
   }, [checking, hasSession]);
 
+  // Clear the post-save redirect timer if the component unmounts first, so the
+  // navigation can't fire against a torn-down router.
+  const redirectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (redirectRef.current) clearTimeout(redirectRef.current);
+    },
+    [],
+  );
+
   const reqs = [
     { label: "At least 8 characters", met: password.length >= 8 },
     { label: "Contains a letter", met: /[A-Za-z]/.test(password) },
@@ -72,7 +82,7 @@ export default function ResetPasswordPage() {
     setDone(true);
     setLoading(false);
     // Give a beat to read the confirmation, then continue into the app.
-    setTimeout(() => {
+    redirectRef.current = setTimeout(() => {
       router.push("/my-page");
       router.refresh();
     }, 1200);

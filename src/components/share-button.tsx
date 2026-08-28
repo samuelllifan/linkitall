@@ -144,11 +144,34 @@ export function ShareButton() {
     };
   }, [open, url]);
 
-  // Close on Escape.
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  // Close on Escape, and keep Tab focus inside the modal (it declares
+  // aria-modal, so focus must not wander to the page behind it).
   useEffect(() => {
     if (!open) return;
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") {
+        setOpen(false);
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const dialog = dialogRef.current;
+      if (!dialog) return;
+      const focusable = dialog.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey && active === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
@@ -192,15 +215,36 @@ export function ShareButton() {
     }
   }
 
-  // Save the generated QR as a PNG via a temporary download anchor.
+  // Save the generated QR as a PNG. iOS Safari ignores the `download` attribute
+  // on `data:` URLs (it just opens the image), so convert the data URL to a
+  // Blob and download that via an object URL, which WebKit honors.
   function downloadQr() {
     if (!qr) return;
-    const a = document.createElement("a");
-    a.href = qr;
-    a.download = qrFilename(url);
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+    const name = qrFilename(url);
+    try {
+      const [meta, base64] = qr.split(",");
+      const mime = meta.match(/:(.*?);/)?.[1] ?? "image/png";
+      const bytes = atob(base64);
+      const buf = new Uint8Array(bytes.length);
+      for (let i = 0; i < bytes.length; i++) buf[i] = bytes.charCodeAt(i);
+      const objectUrl = URL.createObjectURL(new Blob([buf], { type: mime }));
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      // Revoke on the next tick so the download has started.
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    } catch {
+      // Fall back to the data-URL anchor if Blob conversion isn't available.
+      const a = document.createElement("a");
+      a.href = qr;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
   }
 
   return (
@@ -209,7 +253,7 @@ export function ShareButton() {
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Share this page"
-        className="fixed top-[4.5rem] right-4 z-40 flex size-10 items-center justify-center rounded-full border border-border bg-background/80 text-foreground shadow-sm backdrop-blur transition-colors hover:bg-accent hover:text-accent-foreground"
+        className="fixed top-[4.5rem] right-4 z-40 flex size-11 items-center justify-center rounded-full border border-border bg-background/80 text-foreground shadow-sm backdrop-blur transition-colors hover:bg-accent hover:text-accent-foreground"
       >
         <ShareIcon className="size-5" />
       </button>
@@ -223,10 +267,11 @@ export function ShareButton() {
             onClick={() => setOpen(false)}
           />
           <div
+            ref={dialogRef}
             role="dialog"
             aria-modal="true"
             aria-label="Share this page"
-            className="relative w-full max-w-xs animate-pop rounded-lg border border-border bg-background p-5 shadow-lg"
+            className="relative max-h-[calc(100dvh-2rem)] w-full max-w-xs animate-pop overflow-y-auto overscroll-contain rounded-lg border border-border bg-background p-5 shadow-lg"
           >
             <h2 className="text-sm font-semibold">Share this page</h2>
 
@@ -281,7 +326,7 @@ export function ShareButton() {
                 type="button"
                 onClick={downloadQr}
                 disabled={!qr}
-                className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-border bg-transparent px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-50"
+                className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-md border border-border bg-transparent px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-50"
               >
                 <DownloadIcon className="size-4" />
                 Download QR
@@ -290,7 +335,7 @@ export function ShareButton() {
                 <button
                   type="button"
                   onClick={nativeShare}
-                  className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-border bg-transparent px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                  className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-md border border-border bg-transparent px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
                 >
                   <ShareIcon className="size-4" />
                   Share…

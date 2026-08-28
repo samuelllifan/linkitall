@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "~/lib/supabase/server";
+import { type RangeSelection, resolveRange } from "~/lib/time-range";
 import { type AdminOverview, AdminView } from "./admin-view";
-import { type RangeSelection, resolveRange } from "./time-range";
 
 // Admin-only overview of every account and site-wide activity. Always live.
 export const dynamic = "force-dynamic";
@@ -44,7 +44,25 @@ export default async function AdminPage({
   });
   if (error) throw error;
 
+  // Prior equal-length window, so the view can show period-over-period change.
+  // Skipped for lifetime (open start) — there's no comparable prior period.
+  let previous: AdminOverview | null = null;
+  if (selection.start) {
+    const startMs = Date.parse(selection.start);
+    const endMs = selection.end ? Date.parse(selection.end) : Date.now();
+    const prevStart = new Date(startMs - (endMs - startMs)).toISOString();
+    const { data: prevData } = await supabase.rpc("admin_overview", {
+      range_start: prevStart,
+      range_end: selection.start,
+    });
+    previous = (prevData as AdminOverview | null) ?? null;
+  }
+
   return (
-    <AdminView overview={data as AdminOverview} range={selection.current} />
+    <AdminView
+      overview={data as AdminOverview}
+      previous={previous}
+      range={selection.current}
+    />
   );
 }

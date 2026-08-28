@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { StackedMark } from "~/components/stacked-mark";
 import { Button } from "~/components/ui/button";
 import {
   Card,
@@ -14,8 +16,19 @@ import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { PasswordToggle } from "~/components/ui/password-toggle";
 import { Requirement } from "~/components/ui/requirement";
-import { setUsername, usernameError } from "~/lib/profiles";
+import {
+  setUsername,
+  usernameError,
+  usernameUnavailableReason,
+} from "~/lib/profiles";
 import { createClient } from "~/lib/supabase/client";
+
+/** Whether the chosen username is free. `idle` also covers "we couldn't tell". */
+type Availability =
+  | { state: "idle" }
+  | { state: "checking" }
+  | { state: "available" }
+  | { state: "unavailable"; reason: string };
 
 type Mode = "signin" | "signup" | "reset";
 
@@ -72,6 +85,13 @@ export function LoginClient() {
   const [emailError, setEmailError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
+  // Whether the chosen username is actually free. One union rather than a few
+  // booleans, so "checking and available" can't be represented.
+  const [avail, setAvail] = useState<Availability>({ state: "idle" });
+  // Monotonic counter identifying the newest availability check; see the effect.
+  const seqRef = useRef(0);
+  const abortRef = useRef<AbortController | null>(null);
+
   // Show email-related auth errors under the email field; everything else in
   // the shared error slot near the button.
   function reportAuthError(message: string) {
@@ -99,6 +119,72 @@ export function LoginClient() {
   const passwordOk = passwordReqs.every((r) => r.met);
   // Basic email shape check — enough to gate the button until it looks valid.
   const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+
+  // Ask the server whether the username is free, debounced. Runs on sign-up
+  // only, and only once the two local rules pass — the checklist above is
+  // already the feedback for a malformed name, so there's nothing to ask about.
+  //
+  // `seqRef` is the load-bearing race guard, not the abort or the clearTimeout:
+  // every pending resolution captures its own sequence number and discards
+  // itself if a newer check has started, which makes "a slow old answer
+  // overwrites a fresh one" structurally impossible whatever the network does.
+  // A plain "does the response match the current text" comparison is NOT
+  // equivalent — type "sam", then "same", then delete back to "sam", and the
+  // first slow answer would match the current text and be wrongly accepted.
+  useEffect(() => {
+    // Retire any previous check FIRST, before any early return. Otherwise a
+    // request already on the wire stays "current" and its answer lands on top of
+    // whatever an early return just decided — type "aboutme", wait for the
+    // request to go out, delete "me", and the reserved-word verdict for "about"
+    // gets overwritten by a green "Available" from the in-flight "aboutme".
+    const seq = ++seqRef.current;
+    abortRef.current?.abort();
+    abortRef.current = null;
+
+    if (mode !== "signup") return;
+    const trimmed = username.trim();
+
+    if (!usernameOk) {
+      setAvail({ state: "idle" });
+      return;
+    }
+
+    // Reserved names are knowable locally and instantly. (The two visible rows
+    // don't cover them, so without this the row would spin and then report
+    // "reserved" after a round-trip.)
+    const local = usernameError(trimmed);
+    if (local) {
+      setAvail({ state: "unavailable", reason: local });
+      return;
+    }
+
+    // Enter "checking" synchronously, BEFORE the debounce, so a stale green tick
+    // from the previous name can never sit beneath a name the user has since
+    // edited. This line is the one that prevents that.
+    setAvail({ state: "checking" });
+
+    const timer = setTimeout(() => {
+      const ctrl = new AbortController();
+      abortRef.current = ctrl;
+      usernameUnavailableReason(trimmed, ctrl.signal)
+        .then((reason) => {
+          if (seq !== seqRef.current) return;
+          setAvail(
+            reason ? { state: "unavailable", reason } : { state: "available" },
+          );
+        })
+        .catch(() => {
+          if (seq !== seqRef.current) return;
+          // Fail OPEN. If the check can't run (offline, or the migration isn't
+          // deployed yet) the visitor must still be able to sign up — the server
+          // is the real authority and still rejects a taken name with a clear
+          // message. Failing closed would make a network blip an unpassable gate.
+          setAvail({ state: "idle" });
+        });
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [username, mode, usernameOk]);
 
   // Focus the first field on load and whenever the tab changes, so keyboard
   // users always land in the new form: the reset tab renders `#reset-email`,
@@ -218,6 +304,42 @@ export function LoginClient() {
       return;
     }
 
+    // Availability is a real requirement, so it gates the submit. A known-taken
+    // name stops here instead of creating an account first and discovering the
+    // collision afterwards.
+    // The availability row already shows this reason in red, and a copy in the
+    // shared `error` slot is never cleared on the next keystroke — it would sit
+    // there contradicting a later verdict. So just turn the row red.
+    if (avail.state === "unavailable") {
+      setAttempted(true);
+      setLoading(false);
+      return;
+    }
+
+    // Submitting while a check is still in flight (or after one failed): don't
+    // block on the debounce, just ask once more, right now, and honour the
+    // answer. If this lookup itself fails we carry on — the sign-up trigger and
+    // set_username are still the real authority and will reject a taken name.
+    if (avail.state !== "available") {
+      try {
+        // Same sequence discipline as the effect, so this write can't clobber a
+        // newer verdict either.
+        const seq = ++seqRef.current;
+        const reason = await usernameUnavailableReason(username.trim());
+        if (reason) {
+          if (seq === seqRef.current) {
+            setAvail({ state: "unavailable", reason });
+          }
+          setAttempted(true);
+          setLoading(false);
+          return;
+        }
+        if (seq === seqRef.current) setAvail({ state: "available" });
+      } catch {
+        // Unknown — fall through and let the server decide.
+      }
+    }
+
     // If a prior attempt already created the account (e.g. the username was
     // taken), we're already signed in — reuse that session and just retry the
     // username instead of signing up again.
@@ -268,104 +390,59 @@ export function LoginClient() {
   }
 
   return (
-    <main className="flex flex-1 items-center justify-center px-6 py-16">
-      <Card className="w-full max-w-sm">
-        {/* Keyed on mode so the content re-plays a slide/fade on tab switch. */}
-        <CardHeader>
-          <div key={mode} className="animate-slide-up">
-            <CardTitle>
-              {mode === "signin"
-                ? "Sign in"
-                : mode === "signup"
-                  ? "Create your account"
-                  : "Reset your password"}
-            </CardTitle>
-            <CardDescription className="mt-1.5">
-              {mode === "signin"
-                ? "Sign in to edit your page."
-                : mode === "signup"
-                  ? "Sign up to start building your page."
-                  : "Enter your email and we'll send you a reset link."}
-            </CardDescription>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div key={mode} className="animate-slide-up">
-            {mode === "reset" ? (
-              <form
-                onSubmit={handleResetRequest}
-                className="flex flex-col gap-4"
-              >
-                <div className="flex flex-col gap-2">
-                  <Label htmlFor="reset-email">Email</Label>
-                  <Input
-                    id="reset-email"
-                    type="email"
-                    autoComplete="email"
-                    required
-                    aria-invalid={emailError ? true : undefined}
-                    value={email}
-                    onChange={(e) => {
-                      setEmail(e.target.value);
-                      setEmailError(null);
-                    }}
-                  />
-                  {emailError ? (
-                    <p className="animate-slide-up text-sm text-red-400">
-                      {emailError}
-                    </p>
-                  ) : null}
-                </div>
-
-                {error ? (
-                  <p className="animate-slide-up text-sm text-red-400">
-                    {error}
-                  </p>
-                ) : null}
-                {notice ? (
-                  <p className="animate-slide-up text-sm text-muted-foreground">
-                    {notice}
-                  </p>
-                ) : null}
-
-                <Button type="submit" disabled={loading || !emailOk}>
-                  {loading ? "Please wait…" : "Send reset link"}
-                </Button>
-
-                <p className="text-center text-sm text-muted-foreground">
-                  <button
-                    type="button"
-                    className="font-medium text-foreground underline-offset-4 hover:underline"
-                    onClick={() => switchMode("signin")}
-                  >
-                    Back to sign in
-                  </button>
-                </p>
-              </form>
-            ) : (
-              <>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full"
-                  disabled={loading}
-                  onClick={handleGoogle}
+    <main className="relative flex flex-1 items-center justify-center overflow-hidden px-6 py-16">
+      {/* Soft brand aurora behind the card so auth feels "lit" like the landing
+          hero, not a bare form on a black void. Low-opacity + heavily blurred. */}
+      <div
+        aria-hidden
+        className="aurora-a pointer-events-none absolute left-1/2 top-1/2 h-[440px] w-[560px] max-w-[90vw] rounded-full opacity-[0.13] blur-[120px]"
+        style={{ background: "var(--brand-grad)" }}
+      />
+      <div className="relative flex w-full max-w-sm flex-col items-center gap-6">
+        {/* Wordmark ties the auth screen back to the brand and links home. */}
+        <Link
+          href="/"
+          className="group flex items-center gap-2 text-lg font-semibold tracking-tight"
+        >
+          <StackedMark
+            variant="brand"
+            className="size-6 transition-transform duration-300 group-hover:scale-110"
+          />
+          <span>
+            stacked<span className="brand-text">.</span>
+          </span>
+        </Link>
+        <Card className="w-full">
+          {/* Keyed on mode so the content re-plays a slide/fade on tab switch. */}
+          <CardHeader>
+            <div key={mode} className="animate-slide-up">
+              <CardTitle>
+                {mode === "signin"
+                  ? "Sign in"
+                  : mode === "signup"
+                    ? "Create your account"
+                    : "Reset your password"}
+              </CardTitle>
+              <CardDescription className="mt-1.5">
+                {mode === "signin"
+                  ? "Sign in to edit your page."
+                  : mode === "signup"
+                    ? "Sign up to start building your page."
+                    : "Enter your email and we'll send you a reset link."}
+              </CardDescription>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div key={mode} className="animate-slide-up">
+              {mode === "reset" ? (
+                <form
+                  onSubmit={handleResetRequest}
+                  className="flex flex-col gap-4"
                 >
-                  <GoogleIcon className="size-4" />
-                  Continue with Google
-                </Button>
-
-                <div className="my-4 flex items-center gap-3 text-xs text-muted-foreground">
-                  <span className="h-px flex-1 bg-border" />
-                  or
-                  <span className="h-px flex-1 bg-border" />
-                </div>
-
-                <form onSubmit={handleSubmit} className="flex flex-col gap-4">
                   <div className="flex flex-col gap-2">
-                    <Label htmlFor="email">Email</Label>
+                    <Label htmlFor="reset-email">Email</Label>
                     <Input
-                      id="email"
+                      id="reset-email"
                       type="email"
                       autoComplete="email"
                       required
@@ -383,98 +460,6 @@ export function LoginClient() {
                     ) : null}
                   </div>
 
-                  {mode === "signup" ? (
-                    <div className="flex flex-col gap-2">
-                      <Label htmlFor="username">Username</Label>
-                      {/* Fixed "stacked.page/" prefix sits to the left of the box
-                      so the field previews the resulting page address. */}
-                      <div className="flex items-center gap-1">
-                        <span className="shrink-0 text-sm text-muted-foreground select-none">
-                          stacked.page/
-                        </span>
-                        <Input
-                          id="username"
-                          autoComplete="off"
-                          spellCheck={false}
-                          maxLength={30}
-                          value={username}
-                          onChange={(e) => setUsernameValue(e.target.value)}
-                          className="flex-1"
-                        />
-                      </div>
-                      <ul className="mt-1 flex flex-col gap-1">
-                        {usernameReqs.map((r) => (
-                          <Requirement
-                            key={r.label}
-                            met={r.met}
-                            attempted={attempted}
-                          >
-                            {r.label}
-                          </Requirement>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
-
-                  <div className="flex flex-col gap-2">
-                    <Label htmlFor="password">Password</Label>
-                    <div className="relative">
-                      <Input
-                        id="password"
-                        type={showPassword ? "text" : "password"}
-                        autoComplete={
-                          mode === "signin"
-                            ? "current-password"
-                            : "new-password"
-                        }
-                        // Sign-up validity is enforced by the checklist below, so
-                        // native `required` would block our custom red state.
-                        required={mode === "signin"}
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        className="pr-10"
-                      />
-                      <PasswordToggle
-                        visible={showPassword}
-                        onToggle={() => setShowPassword((v) => !v)}
-                      />
-                    </div>
-                    {mode === "signup" ? (
-                      <ul className="mt-1 flex flex-col gap-1">
-                        {passwordReqs.map((r) => (
-                          <Requirement
-                            key={r.label}
-                            met={r.met}
-                            attempted={attempted}
-                          >
-                            {r.label}
-                          </Requirement>
-                        ))}
-                      </ul>
-                    ) : null}
-                  </div>
-
-                  {mode === "signin" ? (
-                    <div className="flex items-center justify-between">
-                      <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground select-none">
-                        <input
-                          type="checkbox"
-                          checked={staySignedIn}
-                          onChange={(e) => setStaySignedIn(e.target.checked)}
-                          className="size-4 rounded border-input accent-foreground"
-                        />
-                        Stay signed in
-                      </label>
-                      <button
-                        type="button"
-                        onClick={() => switchMode("reset")}
-                        className="text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-                      >
-                        Forgot password?
-                      </button>
-                    </div>
-                  ) : null}
-
                   {error ? (
                     <p className="animate-slide-up text-sm text-red-400">
                       {error}
@@ -486,48 +471,241 @@ export function LoginClient() {
                     </p>
                   ) : null}
 
-                  <Button
-                    type="submit"
-                    disabled={loading || (mode === "signup" && !emailOk)}
-                  >
-                    {loading
-                      ? "Please wait…"
-                      : mode === "signin"
-                        ? "Sign in"
-                        : "Sign up"}
+                  <Button type="submit" disabled={loading || !emailOk}>
+                    {loading ? "Please wait…" : "Send reset link"}
                   </Button>
-                </form>
 
-                <p className="mt-4 text-center text-sm text-muted-foreground">
-                  {mode === "signin" ? (
-                    <>
-                      Don&apos;t have an account?{" "}
-                      <button
-                        type="button"
-                        className="font-medium text-foreground underline-offset-4 hover:underline"
-                        onClick={() => switchMode("signup")}
-                      >
-                        Sign up
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      Already have an account?{" "}
-                      <button
-                        type="button"
-                        className="font-medium text-foreground underline-offset-4 hover:underline"
-                        onClick={() => switchMode("signin")}
-                      >
-                        Sign in
-                      </button>
-                    </>
-                  )}
-                </p>
-              </>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+                  <p className="text-center text-sm text-muted-foreground">
+                    <button
+                      type="button"
+                      className="font-medium text-foreground underline-offset-4 hover:underline"
+                      onClick={() => switchMode("signin")}
+                    >
+                      Back to sign in
+                    </button>
+                  </p>
+                </form>
+              ) : (
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    disabled={loading}
+                    onClick={handleGoogle}
+                  >
+                    <GoogleIcon className="size-4" />
+                    Continue with Google
+                  </Button>
+
+                  <div className="my-4 flex items-center gap-3 text-xs text-muted-foreground">
+                    <span className="h-px flex-1 bg-border" />
+                    or
+                    <span className="h-px flex-1 bg-border" />
+                  </div>
+
+                  <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+                    <div className="flex flex-col gap-2">
+                      <Label htmlFor="email">Email</Label>
+                      <Input
+                        id="email"
+                        type="email"
+                        autoComplete="email"
+                        required
+                        aria-invalid={emailError ? true : undefined}
+                        value={email}
+                        onChange={(e) => {
+                          setEmail(e.target.value);
+                          setEmailError(null);
+                        }}
+                      />
+                      {emailError ? (
+                        <p className="animate-slide-up text-sm text-red-400">
+                          {emailError}
+                        </p>
+                      ) : null}
+                    </div>
+
+                    {mode === "signup" ? (
+                      <div className="flex flex-col gap-2">
+                        <Label htmlFor="username">Username</Label>
+                        {/* Fixed "stacked.page/" prefix sits to the left of the box
+                      so the field previews the resulting page address. */}
+                        <div className="flex items-center gap-1">
+                          <span className="shrink-0 select-none font-mono text-sm text-muted-foreground">
+                            stacked.page/
+                          </span>
+                          <Input
+                            id="username"
+                            autoComplete="off"
+                            spellCheck={false}
+                            // Mobile keyboards capitalize a field's first
+                            // letter by default, and usernames are stored
+                            // case-preserving -- so without these, typing "kaze"
+                            // on a phone claims "Kaze". Matches the hero's claim
+                            // field (home-hero.tsx); keep the three username
+                            // inputs in step.
+                            autoCapitalize="none"
+                            autoCorrect="off"
+                            maxLength={30}
+                            value={username}
+                            onChange={(e) => setUsernameValue(e.target.value)}
+                            // Locked while submitting: the handler has already
+                            // captured this value, so letting it change mid-flight
+                            // would claim a different name than the one that was
+                            // checked.
+                            disabled={loading}
+                            className="flex-1"
+                          />
+                        </div>
+                        <ul className="mt-1 flex flex-col gap-1">
+                          {usernameReqs.map((r) => (
+                            <Requirement
+                              key={r.label}
+                              met={r.met}
+                              attempted={attempted}
+                            >
+                              {r.label}
+                            </Requirement>
+                          ))}
+                          {/* Availability. Shown once the local rules pass —
+                              before that it would just be a second way of
+                              saying the name is malformed. Hidden in the `idle`
+                              state, which only happens when the check could not
+                              run at all: an unanswerable requirement shouldn't
+                              claim the name is unavailable. */}
+                          {usernameOk && avail.state !== "idle" ? (
+                            <Requirement
+                              met={avail.state === "available"}
+                              pending={avail.state === "checking"}
+                              attempted={
+                                attempted || avail.state === "unavailable"
+                              }
+                            >
+                              {avail.state === "unavailable"
+                                ? avail.reason
+                                : avail.state === "checking"
+                                  ? "Checking availability…"
+                                  : "Available"}
+                            </Requirement>
+                          ) : null}
+                        </ul>
+                      </div>
+                    ) : null}
+
+                    <div className="flex flex-col gap-2">
+                      <Label htmlFor="password">Password</Label>
+                      <div className="relative">
+                        <Input
+                          id="password"
+                          type={showPassword ? "text" : "password"}
+                          autoComplete={
+                            mode === "signin"
+                              ? "current-password"
+                              : "new-password"
+                          }
+                          // Sign-up validity is enforced by the checklist below, so
+                          // native `required` would block our custom red state.
+                          required={mode === "signin"}
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          className="pr-10"
+                        />
+                        <PasswordToggle
+                          visible={showPassword}
+                          onToggle={() => setShowPassword((v) => !v)}
+                        />
+                      </div>
+                      {mode === "signup" ? (
+                        <ul className="mt-1 flex flex-col gap-1">
+                          {passwordReqs.map((r) => (
+                            <Requirement
+                              key={r.label}
+                              met={r.met}
+                              attempted={attempted}
+                            >
+                              {r.label}
+                            </Requirement>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </div>
+
+                    {mode === "signin" ? (
+                      <div className="flex items-center justify-between">
+                        <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground select-none">
+                          <input
+                            type="checkbox"
+                            checked={staySignedIn}
+                            onChange={(e) => setStaySignedIn(e.target.checked)}
+                            className="size-4 rounded border-input accent-foreground"
+                          />
+                          Stay signed in
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => switchMode("reset")}
+                          className="text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                        >
+                          Forgot password?
+                        </button>
+                      </div>
+                    ) : null}
+
+                    {error ? (
+                      <p className="animate-slide-up text-sm text-red-400">
+                        {error}
+                      </p>
+                    ) : null}
+                    {notice ? (
+                      <p className="animate-slide-up text-sm text-muted-foreground">
+                        {notice}
+                      </p>
+                    ) : null}
+
+                    <Button
+                      type="submit"
+                      disabled={loading || (mode === "signup" && !emailOk)}
+                    >
+                      {loading
+                        ? "Please wait…"
+                        : mode === "signin"
+                          ? "Sign in"
+                          : "Sign up"}
+                    </Button>
+                  </form>
+
+                  <p className="mt-4 text-center text-sm text-muted-foreground">
+                    {mode === "signin" ? (
+                      <>
+                        Don&apos;t have an account?{" "}
+                        <button
+                          type="button"
+                          className="font-medium text-foreground underline-offset-4 hover:underline"
+                          onClick={() => switchMode("signup")}
+                        >
+                          Sign up
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        Already have an account?{" "}
+                        <button
+                          type="button"
+                          className="font-medium text-foreground underline-offset-4 hover:underline"
+                          onClick={() => switchMode("signin")}
+                        >
+                          Sign in
+                        </button>
+                      </>
+                    )}
+                  </p>
+                </>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </main>
   );
 }

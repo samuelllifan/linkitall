@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { FOOTER_LINK_CLASS } from "~/components/footer-link-class";
 import { WhatsNewLink } from "~/components/whats-new-link";
 
 const LINKS = [
@@ -12,13 +13,20 @@ export function Footer() {
     <footer className="relative z-10 border-t border-border bg-background">
       <div className="flex flex-col gap-4 px-6 py-6 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
         <span>© {new Date().getFullYear()} stacked. All rights reserved.</span>
-        <nav className="flex flex-col gap-2 sm:flex-row sm:gap-6">
+        {/* Named, because the site header is also a <nav>: without labels a
+            screen-reader user listing landmarks gets two identical
+            "navigation" entries. Bare nouns — assistive tech already appends
+            the word "navigation". */}
+        <nav
+          aria-label="Footer"
+          className="flex flex-col gap-2 sm:flex-row sm:gap-6"
+        >
           <WhatsNewLink />
           {LINKS.map((link) => (
             <Link
               key={link.href}
               href={link.href}
-              className="underline-offset-4 hover:text-foreground hover:underline"
+              className={FOOTER_LINK_CLASS}
             >
               {link.label}
             </Link>

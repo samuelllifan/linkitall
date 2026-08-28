@@ -5,51 +5,9 @@ import { clamp, formatClipTime, parseTime } from "~/lib/music";
 import { cn } from "~/lib/utils";
 
 // ---------------------------------------------------------------------------
-// File helpers — shared by the audio-source dropdown and the on-card cover edit.
+// Track-title helper. (Reading the picked file itself lives in ~/lib/files, which
+// every editor surface shares.)
 // ---------------------------------------------------------------------------
-
-/** Read a file as a raw data URL (used for uploaded audio). */
-export function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error("Could not read the file"));
-    reader.onload = () => resolve(reader.result as string);
-    reader.readAsDataURL(file);
-  });
-}
-
-/** Read an image and return a downscaled JPEG data URL (keeps covers small). */
-export function readImageDownscaled(
-  file: File,
-  maxSize = 512,
-): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error("Could not read the image"));
-    reader.onload = () => {
-      const src = reader.result as string;
-      const img = new Image();
-      img.onerror = () => reject(new Error("Could not decode the image"));
-      img.onload = () => {
-        const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
-        const w = Math.max(1, Math.round(img.width * scale));
-        const h = Math.max(1, Math.round(img.height * scale));
-        const canvas = document.createElement("canvas");
-        canvas.width = w;
-        canvas.height = h;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) {
-          resolve(src);
-          return;
-        }
-        ctx.drawImage(img, 0, 0, w, h);
-        resolve(canvas.toDataURL("image/jpeg", 0.9));
-      };
-      img.src = src;
-    };
-    reader.readAsDataURL(file);
-  });
-}
 
 /** Strip a file extension for use as a default track title. */
 export function baseName(name: string): string {
@@ -97,12 +55,15 @@ function ClipRange({
       ev.stopPropagation();
       const trackW = trackRef.current?.clientWidth || 1;
       const startX = ev.clientX;
+      // Only this pointer drives the drag, so a second finger can't hijack it.
+      const pointerId = ev.pointerId;
       const s0 = s;
       const e0 = e;
       const len = e0 - s0;
       const pxToSec = (dx: number) => (dx / trackW) * max;
 
       const onMove = (m: PointerEvent) => {
+        if (m.pointerId !== pointerId) return;
         const d = pxToSec(m.clientX - startX);
         if (mode === "move") {
           let ns = s0 + d;
@@ -123,12 +84,19 @@ function ClipRange({
           onChange(s0, ne);
         }
       };
-      const onUp = () => {
+      // Tear down on pointerup AND pointercancel: on touch a system gesture (a
+      // second finger, the browser taking over the scroll) fires `pointercancel`
+      // instead of `pointerup`, which would otherwise leave `onMove` bound to
+      // the window forever, stacking a fresh leak on every drag.
+      const end = (m: PointerEvent) => {
+        if (m.pointerId !== pointerId) return;
         window.removeEventListener("pointermove", onMove);
-        window.removeEventListener("pointerup", onUp);
+        window.removeEventListener("pointerup", end);
+        window.removeEventListener("pointercancel", end);
       };
       window.addEventListener("pointermove", onMove);
-      window.addEventListener("pointerup", onUp);
+      window.addEventListener("pointerup", end);
+      window.addEventListener("pointercancel", end);
     };
 
   return (
@@ -147,6 +115,18 @@ function ClipRange({
         aria-valuemax={Math.round(max)}
         aria-valuenow={Math.round(s)}
         tabIndex={0}
+        // Keyboard operation: arrow keys slide the whole clip window (keeping
+        // its length); Shift jumps in bigger steps. Without this the slider is
+        // focusable but unusable without a pointer.
+        onKeyDown={(ev) => {
+          if (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight") return;
+          ev.preventDefault();
+          const step =
+            (ev.shiftKey ? 5 : 1) * (ev.key === "ArrowLeft" ? -1 : 1);
+          const len = e - s;
+          const ns = clamp(s + step, 0, max - len);
+          onChange(ns, ns + len);
+        }}
       >
         <span
           className="clip-handle clip-handle-l"
@@ -191,7 +171,7 @@ function TimeCodeInput({
       inputMode="numeric"
       aria-label={ariaLabel}
       className={cn(
-        "w-16 rounded-md border border-transparent bg-transparent px-1.5 py-1 text-foreground text-xs tabular-nums outline-none transition-colors hover:border-input focus:border-ring focus:bg-background",
+        "w-16 rounded-md border border-transparent bg-transparent px-1.5 py-1 text-base text-foreground tabular-nums outline-none transition-colors hover:border-input focus:border-ring focus:bg-background md:text-xs",
         align === "left" ? "text-left" : "text-right",
       )}
     />

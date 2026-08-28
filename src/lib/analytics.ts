@@ -5,21 +5,6 @@ export type DeviceType = "desktop" | "mobile" | "other";
 /** The device buckets always shown on the dashboard, in display order. */
 export const DEVICE_LIST: DeviceType[] = ["desktop", "mobile", "other"];
 
-/** Selectable dashboard time ranges. `days: null` means all time. */
-export interface TimeRange {
-  key: string;
-  label: string;
-  days: number | null;
-}
-
-export const TIME_RANGES: TimeRange[] = [
-  { key: "1d", label: "1 day", days: 1 },
-  { key: "3d", label: "3 days", days: 3 },
-  { key: "7d", label: "7 days", days: 7 },
-  { key: "30d", label: "30 days", days: 30 },
-  { key: "all", label: "Lifetime", days: null },
-];
-
 function randomId(): string {
   return typeof crypto !== "undefined" && crypto.randomUUID
     ? crypto.randomUUID()
@@ -122,6 +107,7 @@ interface RawEvent {
   device: string | null;
   link_id: string | null;
   link_label: string | null;
+  country: string | null;
   created_at: string;
 }
 
@@ -130,9 +116,46 @@ export interface ClickGroup {
   linkId: string | null;
   label: string;
   clicks: number;
+  /** Clicks in the immediately-preceding equal-length window (for momentum). */
+  prevClicks: number;
 }
 
-/** One point on the views-over-time chart. */
+/** View counts for one country (ISO alpha-2, or "ZZ" for unknown). */
+export interface LocationDatum {
+  country: string;
+  views: number;
+}
+
+/** When the audience is active, in the owner's local time. */
+export interface PeakActivity {
+  /** View counts by hour of day (index 0–23). */
+  byHour: number[];
+  /** View counts by weekday (index 0 = Sunday … 6 = Saturday). */
+  byWeekday: number[];
+  /** weekday × hour matrix of view counts, for the heatmap ([7][24]). */
+  heat: number[][];
+  /** Busiest hour / weekday, or null when there are no views. */
+  bestHour: number | null;
+  bestWeekday: number | null;
+}
+
+/** New vs returning split of the window's unique visitors. */
+export interface VisitorLoyalty {
+  /** Visitors seen on a single day in the window. */
+  newVisitors: number;
+  /** Visitors seen on 2+ distinct days in the window. */
+  returningVisitors: number;
+}
+
+/** Headline totals for one window, used to compare against the prior period. */
+export interface PeriodTotals {
+  uniqueViews: number;
+  totalViews: number;
+  totalClicks: number;
+  clickThroughRate: number;
+}
+
+/** One point on the views/clicks-over-time chart. */
 export interface TimelinePoint {
   label: string;
   count: number;
@@ -153,8 +176,29 @@ export interface AnalyticsSummary {
   devices: { device: DeviceType; views: number }[];
   /** View counts bucketed over the selected range. */
   timeline: TimelinePoint[];
+  /** Click counts bucketed over the same range/buckets as `timeline`. */
+  clickTimeline: TimelinePoint[];
+  /** View counts by visitor country, most-viewed first. */
+  locations: LocationDatum[];
+  /** When the audience is active (owner-local time). */
+  peak: PeakActivity;
+  /** New vs returning visitor split. */
+  loyalty: VisitorLoyalty;
+  /** Totals for the equally-long window just before this one; null for
+   *  lifetime (no comparable prior period). */
+  previous: PeriodTotals | null;
   /** True when the analytics backend isn't reachable yet (migration pending). */
   unavailable: boolean;
+}
+
+function emptyPeak(): PeakActivity {
+  return {
+    byHour: new Array<number>(24).fill(0),
+    byWeekday: new Array<number>(7).fill(0),
+    heat: Array.from({ length: 7 }, () => new Array<number>(24).fill(0)),
+    bestHour: null,
+    bestWeekday: null,
+  };
 }
 
 const EMPTY_SUMMARY: AnalyticsSummary = {
@@ -165,6 +209,11 @@ const EMPTY_SUMMARY: AnalyticsSummary = {
   clickGroups: [],
   devices: DEVICE_LIST.map((device) => ({ device, views: 0 })),
   timeline: [],
+  clickTimeline: [],
+  locations: [],
+  peak: emptyPeak(),
+  loyalty: { newVisitors: 0, returningVisitors: 0 },
+  previous: null,
   unavailable: false,
 };
 
@@ -177,94 +226,173 @@ function dayLabel(d: Date): string {
   return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
-/**
- * Bucket view timestamps for the chart: hourly over the last 24h for the 1-day
- * range, otherwise one bucket per day (lifetime spans from the first view).
- */
-function buildTimeline(times: number[], days: number | null): TimelinePoint[] {
-  const now = Date.now();
-  const buckets: {
-    label: string;
-    start: number;
-    end: number;
-    count: number;
-  }[] = [];
+interface Bucket {
+  label: string;
+  start: number;
+  end: number;
+}
 
-  if (days === 1) {
-    const base = new Date(now);
+const HOUR_MS = 3_600_000;
+const DAY_MS = 86_400_000;
+
+/**
+ * Build empty time buckets spanning [startMs, endMs]: hourly for windows up to
+ * 48h (matching the admin RPC's granularity), otherwise daily, clamped to the
+ * most-recent 120 days so the axis stays readable. Views and clicks share one
+ * bucket set so their series line up.
+ */
+function buildBuckets(startMs: number, endMs: number): Bucket[] {
+  const buckets: Bucket[] = [];
+  const span = endMs - startMs;
+
+  // `< endMs` (not `<=`) so a window whose exclusive end lands exactly on a
+  // bucket boundary (custom ranges always do) doesn't get a trailing empty
+  // bucket; rolling presets end at "now" (mid-bucket), so the current partial
+  // bucket is still included.
+  if (span <= 48 * HOUR_MS) {
+    const base = new Date(startMs);
     base.setMinutes(0, 0, 0);
-    for (let i = 23; i >= 0; i--) {
-      const start = base.getTime() - i * 3_600_000;
+    for (let t = base.getTime(); t < endMs; t += HOUR_MS) {
       buckets.push({
-        label: hourLabel(new Date(start)),
-        start,
-        end: start + 3_600_000,
-        count: 0,
+        label: hourLabel(new Date(t)),
+        start: t,
+        end: t + HOUR_MS,
       });
     }
   } else {
-    let n = days ?? 0;
-    if (days == null) {
-      if (times.length === 0) return [];
-      const earliest = new Date(Math.min(...times));
-      earliest.setHours(0, 0, 0, 0);
-      const today = new Date(now);
-      today.setHours(0, 0, 0, 0);
-      n = Math.round((today.getTime() - earliest.getTime()) / 86_400_000) + 1;
-      n = Math.max(1, Math.min(n, 120)); // cap so the axis stays readable
-    }
-    const today = new Date(now);
-    today.setHours(0, 0, 0, 0);
-    for (let i = n - 1; i >= 0; i--) {
-      const start = today.getTime() - i * 86_400_000;
-      buckets.push({
-        label: dayLabel(new Date(start)),
-        start,
-        end: start + 86_400_000,
-        count: 0,
-      });
+    const dayFloor = (ms: number) => {
+      const d = new Date(ms);
+      d.setHours(0, 0, 0, 0);
+      return d.getTime();
+    };
+    // Step by re-flooring to the next LOCAL midnight each iteration (not a fixed
+    // 24h) so buckets stay aligned to calendar days across DST transitions.
+    const nextMidnight = (ms: number) => {
+      const d = new Date(ms);
+      d.setDate(d.getDate() + 1);
+      d.setHours(0, 0, 0, 0);
+      return d.getTime();
+    };
+    let t = dayFloor(startMs);
+    // Keep at most the most-recent ~120 days so the axis stays readable.
+    const clamp = dayFloor(endMs - 119 * DAY_MS);
+    if (t < clamp) t = clamp;
+    while (t < endMs) {
+      const next = nextMidnight(t);
+      buckets.push({ label: dayLabel(new Date(t)), start: t, end: next });
+      t = next;
     }
   }
 
+  return buckets;
+}
+
+/** Count how many of `times` fall into each (contiguous) bucket. */
+function countInto(buckets: Bucket[], times: number[]): number[] {
+  const counts = new Array<number>(buckets.length).fill(0);
   for (const t of times) {
-    for (const b of buckets) {
-      if (t >= b.start && t < b.end) {
-        b.count += 1;
+    for (let i = 0; i < buckets.length; i++) {
+      if (t >= buckets[i].start && t < buckets[i].end) {
+        counts[i] += 1;
         break;
       }
     }
   }
-  return buckets.map((b) => ({ label: b.label, count: b.count }));
+  return counts;
+}
+
+function eventTime(e: RawEvent): number {
+  return new Date(e.created_at).getTime();
+}
+
+/** Stable grouping key + display fields for a click event's link. */
+function linkKey(e: RawEvent): {
+  key: string;
+  label: string;
+  linkId: string | null;
+} {
+  const label = e.link_label || e.link_id || "Untitled link";
+  return { key: e.link_id ?? `label:${label}`, label, linkId: e.link_id };
+}
+
+/** Headline totals + CTR for an arbitrary set of events (the prior period). */
+function periodTotals(events: RawEvent[]): PeriodTotals {
+  const viewers = new Set<string>();
+  const clickers = new Set<string>();
+  let totalViews = 0;
+  let totalClicks = 0;
+  for (const e of events) {
+    if (e.kind === "view") {
+      viewers.add(e.visitor_id);
+      totalViews += 1;
+    } else {
+      clickers.add(e.visitor_id);
+      totalClicks += 1;
+    }
+  }
+  let clickingViewers = 0;
+  for (const v of clickers) if (viewers.has(v)) clickingViewers += 1;
+  const uniqueViews = viewers.size;
+  return {
+    uniqueViews,
+    totalViews,
+    totalClicks,
+    clickThroughRate:
+      uniqueViews > 0 ? Math.round((clickingViewers / uniqueViews) * 100) : 0,
+  };
 }
 
 /**
- * Fetch the signed-in owner's events within `days` (null = all time) and reduce
- * them to a dashboard summary. Aggregation happens client-side; volumes are
- * small and RLS guarantees a user only ever sees their own events.
+ * Fetch the signed-in owner's events for the given window and reduce them to a
+ * dashboard summary. When the window is bounded, the immediately-preceding
+ * equal-length window is fetched in the same query so the UI can show
+ * period-over-period change (and per-link momentum). Aggregation is client-side;
+ * volumes are small and RLS guarantees a user only ever sees their own events.
  */
-export async function getAnalytics(
-  days: number | null,
-): Promise<AnalyticsSummary> {
+export async function getAnalytics(window: {
+  start: string | null;
+  end: string | null;
+}): Promise<AnalyticsSummary> {
   const supabase = createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ...EMPTY_SUMMARY };
 
+  const nowMs = Date.now();
+  const startMs = window.start ? Date.parse(window.start) : null;
+  const endMs = window.end ? Date.parse(window.end) : nowMs;
+  const hasPrev = startMs !== null;
+  const prevStartMs = hasPrev ? startMs - (endMs - startMs) : null;
+
   let query = supabase
     .from("analytics_events")
-    .select("kind, visitor_id, device, link_id, link_label, created_at")
+    .select(
+      "kind, visitor_id, device, link_id, link_label, country, created_at",
+    )
     .eq("page_user_id", user.id);
-
-  if (days != null) {
-    const since = new Date(Date.now() - days * 86_400_000).toISOString();
-    query = query.gte("created_at", since);
+  // Fetch the current + prior window together (lower bound = prior start).
+  if (prevStartMs !== null) {
+    query = query.gte("created_at", new Date(prevStartMs).toISOString());
   }
+  if (window.end) query = query.lt("created_at", window.end);
+  // Newest first so that if the row cap ever truncates, it drops the OLDEST
+  // rows (the prior comparison window) before the current window's own stats.
+  query = query.order("created_at", { ascending: false });
 
   const { data, error } = await query;
   if (error) return { ...EMPTY_SUMMARY, unavailable: true };
 
-  const events = (data ?? []) as RawEvent[];
+  const rows = (data ?? []) as RawEvent[];
+
+  // Partition into the current window and the immediately-preceding one.
+  const current: RawEvent[] = [];
+  const prev: RawEvent[] = [];
+  for (const e of rows) {
+    const t = eventTime(e);
+    if (startMs === null || t >= startMs) current.push(e);
+    else if (prevStartMs !== null && t >= prevStartMs) prev.push(e);
+  }
 
   const viewers = new Set<string>();
   const clickers = new Set<string>();
@@ -273,46 +401,147 @@ export async function getAnalytics(
     mobile: 0,
     other: 0,
   };
-  const clickMap = new Map<string, ClickGroup>();
+  const clickMap = new Map<
+    string,
+    { linkId: string | null; label: string; clicks: number }
+  >();
+  const countryViews = new Map<string, number>();
+  const visitorDays = new Map<string, Set<string>>();
+  const peak = emptyPeak();
   const viewTimes: number[] = [];
+  const clickTimes: number[] = [];
   let totalViews = 0;
   let totalClicks = 0;
 
-  for (const e of events) {
+  for (const e of current) {
+    const t = eventTime(e);
     if (e.kind === "view") {
       viewers.add(e.visitor_id);
       totalViews += 1;
       deviceViews[normalizeDevice(e.device)] += 1;
-      viewTimes.push(new Date(e.created_at).getTime());
+      viewTimes.push(t);
+
+      const country =
+        e.country && /^[A-Za-z]{2}$/.test(e.country)
+          ? e.country.toUpperCase()
+          : "ZZ";
+      countryViews.set(country, (countryViews.get(country) ?? 0) + 1);
+
+      const d = new Date(t);
+      const wd = d.getDay();
+      const h = d.getHours();
+      peak.byHour[h] += 1;
+      peak.byWeekday[wd] += 1;
+      peak.heat[wd][h] += 1;
+
+      const dayKey = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+      let days = visitorDays.get(e.visitor_id);
+      if (!days) {
+        days = new Set();
+        visitorDays.set(e.visitor_id, days);
+      }
+      days.add(dayKey);
     } else {
       clickers.add(e.visitor_id);
       totalClicks += 1;
-      const label = e.link_label || e.link_id || "Untitled link";
-      const key = e.link_id ?? `label:${label}`;
-      const existing = clickMap.get(key);
-      if (existing) existing.clicks += 1;
-      else clickMap.set(key, { linkId: e.link_id, label, clicks: 1 });
+      clickTimes.push(t);
+      const { key, label, linkId } = linkKey(e);
+      const g = clickMap.get(key);
+      if (g) g.clicks += 1;
+      else clickMap.set(key, { linkId, label, clicks: 1 });
     }
+  }
+
+  // Prior-window clicks per link, for momentum badges. Keeps link identity so a
+  // link whose clicks ALL fell in the prior window (0 now) still surfaces its
+  // decline instead of dropping out entirely.
+  const prevClickMap = new Map<
+    string,
+    { linkId: string | null; label: string; clicks: number }
+  >();
+  for (const e of prev) {
+    if (e.kind !== "click") continue;
+    const { key, label, linkId } = linkKey(e);
+    const g = prevClickMap.get(key);
+    if (g) g.clicks += 1;
+    else prevClickMap.set(key, { linkId, label, clicks: 1 });
   }
 
   let clickingViewers = 0;
   for (const v of clickers) if (viewers.has(v)) clickingViewers += 1;
-
   const uniqueViews = viewers.size;
   const clickThroughRate =
     uniqueViews > 0 ? Math.round((clickingViewers / uniqueViews) * 100) : 0;
+
+  let returningVisitors = 0;
+  for (const days of visitorDays.values())
+    if (days.size >= 2) returningVisitors += 1;
+
+  // Busiest bucket, or null when there are no views at all.
+  const argmax = (arr: number[]): number | null => {
+    let best = 0;
+    let idx = -1;
+    for (let i = 0; i < arr.length; i++) {
+      if (arr[i] > best) {
+        best = arr[i];
+        idx = i;
+      }
+    }
+    return idx >= 0 ? idx : null;
+  };
+  peak.bestHour = argmax(peak.byHour);
+  peak.bestWeekday = argmax(peak.byWeekday);
+
+  // Time buckets. For lifetime (open start) anchor on the earliest event.
+  const anchorTimes = viewTimes.concat(clickTimes);
+  const bucketStart =
+    startMs ?? (anchorTimes.length ? Math.min(...anchorTimes) : null);
+  const buckets = bucketStart !== null ? buildBuckets(bucketStart, endMs) : [];
+  const viewCounts = countInto(buckets, viewTimes);
+  const clickCounts = countInto(buckets, clickTimes);
+
+  const clickGroups: ClickGroup[] = [];
+  for (const [key, g] of clickMap) {
+    clickGroups.push({ ...g, prevClicks: prevClickMap.get(key)?.clicks ?? 0 });
+  }
+  // Links with prior-window clicks but none now — surface them (clicks: 0) so
+  // the "declined to zero" momentum can still show.
+  for (const [key, g] of prevClickMap) {
+    if (clickMap.has(key)) continue;
+    clickGroups.push({
+      linkId: g.linkId,
+      label: g.label,
+      clicks: 0,
+      prevClicks: g.clicks,
+    });
+  }
+
+  const locations: LocationDatum[] = [...countryViews.entries()]
+    .map(([country, views]) => ({ country, views }))
+    .sort((a, b) => b.views - a.views);
 
   return {
     uniqueViews,
     totalViews,
     totalClicks,
     clickThroughRate,
-    clickGroups: [...clickMap.values()],
+    clickGroups,
     devices: DEVICE_LIST.map((device) => ({
       device,
       views: deviceViews[device],
     })),
-    timeline: buildTimeline(viewTimes, days),
+    timeline: buckets.map((b, i) => ({ label: b.label, count: viewCounts[i] })),
+    clickTimeline: buckets.map((b, i) => ({
+      label: b.label,
+      count: clickCounts[i],
+    })),
+    locations,
+    peak,
+    loyalty: {
+      newVisitors: uniqueViews - returningVisitors,
+      returningVisitors,
+    },
+    previous: hasPrev ? periodTotals(prev) : null,
     unavailable: false,
   };
 }

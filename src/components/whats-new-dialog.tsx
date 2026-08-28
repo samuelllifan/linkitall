@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "~/components/ui/button";
 import { type ChangelogEntry, latestEntry } from "~/lib/changelog";
+import { lockBodyScroll, unlockBodyScroll } from "~/lib/scroll-lock";
 import { cn } from "~/lib/utils";
 import { disableAutoShow, markSeen, shouldAutoShow } from "~/lib/whats-new";
 
@@ -90,7 +91,27 @@ export function WhatsNewDialog({
     const onOwnPage =
       pathname.toLowerCase() === `/${ownUsername.toLowerCase()}`;
     if (!onOwnPage) return;
-    if (shouldAutoShow(entry.id)) show();
+    if (!shouldAutoShow(entry.id)) return;
+
+    // The owner's own page is also where an enabled intro splash renders, and
+    // that splash is the top layer (z-[100] vs this panel's z-[70]). Opening now
+    // would put a focus-trapping dialog under it, invisible — so wait for the
+    // splash to be dismissed and open behind it, not beneath it.
+    const root = document.documentElement;
+    if (!root.hasAttribute("data-intro-splash")) {
+      show();
+      return;
+    }
+    const observer = new MutationObserver(() => {
+      if (root.hasAttribute("data-intro-splash")) return;
+      observer.disconnect();
+      show();
+    });
+    observer.observe(root, {
+      attributes: true,
+      attributeFilter: ["data-intro-splash"],
+    });
+    return () => observer.disconnect();
   }, [entry, ownUsername, pathname, show]);
 
   // Manual open from the footer link — always shows, ignoring the flags.
@@ -123,11 +144,34 @@ export function WhatsNewDialog({
     }
   }, [entry, pathname, router]);
 
-  // Close on Escape.
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // Close on Escape, and keep Tab focus within the dialog (it declares
+  // aria-modal, so focus must not escape to the page behind it).
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close();
+      if (e.key === "Escape") {
+        close();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const panel = panelRef.current;
+      if (!panel) return;
+      const focusable = panel.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey && active === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -140,11 +184,10 @@ export function WhatsNewDialog({
   useEffect(() => {
     if (!open) return;
     prevFocusRef.current = document.activeElement as HTMLElement | null;
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    lockBodyScroll();
     gotItRef.current?.focus();
     return () => {
-      document.body.style.overflow = prevOverflow;
+      unlockBodyScroll();
       prevFocusRef.current?.focus?.();
     };
   }, [open]);
@@ -156,6 +199,10 @@ export function WhatsNewDialog({
       <button
         type="button"
         aria-label="Close"
+        // Kept out of the tab order so it isn't a second, visually-empty "Close"
+        // stop next to the labeled X (Escape + the X + the backdrop click still
+        // dismiss it).
+        tabIndex={-1}
         className={cn(
           "absolute inset-0 bg-black/50",
           visible ? "animate-fade" : "animate-fade-out",
@@ -163,11 +210,12 @@ export function WhatsNewDialog({
         onClick={close}
       />
       <div
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="whats-new-title"
         className={cn(
-          "relative w-full max-w-md overflow-hidden rounded-xl border border-border bg-background shadow-xl",
+          "relative max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-xl border border-border bg-background shadow-xl",
           visible ? "animate-pop" : "animate-pop-out",
         )}
       >
@@ -189,7 +237,7 @@ export function WhatsNewDialog({
                 type="button"
                 aria-label="Close"
                 onClick={close}
-                className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                className="flex size-10 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               >
                 <CloseIcon className="size-5" />
               </button>

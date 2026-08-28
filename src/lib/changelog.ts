@@ -33,6 +33,43 @@ export interface ChangelogEntry {
 /** Newest first. The first entry is the one the pop-up announces. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-08-28",
+    date: "August 28, 2026",
+    title: "Beta 1.1",
+    items: [
+      {
+        feature: "A rebuilt editor",
+        description:
+          "Everything moved to a two-pane studio: grouped controls on one side, your real page updating live on the other. Editing on a phone switches between the two instead of cramming both in.",
+      },
+      {
+        feature: "Click to enter",
+        description:
+          "Put a splash screen in front of your page — your own text over a blurred or solid backdrop — that visitors click through to come in.",
+      },
+      {
+        feature: "Image and video backgrounds",
+        description:
+          "Upload a photo or a video and frame it by dragging, with a dimming control so your text stays readable over it.",
+      },
+      {
+        feature: "Crop your profile picture",
+        description:
+          "Drag and pinch to set exactly what the circle keeps, instead of taking whatever the middle of the image happened to be.",
+      },
+      {
+        feature: "A deeper dashboard",
+        description:
+          "Pick any time range and see how it compares with the one before it, plus where your visitors are, what they are on, and when they show up.",
+      },
+      {
+        feature: "Fixes and polish",
+        description:
+          "Phone keyboards no longer capitalize the first letter of a username, faint text across the site got more readable, and the home page was rebuilt around real pages.",
+      },
+    ],
+  },
+  {
     id: "2026-08-02",
     date: "August 2, 2026",
     title: "Beta 1.0",

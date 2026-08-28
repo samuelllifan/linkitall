@@ -8,6 +8,7 @@ import { Label } from "~/components/ui/label";
 import { PasswordToggle } from "~/components/ui/password-toggle";
 import { Requirement } from "~/components/ui/requirement";
 import { setUsername as saveUsername } from "~/lib/profiles";
+import { lockBodyScroll, unlockBodyScroll } from "~/lib/scroll-lock";
 import { createClient } from "~/lib/supabase/client";
 import { useUnsavedGuard } from "~/lib/unsaved-guard";
 import { cn } from "~/lib/utils";
@@ -130,6 +131,11 @@ function AccountSection({
           placeholder="username"
           autoComplete="off"
           spellCheck={false}
+          // See home-hero.tsx's claim field: mobile keyboards capitalize the
+          // first letter, and usernames are case-preserving, so this is the
+          // difference between "kaze" and "Kaze".
+          autoCapitalize="none"
+          autoCorrect="off"
           className="max-w-xs"
         />
         <p className="text-xs text-muted-foreground">
@@ -477,6 +483,9 @@ export function SettingsClient({
     if (!confirming && !deleteOpen) return;
     function onKey(e: KeyboardEvent) {
       if (e.key === "Enter" && confirming) {
+        // Prevent the default so the auto-focused Confirm button isn't ALSO
+        // natively activated by the same Enter — that double-fired confirmSave.
+        e.preventDefault();
         confirmSaveActionRef.current();
         return;
       }
@@ -488,6 +497,16 @@ export function SettingsClient({
     return () => document.removeEventListener("keydown", onKey);
   }, [confirming, deleteOpen, deleting]);
 
+  // Lock background scroll while a dialog is open so the page behind the overlay
+  // doesn't scroll under it (notably on touch).
+  useEffect(() => {
+    if (!confirming && !deleteOpen) return;
+    lockBodyScroll();
+    return () => {
+      unlockBodyScroll();
+    };
+  }, [confirming, deleteOpen]);
+
   // Focus the confirmation field when the delete dialog opens, and the Confirm
   // button when the save dialog opens.
   useEffect(() => {
@@ -498,6 +517,7 @@ export function SettingsClient({
   }, [confirming]);
 
   async function confirmSave() {
+    if (saving) return;
     setSaving(true);
     setMsg(null);
     setConfirming(false);
@@ -551,9 +571,24 @@ export function SettingsClient({
 
   async function signOutEverywhere() {
     setSigningOutAll(true);
-    await createClient().auth.signOut({ scope: "global" });
-    router.push("/");
-    router.refresh();
+    setMsg(null);
+    try {
+      const { error } = await createClient().auth.signOut({ scope: "global" });
+      if (error) throw new Error(error.message);
+      router.push("/");
+      router.refresh();
+    } catch (err) {
+      // Recover the button and surface the failure instead of hanging on
+      // "Signing out…" forever when the network / session call rejects.
+      setMsg({
+        text:
+          err instanceof Error
+            ? err.message
+            : "Couldn't sign out. Please try again.",
+        error: true,
+      });
+      setSigningOutAll(false);
+    }
   }
 
   // Deletion is gated on re-entering the current password (any non-empty entry
@@ -720,8 +755,15 @@ export function SettingsClient({
             className="absolute inset-0 animate-fade bg-black/50"
             onClick={() => setConfirming(false)}
           />
-          <div className="relative w-full max-w-sm animate-pop rounded-lg border border-border bg-background p-6 shadow-lg">
-            <h2 className="text-lg font-semibold">Confirm changes</h2>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="confirm-dialog-title"
+            className="relative w-full max-w-sm animate-pop rounded-lg border border-border bg-background p-6 shadow-lg"
+          >
+            <h2 id="confirm-dialog-title" className="text-lg font-semibold">
+              Confirm changes
+            </h2>
             <p className="mt-2 text-sm text-muted-foreground">
               Are you sure you want to save these changes?
             </p>
@@ -750,8 +792,15 @@ export function SettingsClient({
             className="absolute inset-0 animate-fade bg-black/50"
             onClick={() => !deleting && setDeleteOpen(false)}
           />
-          <div className="relative w-full max-w-sm animate-pop rounded-lg border border-border bg-background p-6 shadow-lg">
-            <h2 className="text-lg font-semibold">Delete account</h2>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-dialog-title"
+            className="relative w-full max-w-sm animate-pop rounded-lg border border-border bg-background p-6 shadow-lg"
+          >
+            <h2 id="delete-dialog-title" className="text-lg font-semibold">
+              Delete account
+            </h2>
             <p className="mt-2 text-sm text-muted-foreground">
               This permanently deletes your account and page. This can't be
               undone. Enter your password to confirm.

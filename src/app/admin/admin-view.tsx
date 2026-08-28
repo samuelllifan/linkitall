@@ -1,11 +1,12 @@
+import { DeltaBadge } from "~/components/delta-badge";
+import { LocationMap } from "~/components/location-map";
 import type { TimelinePoint } from "~/lib/analytics";
 import { CHART_COLORS } from "~/lib/chart-colors";
 import { countryFlag, countryName } from "~/lib/countries";
+import type { RangeCurrent } from "~/lib/time-range";
 import { getCountryPaths } from "~/lib/world-map";
 import { MultiLineChart, PieChart, ViewsLineChart } from "../dashboard/charts";
-import { LocationMap } from "./location-map";
-import { TimeFramePicker } from "./time-frame-picker";
-import { type RangeCurrent, rangeLabel } from "./time-range";
+import { AdminRangePicker } from "./admin-range-picker";
 
 export interface AdminUserRow {
   id: string;
@@ -82,13 +83,13 @@ function formatDate(iso: string | null): string {
 function StatCard({
   label,
   value,
-  hint,
+  delta,
 }: {
   label: string;
   /** Preformatted (e.g. "3.2%") or numeric — numbers get thousands grouping. */
   value: number | string;
-  /** Optional secondary line, e.g. recent-window activity. */
-  hint?: string;
+  /** Optional period-over-period comparison (hidden when previous is null). */
+  delta?: { current: number; previous: number | null };
 }) {
   return (
     <div className="rounded-xl border border-border bg-card p-5">
@@ -96,9 +97,10 @@ function StatCard({
       <div className="mt-1 text-3xl font-bold tabular-nums">
         {typeof value === "number" ? value.toLocaleString() : value}
       </div>
-      {hint ? (
-        <div className="mt-1 text-xs text-muted-foreground tabular-nums">
-          {hint}
+      {delta && delta.previous !== null ? (
+        <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+          <DeltaBadge current={delta.current} previous={delta.previous} />
+          <span>vs previous</span>
         </div>
       ) : null}
     </div>
@@ -107,9 +109,11 @@ function StatCard({
 
 export function AdminView({
   overview,
+  previous,
   range,
 }: {
   overview: AdminOverview;
+  previous?: AdminOverview | null;
   range: RangeCurrent;
 }) {
   // New fields default so the page still renders if the analytics backend
@@ -124,6 +128,13 @@ export function AdminView({
 
   // Click-through rate across all traffic. Guard against divide-by-zero.
   const ctr = totals.views > 0 ? (totals.clicks / totals.views) * 100 : 0;
+
+  // Prior-period totals for the headline deltas (null when not comparable).
+  const prevTotals = previous?.totals ?? null;
+  const prevCtr =
+    prevTotals && prevTotals.views > 0
+      ? (prevTotals.clicks / prevTotals.views) * 100
+      : null;
 
   // Top links, ranked and shaped for the horizontal bar list below.
   const rankedLinks = topLinks
@@ -153,8 +164,6 @@ export function AdminView({
     count: s.count,
   }));
 
-  const rangeText = rangeLabel(range);
-
   // Device split, shaped for the shared pie chart.
   const deviceSlices = devices.map((d, i) => ({
     label: deviceLabel(d.device),
@@ -168,22 +177,40 @@ export function AdminView({
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Admin</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Every account and site-wide activity. Visible only to you.
+            All accounts and site-wide activity.
           </p>
         </div>
-        <TimeFramePicker current={range} />
+        <AdminRangePicker current={range} />
       </header>
-
-      <div className="mb-4 text-sm text-muted-foreground">
-        Showing <span className="text-foreground">{rangeText}</span>
-      </div>
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
         <StatCard label="Users" value={totals.users} />
-        <StatCard label="Unique visitors" value={uniqueVisitors} />
-        <StatCard label="Views" value={totals.views} />
-        <StatCard label="Clicks" value={totals.clicks} />
-        <StatCard label="Click-through rate" value={`${ctr.toFixed(1)}%`} />
+        <StatCard
+          label="Unique visitors"
+          value={uniqueVisitors}
+          delta={{
+            current: uniqueVisitors,
+            previous: prevTotals?.uniqueVisitors ?? null,
+          }}
+        />
+        <StatCard
+          label="Views"
+          value={totals.views}
+          delta={{ current: totals.views, previous: prevTotals?.views ?? null }}
+        />
+        <StatCard
+          label="Clicks"
+          value={totals.clicks}
+          delta={{
+            current: totals.clicks,
+            previous: prevTotals?.clicks ?? null,
+          }}
+        />
+        <StatCard
+          label="Click-through rate"
+          value={`${ctr.toFixed(1)}%`}
+          delta={{ current: ctr, previous: prevCtr }}
+        />
       </div>
 
       <div className="mt-8 grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -265,7 +292,7 @@ export function AdminView({
 
       <section className="mt-8 rounded-xl border border-border bg-card p-5">
         <h2 className="mb-4 text-sm font-semibold text-muted-foreground">
-          Where in the world · {locationTotal.toLocaleString()} views
+          Where in the world
         </h2>
         {locationTotal === 0 ? (
           <p className="text-sm text-muted-foreground">No views yet.</p>

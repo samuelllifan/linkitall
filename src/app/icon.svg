@@ -1,12 +1,16 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="stacked">
-  <style>
-    /* Dark mark on light browser chrome; light mark on dark. */
-    .s { stroke: #0c0c0f; }
-    @media (prefers-color-scheme: dark) { .s { stroke: #ffffff; } }
-  </style>
-  <!-- Top sheet: full-strength outline. -->
-  <polygon class="s" points="50,8 88,30 50,52 12,30" fill="none" stroke-width="7" stroke-linejoin="round" />
-  <!-- Lower sheets fade as they recede. -->
-  <polyline class="s" points="12,48 50,70 88,48" fill="none" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" opacity="0.58" />
-  <polyline class="s" points="12,64 50,86 88,64" fill="none" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" opacity="0.3" />
+  <defs>
+    <!-- Brand chroma gradient — reads on both light and dark browser chrome. -->
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f472b6" />
+      <stop offset="0.4" stop-color="#a78bfa" />
+      <stop offset="0.72" stop-color="#60a5fa" />
+      <stop offset="1" stop-color="#22d3ee" />
+    </linearGradient>
+  </defs>
+  <!-- Top sheet: gradient-filled outline. -->
+  <polygon points="50,8 88,30 50,52 12,30" fill="url(#g)" stroke="url(#g)" stroke-width="7" stroke-linejoin="round" />
+  <!-- Lower sheets step through the spectrum as they recede. -->
+  <polyline points="12,48 50,70 88,48" fill="none" stroke="#a78bfa" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" opacity="0.6" />
+  <polyline points="12,64 50,86 88,64" fill="none" stroke="#60a5fa" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" opacity="0.32" />
 </svg>

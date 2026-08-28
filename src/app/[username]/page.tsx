@@ -1,16 +1,19 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
+import { EnterOverlay } from "~/components/enter-overlay";
 import { ProfileView } from "~/components/profile-view";
 import { ShareButton } from "~/components/share-button";
+import { Button } from "~/components/ui/button";
 import { isLinkLive } from "~/lib/pages";
 import {
   getPageServer,
   getPublicPageServer,
   type PublicPage,
 } from "~/lib/pages.server";
+import { queryUsername } from "~/lib/profiles";
 import { createClient } from "~/lib/supabase/server";
 import { plainText } from "~/lib/text";
-import { MyPageClient } from "../my-page/my-page-client";
 
 // Always render with fresh data from the database on each request.
 export const dynamic = "force-dynamic";
@@ -102,25 +105,21 @@ export default async function UserPage({
     data: { user },
   } = await supabase.auth.getUser();
 
-  // If the signed-in visitor owns this username, load and edit their page
-  // through normal owner permissions — no public function required, so the
-  // owner's page works even before the public-access migration is applied.
-  if (user) {
-    const { data } = await supabase
-      .from("profiles")
-      .select("username")
-      .eq("id", user.id)
-      .maybeSingle();
-    const myUsername = (data?.username as string | null) ?? null;
-    if (myUsername && myUsername.toLowerCase() === username.toLowerCase()) {
-      const initialData = await getPageServer();
-      return <MyPageClient initialData={initialData} username={myUsername} />;
-    }
-  }
+  // The owner sees exactly what visitors see — editing lives at /edit — so the
+  // only thing ownership changes here is the extra owner-only chrome below.
+  const myUsername = user ? await queryUsername(supabase) : null;
+  const isOwner =
+    !!myUsername && myUsername.toLowerCase() === username.toLowerCase();
 
-  // Otherwise this is a public (or cross-account) view: read-only, resolved
-  // through the public function.
-  const page = await getPublicPageServer(username);
+  let page = await getPublicPageServer(username);
+  // That RPC reports every failure as null, which for a visitor is a 404 either
+  // way. The owner shouldn't lose their own page to a transient RPC error
+  // though, so fall back to their own RLS-scoped read — which is how this route
+  // loaded for them before the editor moved to /edit.
+  if (!page && isOwner && myUsername) {
+    const own = await getPageServer();
+    if (own) page = { username: myUsername, data: own, indexable: true };
+  }
   if (!page) notFound();
 
   // Hide scheduled links that aren't live yet (or have expired) from visitors.
@@ -130,11 +129,99 @@ export default async function UserPage({
     ...page.data,
     links: page.data.links.filter((link) => isLinkLive(link)),
   };
+  const hiddenCount = page.data.links.length - publicData.links.length;
+
+  const intro = publicData.intro;
+
+  // `username` is what arms analytics inside ProfileView (recordView, and
+  // recordClick per link) — withholding it for the owner keeps their own visits
+  // and clicks out of their stats, which is how the old inline editor behaved by
+  // never rendering the public view at all. The markup is otherwise identical.
+  const trackAs = isOwner ? undefined : page.username;
+
+  // `get_public_page` LEFT JOINs, so a profile with no page row resolves to a
+  // 200 with empty fields rather than a 404. A visitor should still get that
+  // empty page, but for the owner it would be a blank screen with no hint of
+  // what to do — so show them what this URL is and point at the editor. Never
+  // redirect: they'd lose the ability to ever view their own live page.
+  //
+  // Deliberately generous about what counts as content: a page with no name and
+  // no links can still be a real page (an avatar, a bio, a background, a music
+  // card), and telling that owner it's empty would be both false and a way to
+  // deny them the only view they have of their own live page.
+  const isEmpty =
+    !plainText(page.data.name) &&
+    !plainText(page.data.bio) &&
+    !page.data.avatar &&
+    !page.data.background &&
+    !page.data.music?.enabled &&
+    !page.data.intro?.enabled &&
+    page.data.links.length === 0;
+  if (isOwner && isEmpty) {
+    return (
+      <main className="mx-auto flex min-h-[calc(100dvh-3.5rem)] w-full max-w-md flex-col items-center justify-center gap-4 px-6 py-16 text-center">
+        <h1 className="font-semibold text-2xl tracking-tight">
+          Your page is empty
+        </h1>
+        <p className="text-muted-foreground">
+          This is your public link —{" "}
+          <span className="text-foreground">stacked.page/{page.username}</span>.
+          Visitors don't see anything here yet.
+        </p>
+        <Button asChild size="lg" className="mt-2">
+          <Link href="/edit">Set up your page</Link>
+        </Button>
+      </main>
+    );
+  }
 
   return (
     <main className="relative mx-auto flex min-h-[calc(100dvh-3.5rem)] w-full flex-col items-center justify-center px-6 pt-16 pb-28">
       <ShareButton />
-      <ProfileView data={publicData} username={page.username} />
+      {intro?.enabled ? (
+        <EnterOverlay config={intro}>
+          <ProfileView data={publicData} username={trackAs} />
+        </EnterOverlay>
+      ) : (
+        <ProfileView data={publicData} username={trackAs} />
+      )}
+      {isOwner ? (
+        <>
+          {/* Scheduled and expired links are filtered above, so without this the
+              owner just sees links missing from their own page and reads it as a
+              bug. Left under the intro splash's z-[100]: there's nothing to
+              explain until the page itself is visible. */}
+          {hiddenCount > 0 ? (
+            <p className="fixed top-[4.5rem] left-4 z-40 max-w-[12rem] rounded-lg border border-border bg-background/90 px-3 py-2 text-muted-foreground text-xs backdrop-blur">
+              {hiddenCount === 1
+                ? "1 link is hidden right now"
+                : `${hiddenCount} links are hidden right now`}{" "}
+              — scheduled or expired.
+            </p>
+          ) : null}
+          {/* Above the intro splash (z-[100]), which is `fixed inset-0` and locks
+              body scroll: at a lower layer the owner would be sealed out of their
+              own editor by their own splash screen. */}
+          <Link
+            href="/edit"
+            className="fixed right-4 bottom-[calc(1.5rem+env(safe-area-inset-bottom))] z-[110] flex items-center gap-2 rounded-full border border-border bg-background/90 px-4 py-2 font-medium text-foreground text-sm shadow-lg backdrop-blur transition-colors hover:bg-muted"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+              className="size-4"
+            >
+              <path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+            </svg>
+            Edit page
+          </Link>
+        </>
+      ) : null}
     </main>
   );
 }

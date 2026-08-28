@@ -1,275 +1,90 @@
-"use client";
+import { cookies } from "next/headers";
+import { FinalCta } from "~/components/final-cta";
+import { HowItWorks } from "~/components/how-it-works";
+import { isLinkLive, type PageData } from "~/lib/pages";
+import { getFeaturedPagesServer, getPageServer } from "~/lib/pages.server";
+import { HomeHero } from "./home-hero";
 
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { Button } from "~/components/ui/button";
+// Real public pages featured in the landing wall (rendered exactly as their
+// owners' public pages look). Resolved live via get_public_page; any that don't
+// resolve are simply dropped.
+const FEATURED_USERNAMES = ["syun", "anyix", "bored", "hazelcolonthree"];
 
-// Landing page: a full-height hero, followed by a "what you get" section of
-// three equally sized feature panels on a subtle grid backdrop.
+// Landing page: hero -> product demo -> close. When signed in, the owner's own
+// page leads the hero's wall; it's filled out with the featured real pages above.
+export default async function Home() {
+  // Fast path for the common logged-out visitor: with no Supabase auth cookie,
+  // skip the owner-page auth + DB round-trip entirely. (Reading cookies already
+  // makes the route dynamic; this only avoids the network work.)
+  const cookieStore = await cookies();
+  const hasSession = cookieStore
+    .getAll()
+    .some((c) => c.name.includes("-auth-token"));
 
-export default function Home() {
+  // Fetch the owner's page (if signed in) and the featured pages together. The
+  // featured set is public and identical for everyone, so it's served from a
+  // shared hourly cache; only the owner lookup is per-request.
+  const [ownerRaw, featuredRaw] = await Promise.all([
+    hasSession ? getPageServer() : Promise.resolve(null),
+    getFeaturedPagesServer(FEATURED_USERNAMES),
+  ]);
+
+  let ownerPage: PageData | null = null;
+  if (ownerRaw && (ownerRaw.name.trim() || ownerRaw.links.length > 0)) {
+    ownerPage = sanitizeForPreview(ownerRaw);
+  }
+
+  const featured = featuredRaw.map((p) => sanitizeForPreview(p.data));
+
+  // Rotates which pool page lands in which wall slot, changing once an hour so
+  // repeat visitors don't always meet the same faces. Computed here on the
+  // server and passed down: `Math.random()` would hydration-mismatch, and a
+  // client-side `Date.now()` can land in a different hour bucket than the
+  // server did right on the boundary.
+  const seed = Math.floor(Date.now() / 3_600_000);
+
   return (
     <main className="flex flex-1 flex-col">
-      {/* Scoped keyframes for the shining gradients on the hero adjectives. */}
-      {/* biome-ignore lint/security/noDangerouslySetInnerHtml: static, no user input */}
-      <style dangerouslySetInnerHTML={{ __html: SLOT_SHINE_CSS }} />
-      <section className="relative flex min-h-[calc(100dvh-3.5rem)] flex-col items-center justify-center overflow-hidden px-6 py-20 text-center">
-        <div className="flex max-w-2xl flex-col items-center gap-6">
-          <h1 className="text-balance text-5xl font-bold tracking-tight sm:text-6xl lg:text-7xl">
-            All of you, in one
-          </h1>
-          <p className="max-w-xl text-lg leading-relaxed text-muted-foreground sm:text-xl">
-            stacked is the <span className="slot-shine italic">fastest</span>,{" "}
-            <span className="slot-shine font-semibold">easiest</span>, and{" "}
-            <span className="slot-shine font-serif italic text-[1.1em]">
-              most customizable
-            </span>{" "}
-            way to create your link-in-bio page
-          </p>
-          <div className="flex flex-wrap items-center justify-center gap-4 pt-4">
-            <Button asChild size="lg">
-              <Link href="/my-page">Create Your Page for Free</Link>
-            </Button>
-          </div>
-        </div>
-      </section>
-
+      <HomeHero ownerPage={ownerPage} featured={featured} seed={seed} />
       <HowItWorks />
-      <PageShowcase />
+      <FinalCta />
     </main>
   );
 }
 
-// Three equally sized panels laid out in a responsive grid (stacked on mobile,
-// side-by-side from `md`). The whole block sits on a distinct, slightly raised
-// surface with a top border so it reads as its own section — a clean divider
-// from the full-height hero above rather than fading into the same void.
+// Prepare a real page for a display-only card: drop scheduled/expired links (as
+// the public page would), strip music so nothing autoplays, drop any click-to-
+// enter intro so no overlay covers the card, drop the avatar effect (its
+// particles are positioned with Math.random(), which SSR-hydration-mismatches
+// and runs a perpetual animation on every card), and swap an aurora background
+// for a plain gradient.
 //
-// Every icon is normalised to the same stroke and size, and the cards stretch
-// to a shared height via the grid, so nothing looks uneven regardless of copy
-// length.
-const FEATURES = [
-  {
-    title: "Everything in one place",
-    description:
-      "Collect all your links, socials, and projects on a single page so your audience always knows where to find you.",
-    icon: (
-      <svg
-        aria-hidden="true"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        className="size-8"
-      >
-        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-      </svg>
-    ),
-  },
-  {
-    title: "Customize freely",
-    description:
-      "Tweak colors, layout, and backgrounds to make your page truly yours, quickly and easily.",
-    icon: (
-      <svg
-        aria-hidden="true"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        className="size-8"
-      >
-        <path d="M12 3v2m0 14v2m9-9h-2M5 12H3m14.66-6.66-1.42 1.42M7.76 16.24l-1.42 1.42m0-11.32 1.42 1.42m8.48 8.48 1.42 1.42" />
-        <circle cx="12" cy="12" r="4" />
-      </svg>
-    ),
-  },
-  {
-    title: "Know what's working",
-    description:
-      "Built-in analytics show your views and clicks, so you can see what resonates and grow your audience.",
-    icon: (
-      <svg
-        aria-hidden="true"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        className="size-8"
-      >
-        <path d="M3 3v18h18" />
-        <path d="M7 15l4-4 3 3 5-6" />
-      </svg>
-    ),
-  },
-];
-
-function HowItWorks() {
-  return (
-    <section className="relative overflow-hidden border-t border-border bg-muted/20">
-      {/* Subtle square grid, brightest in the middle and masked out toward the
-          edges so it fades into the dark rather than ending in a hard line. */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0"
-        style={{
-          backgroundImage:
-            "linear-gradient(to right, rgba(255,255,255,0.05) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.05) 1px, transparent 1px)",
-          backgroundSize: "64px 64px",
-          maskImage:
-            "radial-gradient(ellipse 100% 95% at 50% 48%, #000 45%, transparent 96%)",
-          WebkitMaskImage:
-            "radial-gradient(ellipse 100% 95% at 50% 48%, #000 45%, transparent 96%)",
-        }}
-      />
-      <div className="relative z-10 mx-auto w-full max-w-[100rem] px-6 py-16 sm:px-12 sm:py-20 lg:px-20">
-        <h2 className="mb-10 text-balance text-center text-3xl font-bold tracking-tight sm:mb-16 sm:text-5xl">
-          Everything you need to{" "}
-          <span className="slot-shine font-serif font-medium italic">grow</span>{" "}
-          your audience
-        </h2>
-        <div className="grid gap-6 md:grid-cols-3 lg:gap-14">
-          {FEATURES.map((feature) => (
-            <div
-              key={feature.title}
-              className="group flex flex-col rounded-2xl border border-border bg-background/85 p-8 backdrop-blur-sm transition duration-300 ease-out hover:-translate-y-1 hover:border-white/20 hover:bg-background hover:shadow-xl hover:shadow-black/40 sm:p-10 lg:p-14"
-            >
-              <div className="mb-6 flex size-14 items-center justify-center rounded-xl bg-primary text-primary-foreground transition-transform duration-300 ease-out group-hover:scale-105 sm:mb-8 sm:size-16">
-                {feature.icon}
-              </div>
-              <h3 className="mb-3 text-xl font-semibold tracking-tight sm:mb-4 sm:text-2xl">
-                {feature.title}
-              </h3>
-              <p className="text-base leading-relaxed text-muted-foreground sm:text-lg">
-                {feature.description}
-              </p>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
+// The aurora swap is a hard requirement, not a nicety: AuroraCanvas creates a
+// WebGL context per mount (profile-view.tsx), and pinning `speed` to 0 only
+// stops the rAF loop -- the context is still created. One featured page with an
+// aurora background appears once per card, so the wall was holding ~10 live
+// contexts at 2316x1446 each (~13MB of GPU memory apiece). Browsers cap live
+// WebGL contexts around 16 and silently drop the oldest, which blanks cards.
+// A vertical `color -> baseColor` gradient reads almost identically at the
+// wall's card size and costs nothing.
+function sanitizeForPreview(page: PageData): PageData {
+  return {
+    ...page,
+    links: page.links.filter((l) => isLinkLive(l)),
+    music: undefined,
+    intro: undefined,
+    avatarEffect: undefined,
+    background:
+      page.background?.type === "aurora"
+        ? {
+            type: "gradient",
+            from: page.background.color,
+            to: page.background.baseColor,
+            direction: "vertical",
+            // The real aurora blooms from the top and fades out well before the
+            // bottom, so bias the blend upward instead of the 50% default.
+            distribution: 35,
+          }
+        : page.background,
+  };
 }
-
-// ---------------------------------------------------------------------------
-// Page showcase — a static mockup of a real stacked page shown on desktop and
-// mobile, plus the "Claim Your Page" username field. The composition image lives
-// at /public/showcase.png; regenerate it (scratchpad capture script) if the
-// featured page changes.
-// ---------------------------------------------------------------------------
-
-function PageShowcase() {
-  const router = useRouter();
-  // The username typed into the "Claim Your Page" field.
-  const [claim, setClaim] = useState("");
-
-  // Send the visitor to sign-up in signup mode with their chosen username
-  // pre-filled (the login page reads `mode` and `username` from the query).
-  function handleClaim(e: React.FormEvent) {
-    e.preventDefault();
-    const params = new URLSearchParams({ mode: "signup" });
-    const name = claim.trim();
-    if (name) params.set("username", name);
-    router.push(`/login?${params.toString()}`);
-  }
-
-  return (
-    <section className="relative overflow-hidden border-t border-border bg-background">
-      <div className="relative z-10 mx-auto w-full max-w-[100rem] px-6 py-16 sm:px-12 sm:py-24 lg:px-20">
-        <div className="mx-auto mb-10 max-w-2xl text-center sm:mb-14">
-          <h2 className="text-balance text-4xl font-bold tracking-tight sm:text-5xl">
-            Join us
-          </h2>
-          <p className="mt-5 text-balance text-lg leading-relaxed text-muted-foreground">
-            Make your own — it&apos;s free.
-          </p>
-          {/*
-            Social proof lands here once there's real momentum. Hold the count
-            until it reads as a crowd (~50+ creators), then drop in a line like
-            "Join 1,200+ creators on stacked" fed by a `creator_count()`
-            Supabase RPC granted to `anon` (mirrors get_public_page). Showing a
-            tiny number now would undercut the pitch, so it's intentionally
-            omitted for launch.
-          */}
-        </div>
-
-        {/* Static composition of the featured page on desktop + mobile. */}
-        {/* biome-ignore lint/performance/noImgElement: static hero mockup; next/image adds no value here */}
-        <img
-          src="/showcase.png"
-          alt="A stacked page shown on a desktop browser and a phone"
-          width={1250}
-          height={843}
-          className="mx-auto h-auto w-full max-w-5xl"
-        />
-
-        <form
-          onSubmit={handleClaim}
-          className="mx-auto mt-10 flex w-full max-w-lg flex-col gap-3 sm:mt-16 sm:flex-row"
-        >
-          {/* URL-style field: a fixed "stacked.page/" prefix in front of the
-              editable username, matching the sign-up form's address preview. */}
-          <div className="flex h-12 flex-1 items-center rounded-lg border border-input bg-background pl-3 transition focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/40">
-            <span className="shrink-0 select-none text-muted-foreground text-sm">
-              stacked.page/
-            </span>
-            <input
-              value={claim}
-              onChange={(e) => setClaim(e.target.value)}
-              placeholder="yourname"
-              aria-label="Choose your page username"
-              autoComplete="off"
-              spellCheck={false}
-              maxLength={30}
-              className="h-full w-full flex-1 bg-transparent pr-3 text-base outline-none placeholder:text-muted-foreground/60 sm:text-sm"
-            />
-          </div>
-          <Button
-            type="submit"
-            size="lg"
-            className="h-12"
-            disabled={!claim.trim()}
-          >
-            Claim Your Page
-          </Button>
-        </form>
-      </div>
-    </section>
-  );
-}
-
-// A silver base with a bright highlight band that sweeps left→right, giving the
-// text a periodic "shine". Shared by the hero adjectives and "grow" below.
-const SLOT_SHINE_CSS = `
-@keyframes slot-shine {
-  from { background-position: 200% center; }
-  to { background-position: -200% center; }
-}
-.slot-shine {
-  /* inline-block + a little padding on every side so the glyphs aren't clipped
-     by the background-clip:text box: the horizontal sliver clears the italic
-     slant overhang (e.g. the tail of "fastest"), and the vertical room clears
-     ascenders/descenders — without it the paint box is only line-height tall
-     (== font-size) and descenders fall outside it and render transparent (e.g.
-     the "g" in "grow" was cut off). Matching negative margins on all sides keep
-     the surrounding layout unchanged. */
-  display: inline-block;
-  padding: 0.12em 0.08em 0.22em;
-  margin: -0.12em -0.08em -0.22em;
-  background-image: linear-gradient(100deg, #94a3b8 0%, #94a3b8 40%, #ffffff 50%, #94a3b8 60%, #94a3b8 100%);
-  background-size: 200% auto;
-  background-clip: text;
-  -webkit-background-clip: text;
-  color: transparent;
-  -webkit-text-fill-color: transparent;
-  animation: slot-shine 3s linear infinite;
-}
-`;

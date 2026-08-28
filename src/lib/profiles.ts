@@ -16,6 +16,7 @@ const RESERVED_USERNAMES = new Set([
   "logout",
   "api",
   "admin",
+  "contact",
   "about",
   "help",
   "support",
@@ -27,6 +28,7 @@ const RESERVED_USERNAMES = new Set([
   "account",
   "auth",
   "new",
+  "edit",
 ]);
 
 /** Returns a human-readable problem with the username, or null if it's valid. */
@@ -71,6 +73,36 @@ export async function queryUsername(
  * returned an opaque PostgrestError that surfaced only as "Couldn't save
  * changes.", soft-locking account creation).
  */
+/**
+ * Ask the server whether `username` is usable: returns the reason it is not
+ * (malformed / reserved / already taken), or null when it is free.
+ *
+ * Goes through the `username_unavailable_reason` SECURITY DEFINER RPC because
+ * `profiles` is owner-only under RLS. A direct table read is not an option: as
+ * anon it fails with "permission denied", and as a signed-in user it returns
+ * zero rows for somebody else's username with NO error, which would report
+ * every taken name in the database as available.
+ *
+ * THROWS on a transport/RPC failure rather than returning null, so the caller
+ * has to decide explicitly what to do when the answer is unknown. A null return
+ * means "free" and nothing else -- conflating that with "we could not tell" is
+ * the most dangerous bug this feature could have.
+ */
+export async function usernameUnavailableReason(
+  username: string,
+  signal?: AbortSignal,
+): Promise<string | null> {
+  const supabase = createClient();
+  let query = supabase.rpc("username_unavailable_reason", {
+    candidate: username.trim(),
+  });
+  if (signal) query = query.abortSignal(signal);
+
+  const { data, error } = await query;
+  if (error) throw new Error(error.message || "Couldn't check that username.");
+  return (data as string | null) ?? null;
+}
+
 export async function setUsername(username: string): Promise<void> {
   const trimmed = username.trim();
   // Fast local feedback; the RPC re-validates authoritatively server-side.

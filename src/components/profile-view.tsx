@@ -26,6 +26,7 @@ import {
 import { createPortal } from "react-dom";
 import { MusicPlayer } from "~/components/music-player";
 import { recordClick, recordView } from "~/lib/analytics";
+import type { MusicConfig } from "~/lib/music";
 import type {
   AvatarEffect,
   AvatarOutline,
@@ -36,6 +37,7 @@ import type {
   PanelStyle,
   TextStyle,
 } from "~/lib/pages";
+import { DEFAULT_AVATAR_CROP } from "~/lib/pages";
 import { cn } from "~/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -188,31 +190,6 @@ export function contrastText(bg: string | undefined): string | undefined {
   const rgb = parseColor(bg);
   if (!rgb) return undefined;
   return relLuminance(rgb) > 0.4 ? "#000000" : "#ffffff";
-}
-
-/**
- * The solid color a box surface actually appears as — its color composited over
- * the page background at its own opacity (or the page background itself when the
- * box is off). Used so controls layered on a box (e.g. the text toolbar) can
- * tint themselves to match what's visible above them instead of the raw color.
- */
-export function effectiveBoxColor(box: BoxStyle, isDark: boolean): string {
-  const base = isDark ? { r: 10, g: 10, b: 10 } : { r: 255, g: 255, b: 255 };
-  const hex = (n: number) =>
-    Math.max(0, Math.min(255, Math.round(n)))
-      .toString(16)
-      .padStart(2, "0");
-  const toHex = (c: { r: number; g: number; b: number }) =>
-    `#${hex(c.r)}${hex(c.g)}${hex(c.b)}`;
-  if (box.enabled === false) return toHex(base);
-  const rgb = parseColor(box.color);
-  if (!rgb) return toHex(base);
-  const a = Math.max(0, Math.min(100, box.opacity)) / 100;
-  return toHex({
-    r: rgb.r * a + base.r * (1 - a),
-    g: rgb.g * a + base.g * (1 - a),
-    b: rgb.b * a + base.b * (1 - a),
-  });
 }
 
 // ---------------------------------------------------------------------------
@@ -1046,7 +1023,10 @@ export function BrandIcon({
   className?: string;
 }) {
   return (
-    <span style={color ? { color } : undefined} className="inline-flex">
+    <span
+      style={color ? { color } : undefined}
+      className="inline-flex items-center justify-center"
+    >
       <Icon className={className} />
     </span>
   );
@@ -1134,7 +1114,7 @@ function CopiedToast({ show }: { show: boolean }) {
   return createPortal(
     <div
       className={cn(
-        "pointer-events-none fixed inset-x-0 bottom-6 z-50 flex justify-center px-4",
+        "pointer-events-none fixed inset-x-0 bottom-[calc(1.5rem+env(safe-area-inset-bottom))] z-50 flex justify-center px-4",
         visible ? "animate-slide-up" : "animate-slide-down",
       )}
     >
@@ -1198,10 +1178,13 @@ export function LinkAnchor({
   const wrapRef = useRef<HTMLDivElement>(null);
   const { copied, copy } = useCopied();
 
-  // Close the preview on outside click or Escape.
+  // Close the preview on outside tap/click or Escape. Uses `pointerdown` (not
+  // `mousedown`) so an outside tap dismisses it on touch devices too — iOS
+  // Safari doesn't reliably synthesize mouse events for taps on the page
+  // background, which left the preview stuck open on phones.
   useEffect(() => {
     if (!previewOpen) return;
-    function onDown(e: MouseEvent) {
+    function onDown(e: PointerEvent) {
       if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
         setPreviewOpen(false);
       }
@@ -1209,10 +1192,10 @@ export function LinkAnchor({
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") setPreviewOpen(false);
     }
-    document.addEventListener("mousedown", onDown);
+    document.addEventListener("pointerdown", onDown);
     document.addEventListener("keydown", onKey);
     return () => {
-      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("pointerdown", onDown);
       document.removeEventListener("keydown", onKey);
     };
   }, [previewOpen]);
@@ -1226,9 +1209,16 @@ export function LinkAnchor({
     fontStyle: ts?.italic ? "italic" : undefined,
     textDecoration: ts?.underline ? "underline" : undefined,
     justifyContent: alignToJustify(ts?.align),
+    // On hover the lift glows in the link's own platform color (Twitch purple,
+    // YouTube red, Spotify green…) — the link-in-bio "signature" feel. Links
+    // with no recognized platform fall back to a neutral shadow. The user's
+    // chosen box styling is untouched; only the hover shadow is tinted.
+    ["--link-glow" as string]: platform?.color
+      ? withOpacity(platform.color, 0.5)
+      : "rgba(0,0,0,0.42)",
   };
   const boxClassName =
-    "flex w-full items-center gap-2 rounded-md px-4 py-3 text-center text-sm font-medium transition duration-300 ease-out hover:-translate-y-1 hover:scale-105 hover:shadow-xl hover:shadow-black/40 active:translate-y-0 active:scale-95 active:duration-75";
+    "flex w-full items-center gap-2 rounded-md px-4 py-3 text-center text-sm font-medium transition duration-300 ease-out hover:-translate-y-1 hover:scale-[1.03] hover:shadow-[0_16px_34px_-12px_var(--link-glow)] active:translate-y-0 active:scale-95 active:duration-75";
   const iconEl = link.logo ? (
     // biome-ignore lint/performance/noImgElement: small inline data-URL logo; next/image adds no value
     <img src={link.logo} alt="" className="size-4 object-contain" />
@@ -1238,13 +1228,15 @@ export function LinkAnchor({
   const labelEl =
     ts?.animation && ts.animation !== "none" ? (
       <span
-        className={textAnimClass(ts)}
+        className={cn("min-w-0 break-words", textAnimClass(ts))}
         style={{ "--text-c": textColor ?? "#ffffff" } as CSSProperties}
       >
         {link.label}
       </span>
     ) : (
-      link.label
+      // `min-w-0 break-words` so a long unbroken label (e.g. a pasted URL) wraps
+      // inside the box instead of forcing whole-page horizontal scroll on mobile.
+      <span className="min-w-0 break-words">{link.label}</span>
     );
 
   // Discord: the href holds a username, not a URL. Clicking copies it and
@@ -1365,11 +1357,15 @@ export function LinkIconAnchor({
     ? adaptColor(link.textStyle.color, isDark)
     : undefined;
   const { copied, copy } = useCopied();
+  // The glyph is sized as a fraction of its container (not a fixed `size-8`) so
+  // it scales down together with the container when the nowrap row shrinks its
+  // icons to fit a narrow phone — otherwise a fixed-size glyph would overflow
+  // its shrunken box and overlap its neighbors.
   const inner = link.logo ? (
     // biome-ignore lint/performance/noImgElement: small inline data-URL logo; next/image adds no value
-    <img src={link.logo} alt="" className="size-8 object-contain" />
+    <img src={link.logo} alt="" className="h-3/4 w-3/4 object-contain" />
   ) : Icon ? (
-    <BrandIcon icon={Icon} color={platform?.color} className="size-8" />
+    <BrandIcon icon={Icon} color={platform?.color} className="h-3/4 w-3/4" />
   ) : (
     <span
       style={fallbackColor ? { color: fallbackColor } : undefined}
@@ -1381,8 +1377,11 @@ export function LinkIconAnchor({
   // `aspect-square w-11` (instead of a fixed `size-11`) so the icon can shrink
   // to fit when the row is set to nowrap on narrow screens while staying a
   // square — the icons never wrap to a second row (see the row containers).
+  // `min-w-0` (not `min-w-8`) lets the icons keep shrinking past 32px so a row
+  // of many icons always fits the viewport instead of forcing page-wide
+  // horizontal scroll on a narrow phone.
   const iconClassName =
-    "flex aspect-square w-11 min-w-8 shrink items-center justify-center rounded-md transition duration-300 ease-out hover:-translate-y-1 hover:scale-110 hover:shadow-xl hover:shadow-black/40 active:translate-y-0 active:scale-95 active:duration-75";
+    "flex aspect-square w-11 min-w-0 shrink items-center justify-center rounded-md transition duration-300 ease-out hover:-translate-y-1 hover:scale-110 hover:shadow-xl hover:shadow-black/40 active:translate-y-0 active:scale-95 active:duration-75";
 
   // Discord: copy the username instead of navigating, with a confirmation.
   if (isDiscordLink(link.href)) {
@@ -1973,9 +1972,45 @@ export function AvatarFx({
 export function ProfileView({
   data,
   username,
+  selectable = false,
+  decorative = false,
+  onMusicChange,
 }: {
   data: PageData;
   username?: string;
+  /**
+   * Editor seam. When true, each editable element is tagged with a `data-select`
+   * marker (`avatar` | `name` | `bio` | `panel` | `music` | `link:<id>`) so the
+   * Studio editor can map a click in the preview back to the control that edits
+   * it. Defaults to false, so public pages render identical markup.
+   */
+  selectable?: boolean;
+  /**
+   * Marks this render as a MOCKUP rather than a document: the owner's name drops
+   * from `<h1>` to `<p>`.
+   *
+   * Every non-public render of this component is decorative -- the landing
+   * hero's wall of pages, the "how it works" demo, the editor's live preview --
+   * and each of them puts a whole page inside a page. The wall alone mounts a
+   * dozen cards, so the landing page was serving 48 `<h1>`s of other people's
+   * names ahead of its own. They are inside `inert` + `aria-hidden` wrappers, so
+   * a screen reader never reaches them; a crawler reading the markup does, and
+   * the one heading on the page that should carry weight was outnumbered
+   * 48-to-1.
+   *
+   * Defaults to false, so the real public page at /[username] -- the one render
+   * where the name IS the document's subject -- keeps its `<h1>` untouched.
+   */
+  decorative?: boolean;
+  /**
+   * Editor seam for the music card, which is the one element edited *in* the
+   * rendered page rather than from a control panel: the cover, the title /
+   * artist / album (each with its own typography) and the clip window are all
+   * on the card itself. Passing a handler puts the player in editing mode and
+   * receives the updated config; public pages pass nothing and get the
+   * read-only card.
+   */
+  onMusicChange?: (next: MusicConfig) => void;
 }) {
   // The app is dark-only.
   const isDark = true;
@@ -2003,6 +2038,36 @@ export function ProfileView({
   // Only render music when it's enabled and actually has something to show/play.
   const music = data.music?.enabled ? data.music : undefined;
 
+  // Editor seam: spread onto an element to tag it for the Studio editor. Returns
+  // nothing on public pages (selectable = false), so the markup is unchanged.
+  const mark = (id: string) => (selectable ? { "data-select": id } : {});
+
+  // Non-destructive framing: cover-fit, then pan/zoom via transform. The circle
+  // clip lives on the wrapper so the transformed image is masked to it. Values
+  // are percentages of the avatar size, so this same crop holds at any scale.
+  const crop = { ...DEFAULT_AVATAR_CROP, ...data.avatarCrop };
+  const avatarNode = (
+    <AvatarFx effect={data.avatarEffect} outline={data.avatarOutline}>
+      {data.avatar ? (
+        <div className="size-24 overflow-hidden rounded-full">
+          {/* biome-ignore lint/performance/noImgElement: small inline data-URL avatar; next/image adds no value */}
+          <img
+            src={data.avatar}
+            alt=""
+            className="size-full object-cover"
+            style={{
+              transform: `translate(${crop.x}%, ${crop.y}%) scale(${crop.zoom})`,
+            }}
+          />
+        </div>
+      ) : (
+        <div className="flex size-24 items-center justify-center rounded-full bg-muted text-3xl font-semibold text-muted-foreground">
+          {data.name.charAt(0).toUpperCase() || "?"}
+        </div>
+      )}
+    </AvatarFx>
+  );
+
   return (
     <>
       {/* The page background and glass filter must sit OUTSIDE the panel: the
@@ -2017,38 +2082,33 @@ export function ProfileView({
 
       <div
         style={panelCss(panel)}
+        {...mark("panel")}
         className={cn(
           "relative mx-auto flex w-full max-w-lg flex-col items-center gap-6",
           panel.type !== "transparent" && "rounded-2xl p-6",
         )}
       >
-        <AvatarFx effect={data.avatarEffect} outline={data.avatarOutline}>
-          {data.avatar ? (
-            // biome-ignore lint/performance/noImgElement: small inline data-URL avatar; next/image adds no value
-            <img
-              src={data.avatar}
-              alt=""
-              className="size-24 rounded-full object-cover"
-            />
-          ) : (
-            <div className="flex size-24 items-center justify-center rounded-full bg-muted text-3xl font-semibold text-muted-foreground">
-              {data.name.charAt(0).toUpperCase() || "?"}
-            </div>
-          )}
-        </AvatarFx>
+        {selectable ? (
+          <div data-select="avatar" className="inline-flex">
+            {avatarNode}
+          </div>
+        ) : (
+          avatarNode
+        )}
 
         {/* Name and bio, kept close together in their own group. */}
         <div className="flex w-full flex-col items-center gap-2">
           <div
             style={boxCss(nameBox)}
+            {...mark("name")}
             className="flex w-full flex-col items-center rounded-lg px-4 py-3"
           >
             <RichText
-              as="h1"
+              as={decorative ? "p" : "h1"}
               html={data.name}
               isDark={isDark}
               className={cn(
-                "w-full tracking-tight whitespace-pre-wrap",
+                "w-full tracking-tight break-words whitespace-pre-wrap",
                 textAnimClass(nameStyle),
               )}
               style={styleToCss(nameStyle, isDark)}
@@ -2056,6 +2116,7 @@ export function ProfileView({
           </div>
           <div
             style={boxCss(bioBox)}
+            {...mark("bio")}
             className="flex w-full flex-col items-center rounded-lg px-4 py-3"
           >
             <RichText
@@ -2063,7 +2124,7 @@ export function ProfileView({
               html={data.bio}
               isDark={isDark}
               className={cn(
-                "w-full whitespace-pre-wrap",
+                "w-full break-words whitespace-pre-wrap",
                 !bioStyle.color &&
                   !bioStyle.animation &&
                   "text-muted-foreground",
@@ -2077,43 +2138,93 @@ export function ProfileView({
         {data.links.length > 0 ? (
           horizontal ? (
             <div className="flex w-full flex-nowrap items-center justify-center gap-3 sm:gap-5">
-              {data.links.map((link) => (
-                <LinkIconAnchor
-                  key={link.id}
-                  link={link}
-                  isDark={isDark}
-                  trackUsername={username}
-                />
-              ))}
+              {data.links.map((link) =>
+                selectable ? (
+                  <div
+                    key={link.id}
+                    data-select={`link:${link.id}`}
+                    className="inline-flex"
+                  >
+                    <LinkIconAnchor
+                      link={link}
+                      isDark={isDark}
+                      trackUsername={username}
+                    />
+                  </div>
+                ) : (
+                  <LinkIconAnchor
+                    key={link.id}
+                    link={link}
+                    isDark={isDark}
+                    trackUsername={username}
+                  />
+                ),
+              )}
             </div>
           ) : (
             <div className="flex w-full flex-col gap-3">
-              {data.links.map((link) => (
-                <LinkAnchor
-                  key={link.id}
-                  link={link}
-                  box={linkBox}
-                  textStyle={data.linkStyle}
-                  isDark={isDark}
-                  trackUsername={username}
-                  enablePreview
-                />
-              ))}
+              {data.links.map((link) =>
+                selectable ? (
+                  <div
+                    key={link.id}
+                    data-select={`link:${link.id}`}
+                    className="w-full"
+                  >
+                    <LinkAnchor
+                      link={link}
+                      box={linkBox}
+                      textStyle={data.linkStyle}
+                      isDark={isDark}
+                      trackUsername={username}
+                      enablePreview
+                    />
+                  </div>
+                ) : (
+                  <LinkAnchor
+                    key={link.id}
+                    link={link}
+                    box={linkBox}
+                    textStyle={data.linkStyle}
+                    isDark={isDark}
+                    trackUsername={username}
+                    enablePreview
+                  />
+                ),
+              )}
             </div>
           )
         ) : null}
 
         {/* Integrated: the player sits inside the profile panel, full-width. */}
-        {music && music.display === "integrated" && (
-          <MusicPlayer config={music} className="w-full max-w-none" />
-        )}
+        {music &&
+          music.display === "integrated" &&
+          (selectable ? (
+            <div data-select="music" className="w-full">
+              <MusicPlayer
+                config={music}
+                className="w-full max-w-none"
+                editing={!!onMusicChange}
+                onChange={onMusicChange}
+              />
+            </div>
+          ) : (
+            <MusicPlayer config={music} className="w-full max-w-none" />
+          ))}
       </div>
 
       {/* Own panel: a standalone player card below the profile block, matching
           the profile panel's width. */}
       {music && music.display === "panel" && (
-        <div className="relative mx-auto mt-6 w-full max-w-lg">
-          <MusicPlayer config={music} className="w-full max-w-none" />
+        <div
+          {...mark("music")}
+          className="relative mx-auto mt-6 w-full max-w-lg"
+        >
+          <MusicPlayer
+            config={music}
+            className="w-full max-w-none"
+            editing={!!onMusicChange}
+            onChange={onMusicChange}
+          />
         </div>
       )}
 

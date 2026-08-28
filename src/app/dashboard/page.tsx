@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getPageServer } from "~/lib/pages.server";
 import { createClient } from "~/lib/supabase/server";
+import { getCountryPaths } from "~/lib/world-map";
 import { DashboardClient } from "./dashboard-client";
 
 // Analytics are per-account and always reflect the latest data.
@@ -25,5 +26,13 @@ export default async function DashboardPage() {
   // ones with zero clicks) with its icon.
   const page = await getPageServer();
 
-  return <DashboardClient username={username} links={page?.links ?? []} />;
+  // World-map outlines are projected on the server (same as the admin view) and
+  // handed to the client, which colors them by the owner's view counts.
+  return (
+    <DashboardClient
+      username={username}
+      links={page?.links ?? []}
+      countryPaths={getCountryPaths()}
+    />
+  );
 }

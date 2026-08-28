@@ -7,12 +7,11 @@ import {
   useRef,
   useState,
 } from "react";
-import {
-  MusicClipEditor,
-  readImageDownscaled,
-} from "~/components/music-edit-controls";
+import { useEntered } from "~/components/entry-gate";
+import { MusicClipEditor } from "~/components/music-edit-controls";
 import { styleToCss, textAnimClass } from "~/components/profile-view";
 import { TextStyleEditor } from "~/components/text-style-editor";
+import { MAX_IMAGE_SIZE, readImageDownscaled } from "~/lib/files";
 import {
   clamp,
   DEFAULT_ALBUM_STYLE,
@@ -161,6 +160,7 @@ function EditField({
   ariaLabel: string;
   className?: string;
 }) {
+  const css = styleToCss(style, IS_DARK);
   return (
     <input
       value={value}
@@ -168,9 +168,12 @@ function EditField({
       onFocus={onFocus}
       placeholder={placeholder}
       aria-label={ariaLabel}
-      style={styleToCss(style, IS_DARK)}
+      // `--no-zoom-fs` + `.no-zoom` floor the editor field at 16px on touch so
+      // tapping in to edit a sub-16px title/artist/album doesn't zoom the page
+      // (see globals.css). The saved card renders the real size (not editable).
+      style={{ ...css, "--no-zoom-fs": css.fontSize } as CSSProperties}
       className={cn(
-        "w-full min-w-0 rounded-md border border-white/20 bg-white/10 px-1.5 py-0.5 leading-tight outline-none transition-colors placeholder:font-normal placeholder:text-white/30 focus:border-white/60 focus:bg-white/15",
+        "no-zoom w-full min-w-0 rounded-md border border-white/20 bg-white/10 px-1.5 py-0.5 leading-tight outline-none transition-colors placeholder:font-normal placeholder:text-white/30 focus:border-white/60 focus:bg-white/15",
         textAnimClass(style),
         className,
       )}
@@ -218,6 +221,9 @@ export function MusicPlayer({
   const hasAudio = !!audioSrc;
 
   const audioRef = useRef<HTMLAudioElement>(null);
+
+  // `false` only while a click-to-enter splash still covers the page.
+  const entered = useEntered();
 
   const [volume, setVolume] = useState(() => clamp(config.initialVolume, 0, 1));
   const [muted, setMuted] = useState(false);
@@ -361,6 +367,10 @@ export function MusicPlayer({
     async (fadeMs = FADE_MS) => {
       const a = audioRef.current;
       if (!a) return;
+      // Already running (or already starting) — don't restart the fade. The
+      // enter click can reach us twice: once as the window gesture, once as
+      // the gate opening.
+      if (!a.paused) return;
       // Keep playback inside the configured segment: if the head sits outside
       // it, snap to the segment start before playing.
       const cs = clipStartRef.current ?? 0;
@@ -396,16 +406,21 @@ export function MusicPlayer({
 
   // Autoplay on load and whenever the audio source changes — the music eases in
   // over the longer entrance fade. Volume/mute are read via refs on purpose so
-  // dragging them doesn't restart playback.
+  // dragging them doesn't restart playback. Behind a click-to-enter splash the
+  // page hasn't been "entered" yet, so this waits for the visitor's click
+  // rather than playing under the overlay.
   useEffect(() => {
-    if (!config.autoplay || !audioSrc) return;
+    if (!entered || !config.autoplay || !audioSrc) return;
     void attemptPlay(ENTER_FADE_MS);
-  }, [audioSrc, config.autoplay, attemptPlay]);
+  }, [entered, audioSrc, config.autoplay, attemptPlay]);
 
-  // If autoplay was blocked, start on the visitor's first interaction anywhere —
-  // still eased in, since this is effectively the page's entrance.
+  // Start on the visitor's first interaction anywhere — either because autoplay
+  // was blocked, or because a splash is still up and their entering click is
+  // the gesture we want. Listening at the window means playback starts inside
+  // that gesture's call stack, which is what strict autoplay policies demand.
+  const waitingForEnter = !entered && config.autoplay && !!audioSrc;
   useEffect(() => {
-    if (!needsGesture) return;
+    if (!needsGesture && !waitingForEnter) return;
     const handler = () => void attemptPlay(ENTER_FADE_MS);
     window.addEventListener("pointerdown", handler);
     window.addEventListener("keydown", handler);
@@ -413,7 +428,7 @@ export function MusicPlayer({
       window.removeEventListener("pointerdown", handler);
       window.removeEventListener("keydown", handler);
     };
-  }, [needsGesture, attemptPlay]);
+  }, [needsGesture, waitingForEnter, attemptPlay]);
 
   const togglePlay = useCallback(() => {
     const a = audioRef.current;
@@ -480,7 +495,14 @@ export function MusicPlayer({
   ) => onChange?.({ ...config, [key]: { ...(config[key] ?? {}), ...patch } });
   const onCoverFile = async (file: File | undefined) => {
     if (!file) return;
-    updateMeta({ albumArt: await readImageDownscaled(file) });
+    // JPEG: album art is photographic and opaque, so the smaller encoding wins.
+    updateMeta({
+      albumArt: await readImageDownscaled(
+        file,
+        MAX_IMAGE_SIZE.albumArt,
+        "image/jpeg",
+      ),
+    });
   };
   const isEmpty = !meta.title && !meta.albumArt && !hasAudio;
 
@@ -653,7 +675,9 @@ export function MusicPlayer({
                 <NoteIcon className="size-7" />
               </div>
             )}
-            <span className="absolute inset-0 flex items-center justify-center bg-black/50 text-[10px] text-white opacity-0 transition-opacity group-hover:opacity-100">
+            {/* Reveal on hover for mouse users, and always on coarse pointers
+                (touch has no hover) so the cover reads as editable there too. */}
+            <span className="absolute inset-0 flex items-center justify-center bg-black/50 text-[10px] text-white opacity-0 transition-opacity group-hover:opacity-100 pointer-coarse:opacity-100">
               Change
             </span>
             <input
@@ -717,7 +741,7 @@ export function MusicPlayer({
                   placeholder="Year"
                   aria-label="Year"
                   inputMode="numeric"
-                  className="w-14 shrink-0 rounded-md border border-white/20 bg-white/10 px-1.5 py-0.5 text-[11px] text-white/70 outline-none placeholder:text-white/30 focus:border-white/60 focus:bg-white/15"
+                  className="w-14 shrink-0 rounded-md border border-white/20 bg-white/10 px-1.5 py-0.5 text-base text-white/70 outline-none placeholder:text-white/30 focus:border-white/60 focus:bg-white/15 md:text-[11px]"
                 />
               </div>
             </>

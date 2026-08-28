@@ -424,23 +424,11 @@ export function TextStyleEditor({
       </div>
       <div className="flex items-center justify-between gap-2 text-sm">
         <span className="text-muted-foreground">Text color</span>
-        <div className="flex items-center gap-2">
-          {style.color ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onChange({ color: undefined })}
-              className="text-muted-foreground"
-            >
-              Auto
-            </Button>
-          ) : null}
-          <ColorPicker
-            value={style.color ?? "#ffffff"}
-            onChange={(c) => onChange({ color: c })}
-            ariaLabel="Text color"
-          />
-        </div>
+        <ColorPicker
+          value={style.color ?? "#ffffff"}
+          onChange={(c) => onChange({ color: c })}
+          ariaLabel="Text color"
+        />
       </div>
     </div>
   );

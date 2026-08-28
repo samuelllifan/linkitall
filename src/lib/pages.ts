@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { IntroConfig } from "~/lib/intro";
 import type { MusicConfig } from "~/lib/music";
 import { createClient } from "~/lib/supabase/client";
 
@@ -54,6 +55,38 @@ export function linkScheduleStatus(
 /** True when a link should be shown to public visitors right now. */
 export function isLinkLive(link: LinkItem, now: number = Date.now()): boolean {
   return linkScheduleStatus(link, now) === "live";
+}
+
+/** An ISO-8601 string → the `datetime-local` value for that local wall-clock. */
+export function isoToLocalInput(iso?: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
+    d.getHours(),
+  )}:${pad(d.getMinutes())}`;
+}
+
+/** A `datetime-local` value (local wall-clock) → an ISO-8601 UTC string. */
+export function localInputToIso(value: string): string | undefined {
+  if (!value) return undefined;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return undefined;
+  return d.toISOString();
+}
+
+/** Compact, human date+time for schedule status lines (e.g. "Aug 3, 2:30 PM"). */
+export function formatScheduleDate(iso?: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 /** Google-Docs-style text formatting applied to a single text field. */
@@ -210,6 +243,27 @@ export interface AvatarOutline {
 }
 
 /**
+ * Non-destructive framing of the profile picture — which part of the source
+ * shows inside the circular avatar. The image is `object-fit: cover` fitted to
+ * the avatar box, then transformed by `translate(x%, y%) scale(zoom)`:
+ *
+ * - `x` / `y` pan the image, as a percentage of the avatar size (0 = centered).
+ *   Positive x moves the image right, positive y moves it down.
+ * - `zoom` scales on top of the cover fit (1 = fit, no zoom).
+ *
+ * Percentages (not pixels) so the same crop renders identically at any avatar
+ * size — the tiny 96px page avatar and a larger editor preview stay in sync.
+ */
+export interface AvatarCrop {
+  x: number;
+  y: number;
+  zoom: number;
+}
+
+/** A centered, un-zoomed avatar — the framing every existing page reads as. */
+export const DEFAULT_AVATAR_CROP: AvatarCrop = { x: 0, y: 0, zoom: 1 };
+
+/**
  * An animated decoration on the profile picture. `none` is the default (no
  * animation). `particles` emits little dots outward from the avatar; `shine`
  * sweeps a glossy highlight across it.
@@ -241,6 +295,8 @@ export interface PageData {
   avatar?: string;
   /** Ring around the profile picture. */
   avatarOutline?: AvatarOutline;
+  /** Non-destructive framing (pan/zoom) of the profile picture. */
+  avatarCrop?: AvatarCrop;
   /** Animated decoration on the profile picture. */
   avatarEffect?: AvatarEffect;
   nameStyle?: TextStyle;
@@ -265,6 +321,12 @@ export interface PageData {
   panelOrientation?: "vertical" | "horizontal";
   /** Optional music player (a song that plays on the page). Absent = no music. */
   music?: MusicConfig;
+  /**
+   * Optional "click to enter" splash shown before the page. Absent = the page
+   * shows immediately. When present with music set to autoplay, the enter-click
+   * also starts the track.
+   */
+  intro?: IntroConfig;
 }
 
 /** Shape of the `styles` jsonb column. */
@@ -280,8 +342,10 @@ interface StoredStyles {
   panel?: PanelStyle;
   panelOrientation?: "vertical" | "horizontal";
   avatarOutline?: AvatarOutline;
+  avatarCrop?: AvatarCrop;
   avatarEffect?: AvatarEffect;
   music?: MusicConfig;
+  intro?: IntroConfig;
 }
 
 /**
@@ -326,8 +390,10 @@ export async function queryPage(
     panel: styles.panel,
     panelOrientation: styles.panelOrientation,
     avatarOutline: styles.avatarOutline,
+    avatarCrop: styles.avatarCrop,
     avatarEffect: styles.avatarEffect,
     music: styles.music,
+    intro: styles.intro,
   };
 }
 
@@ -487,8 +553,10 @@ export async function savePage(pageInput: PageData): Promise<void> {
     panel: page.panel,
     panelOrientation: page.panelOrientation,
     avatarOutline: page.avatarOutline,
+    avatarCrop: page.avatarCrop,
     avatarEffect: page.avatarEffect,
     music: page.music,
+    intro: page.intro,
   };
 
   const { error } = await supabase.from("pages").upsert(
