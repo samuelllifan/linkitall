@@ -1,9 +1,20 @@
+import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { FinalCta } from "~/components/final-cta";
 import { HowItWorks } from "~/components/how-it-works";
 import { isLinkLive, type PageData } from "~/lib/pages";
 import { getFeaturedPagesServer, getPageServer } from "~/lib/pages.server";
+import { SITE_TITLE } from "~/lib/site-meta";
 import { HomeHero } from "./home-hero";
+
+// Only the landing page gets the headline in its title; see SITE_TITLE for why
+// the root layout keeps the bare wordmark. `title` alone here on purpose —
+// Next merges metadata SHALLOWLY, so declaring `openGraph` would replace the
+// root layout's whole block and silently drop siteName / type / description
+// with it. og:title is already pinned at the root, so there is nothing to fix.
+// `absolute`, so the root layout's "%s · stacked" template does not append the
+// wordmark to a title that already ends in it.
+export const metadata: Metadata = { title: { absolute: SITE_TITLE } };
 
 // Real public pages featured in the landing wall (rendered exactly as their
 // owners' public pages look). Resolved live via get_public_page; any that don't
@@ -34,7 +45,14 @@ export default async function Home() {
     ownerPage = sanitizeForPreview(ownerRaw);
   }
 
-  const featured = featuredRaw.map((p) => sanitizeForPreview(p.data));
+  // Drop any featured page its owner has since gated. `get_public_page` already
+  // withholds the CONTENT of an offline or password-protected page, so without
+  // this the wall would render them as blank cards — and a sensitive page has no
+  // business being the landing page's showcase at all. Pages that resolve to
+  // nothing are dropped by getFeaturedPagesServer already.
+  const featured = featuredRaw
+    .filter((p) => p.live && !p.passwordProtected && !p.sensitive)
+    .map((p) => sanitizeForPreview(p.data));
 
   // Rotates which pool page lands in which wall slot, changing once an hour so
   // repeat visitors don't always meet the same faces. Computed here on the

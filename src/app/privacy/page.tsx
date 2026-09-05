@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy — stacked",
+  title: "Privacy Policy",
   description: "How stacked collects, uses, and protects your information.",
 };
 

@@ -1,6 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
 import { ImageResponse } from "next/og";
 import { env } from "~/env";
+import { resolveBackground } from "~/lib/og-background";
+import { ogFonts } from "~/lib/og-fonts";
 import type { Background } from "~/lib/pages";
 import { plainText } from "~/lib/text";
 
@@ -13,102 +15,12 @@ export const alt = "Profile on stacked";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-// The card's default fill when a page has no custom background (or one Satori
-// can't render, like a video). A page on the default background just shows the
-// app's near-black dark theme, so mirror that (a whisper of gradient keeps it
-// from reading as dead-flat) rather than a decorative tint.
-const DEFAULT_BG = "linear-gradient(180deg, #0e0e13 0%, #08080b 100%)";
-
-/**
- * Translate a page's saved `background` into inline styles Satori can render,
- * so the share card matches what visitors actually see on the page. Returns the
- * background style plus a foreground color legible on top of it.
- */
-function resolveBackground(bg?: Background): {
-  style: Record<string, string>;
-  fg: string;
-} {
-  if (bg?.type === "custom") {
-    return { style: { backgroundColor: bg.color }, fg: readableText(bg.color) };
-  }
-  if (bg?.type === "gradient") {
-    const dir = bg.direction === "horizontal" ? "to right" : "to bottom";
-    const mid = bg.distribution ?? 50;
-    return {
-      style: {
-        backgroundImage: `linear-gradient(${dir}, ${bg.from}, ${mid}%, ${bg.to})`,
-      },
-      // The "stacked" label sits at the gradient's start (top or left),
-      // which is `from` for both directions — base legibility on it.
-      fg: readableText(bg.from),
-    };
-  }
-  if (bg?.type === "grid") {
-    const t = Math.max(0, bg.thickness);
-    // Solid base color with two tiled line layers (vertical + horizontal),
-    // mirroring PageBackground's grid. Satori tiles gradients via
-    // background-size, but doesn't support the page's radial fade mask, so the
-    // lines stay uniform across the card.
-    return {
-      style: {
-        backgroundColor: bg.baseColor,
-        backgroundImage: `linear-gradient(to right, ${bg.lineColor} ${t}px, transparent ${t}px), linear-gradient(to bottom, ${bg.lineColor} ${t}px, transparent ${t}px)`,
-        backgroundSize: `${bg.size}px ${bg.size}px, ${bg.size}px ${bg.size}px`,
-      },
-      fg: readableText(bg.baseColor),
-    };
-  }
-  if (bg?.type === "aurora") {
-    // The real aurora (a WebGL shader) is a broad light-top → dark-bottom
-    // vertical gradient whose horizon sits a little under halfway down — NOT a
-    // radial glow. Satori can't run the shader, so approximate the static look
-    // with a linear gradient: the light color fills the top and fades into the
-    // base color by ~88% down, mirroring the shader's wide, smooth falloff.
-    return {
-      style: {
-        backgroundColor: bg.baseColor,
-        backgroundImage: `linear-gradient(to bottom, ${bg.color} 0%, ${bg.baseColor} 88%)`,
-      },
-      fg: readableText(bg.baseColor),
-    };
-  }
-  if (
-    bg?.type === "media" &&
-    bg.kind === "image" &&
-    bg.src.startsWith("http")
-  ) {
-    // Mirror the page's darkening overlay so a dimmed photo reads the same on
-    // the card. (Blur is skipped — Satori doesn't rasterize CSS filters.)
-    const dim = Math.max(0, Math.min(100, bg.dim ?? 0)) / 100;
-    const overlay =
-      dim > 0
-        ? `linear-gradient(rgba(0,0,0,${dim}), rgba(0,0,0,${dim})), `
-        : "";
-    return {
-      style: {
-        backgroundImage: `${overlay}url(${bg.src})`,
-        backgroundSize: "cover",
-        backgroundPosition: `${bg.posX}% ${bg.posY}%`,
-      },
-      fg: "#ffffff",
-    };
-  }
-  // default and video (which Satori can't rasterize) fall back.
-  return { style: { backgroundImage: DEFAULT_BG }, fg: "#ffffff" };
-}
-
-/** Black or white text, whichever contrasts better with a hex background. */
-function readableText(hex: string): string {
-  const m = /^#?([\da-f]{6})$/i.exec(hex.trim());
-  if (!m) return "#ffffff";
-  const n = Number.parseInt(m[1], 16);
-  const r = (n >> 16) & 255;
-  const g = (n >> 8) & 255;
-  const b = n & 255;
-  // Relative luminance (sRGB coefficients); dark text on light backgrounds.
-  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  return luminance > 0.6 ? "#0b0b12" : "#ffffff";
-}
+// The brand purple's steps — mirrors --brand-* in globals.css and the gradient
+// stops in StackedMark / icon.svg. Change one, change all three.
+const LILAC = "#d8b4fe";
+const ORCHID = "#c084fc";
+const VIOLET = "#a78bfa";
+const INDIGO = "#818cf8";
 
 // A shared card shown when a page URL is posted to social/chat. Rendered from a
 // cookieless anon client (the public-page RPC is anon-accessible), so it works
@@ -134,7 +46,21 @@ export default async function OpengraphImage({
       page_username: username,
     });
     const row = Array.isArray(data) ? data[0] : data;
-    if (row) {
+    // This route is publicly fetchable and its output gets embedded by Discord,
+    // iMessage and every link unfurler, so it must respect the page's own gates.
+    // `get_public_page` already nulls the content of an offline or protected
+    // page; `sensitive` it does NOT (the page itself is viewable behind a
+    // click-through), and auto-unfurling that into a chat is exactly what the
+    // warning exists to prevent — so it is checked here.
+    //
+    // Compared against explicit `false`/`true` rather than truthiness: before the
+    // page-settings migration these columns are absent (undefined) and every
+    // page must keep its card.
+    const gated =
+      row?.live === false ||
+      row?.sensitive === true ||
+      row?.password_protected === true;
+    if (row && !gated) {
       name = plainText(row.name as string) || `@${row.username ?? username}`;
       tagline = plainText(row.bio as string);
       const a = (row.avatar as string | null) ?? null;
@@ -147,106 +73,194 @@ export default async function OpengraphImage({
     // Fall back to the username-only card below.
   }
 
+  const fonts = await ogFonts();
   const initial = name.replace(/^@/, "").charAt(0).toUpperCase() || "?";
-  const { style: bgStyle, fg } = resolveBackground(background);
+  // The page's own background, reconstructed for Satori. `topFg` can differ
+  // from `fg` because several backgrounds are not one flat colour — the top of
+  // an aurora is its lit band while the body sits on the base, and a gradient's
+  // start can be the opposite end of the ramp from its middle.
+  const { layers, fill, fg, topFg } = resolveBackground(background, size);
   // Muted variants of the foreground for the secondary lines.
   const mutedRgb = fg === "#ffffff" ? "255,255,255" : "11,11,18";
-  // The top "stacked" label sits at the very top of the card. For aurora that
-  // area is the light glow color (not the base), so contrast the label against
-  // that instead of the base-derived `fg`; every other background is uniform
-  // enough at the top that `fg` is already correct.
-  const topFg =
-    background?.type === "aurora" ? readableText(background.color) : fg;
 
   return new ImageResponse(
     <div
       style={{
+        position: "relative",
         width: "100%",
         height: "100%",
         display: "flex",
-        flexDirection: "column",
-        justifyContent: "space-between",
-        padding: "72px",
+        backgroundColor: fill,
         color: fg,
-        ...bgStyle,
+        fontFamily: "Inter",
       }}
     >
+      {layers}
+      {/* The lockup pins to the top and the profile block centres itself in
+          what is left. It used to be the middle row of a `space-between` trio
+          with the page URL beneath it; with that row gone, `space-between`
+          would have driven the block down to the bottom edge. Centring it in
+          the remaining space — rather than on the card — is what keeps the air
+          above and below it equal now that nothing balances the lockup. */}
       <div
-        style={{ display: "flex", fontSize: 34, fontWeight: 700, color: topFg }}
+        style={{
+          position: "relative",
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          flexDirection: "column",
+          padding: "72px",
+        }}
       >
-        stacked
-      </div>
+        {/* Brand lockup: the mark in the brand purple (StackedMark's
+            `variant="brand"`, same artwork and same stops as icon.svg), beside
+            the wordmark in `topFg`.
 
-      <div style={{ display: "flex", alignItems: "center", gap: "48px" }}>
-        {avatar ? (
-          // biome-ignore lint/performance/noImgElement: satori (next/og) renders a plain <img>
-          <img
-            src={avatar}
-            width={220}
-            height={220}
-            style={{ borderRadius: "9999px", objectFit: "cover" }}
-            alt=""
-          />
-        ) : (
+            The mark carries its own colour while the wordmark keeps flipping
+            black-or-white against the page's background. That split is the
+            point: the purple is the recognisable half and has to look the same
+            on every card, and the text is the half that has to stay readable.
+            The mark is 40px of decoration next to it, so it can sit on a light
+            page at logo contrast without costing legibility.
+            StackedMark's soft glow is left off — Satori rasterizes no CSS
+            drop-shadow, and at this size it would be invisible regardless. */}
+        <div style={{ display: "flex", alignItems: "center", gap: 13 }}>
+          <svg
+            width={40}
+            height={40}
+            viewBox="0 0 100 100"
+            fill="none"
+            aria-hidden="true"
+          >
+            <defs>
+              <linearGradient id="og-mark-brand" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stopColor={LILAC} />
+                <stop offset="0.4" stopColor={ORCHID} />
+                <stop offset="0.72" stopColor={VIOLET} />
+                <stop offset="1" stopColor={INDIGO} />
+              </linearGradient>
+            </defs>
+            {/* Top sheet: gradient-filled outline. */}
+            <polygon
+              points="50,8 88,30 50,52 12,30"
+              fill="url(#og-mark-brand)"
+              stroke="url(#og-mark-brand)"
+              strokeWidth={7}
+              strokeLinejoin="round"
+            />
+            {/* Lower sheets step down the ramp as they recede. */}
+            <polyline
+              points="12,48 50,70 88,48"
+              stroke={VIOLET}
+              strokeWidth={7}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              opacity={0.6}
+            />
+            <polyline
+              points="12,64 50,86 88,64"
+              stroke={INDIGO}
+              strokeWidth={7}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              opacity={0.32}
+            />
+          </svg>
           <div
             style={{
-              width: 220,
-              height: 220,
-              borderRadius: "9999px",
               display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: 110,
+              fontSize: 34,
               fontWeight: 700,
-              background: `rgba(${mutedRgb},0.12)`,
+              letterSpacing: "-0.03em",
+              color: topFg,
             }}
           >
-            {initial}
+            stacked
+            {/* The wordmark is "stacked." — the period is part of it, and it is
+                brand purple everywhere it appears (`.brand-text`, navbar.tsx /
+                auth-card.tsx). Flat ORCHID rather than the gradient those use:
+                Satori has no `background-clip: text`, and at this size the
+                gradient is squeezed into a ~10px dot anyway, over which the
+                visible slice averages out to about this colour.
+
+                This is the one piece of brand chroma on a lockup that is
+                otherwise deliberately neutral — see the mark above for why the
+                rest stays mono. A dot is small enough to read as a signature
+                rather than as stacked's palette imposed on someone's page. */}
+            <div style={{ display: "flex", color: ORCHID }}>.</div>
           </div>
-        )}
+        </div>
+
         <div
           style={{
             display: "flex",
-            flexDirection: "column",
-            maxWidth: 760,
+            flex: 1,
+            alignItems: "center",
+            gap: "48px",
           }}
         >
+          {avatar ? (
+            // biome-ignore lint/performance/noImgElement: satori (next/og) renders a plain <img>
+            <img
+              src={avatar}
+              width={220}
+              height={220}
+              style={{ borderRadius: "9999px", objectFit: "cover" }}
+              alt=""
+            />
+          ) : (
+            <div
+              style={{
+                width: 220,
+                height: 220,
+                borderRadius: "9999px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 110,
+                fontWeight: 700,
+                background: `rgba(${mutedRgb},0.12)`,
+              }}
+            >
+              {initial}
+            </div>
+          )}
           <div
             style={{
               display: "flex",
-              fontSize: 76,
-              fontWeight: 700,
-              lineHeight: 1.05,
+              flexDirection: "column",
+              maxWidth: 760,
             }}
           >
-            {name}
-          </div>
-          {tagline ? (
             <div
               style={{
                 display: "flex",
-                marginTop: 20,
-                fontSize: 38,
-                color: `rgba(${mutedRgb},0.75)`,
-                lineHeight: 1.25,
+                fontSize: 76,
+                fontWeight: 700,
+                lineHeight: 1.05,
               }}
             >
-              {tagline.slice(0, 120)}
+              {name}
             </div>
-          ) : null}
+            {tagline ? (
+              <div
+                style={{
+                  display: "flex",
+                  marginTop: 20,
+                  fontSize: 38,
+                  color: `rgba(${mutedRgb},0.75)`,
+                  lineHeight: 1.25,
+                }}
+              >
+                {tagline.slice(0, 120)}
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
-
-      <div
-        style={{
-          display: "flex",
-          fontSize: 30,
-          color: `rgba(${mutedRgb},0.6)`,
-        }}
-      >
-        stacked.page/{username}
-      </div>
     </div>,
-    { ...size },
+    // No `fonts` key at all when they couldn't be read, rather than an empty
+    // array — Satori needs at least one face and falls back to its own.
+    { ...size, ...(fonts.length > 0 ? { fonts } : {}) },
   );
 }

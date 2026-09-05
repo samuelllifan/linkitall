@@ -15,5 +15,12 @@
  * Its own module, not footer.tsx: footer.tsx imports WhatsNewLink, so exporting
  * it from there would make the two files circular.
  */
+/*
+ * The focus half is `rounded-sm` + an offset ring: the elements themselves are
+ * square-cornered inline text, so without a radius the ring is a hard rectangle
+ * with corners sharper than anything else on the page, and without the offset it
+ * sits right on the glyphs. Neither link nor button had any focus style, so
+ * tabbing through the footer moved an invisible cursor across four stops.
+ */
 export const FOOTER_LINK_CLASS =
-  "self-start border-transparent border-b pb-px text-left transition-colors hover:border-current hover:text-foreground";
+  "self-start rounded-sm border-transparent border-b pb-px text-left transition-colors hover:border-current hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background";

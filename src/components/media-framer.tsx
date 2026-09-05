@@ -245,7 +245,7 @@ export function MediaFramer({
           <button
             type="button"
             onClick={() => onChange({ ...DEFAULT_MEDIA_FRAME })}
-            className="rounded px-1.5 py-0.5 text-foreground/80 transition-colors hover:bg-muted hover:text-foreground"
+            className="rounded px-1.5 py-0.5 text-foreground/80 transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
           >
             Reset
           </button>

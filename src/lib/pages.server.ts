@@ -62,6 +62,53 @@ export interface PublicPage {
    * search-visibility migration is applied.
    */
   indexable: boolean;
+  /**
+   * Whether the page is published. False means the owner has taken it offline:
+   * visitors get a plain "not available" screen, the owner still sees the page.
+   */
+  live: boolean;
+  /** Show a "sensitive content" interstitial before the page. */
+  sensitive: boolean;
+  /** Whether the OWNER's own views and clicks are recorded in their analytics. */
+  countOwnVisits: boolean;
+  /**
+   * The page is behind a visitor password.
+   *
+   * Whether `data` is populated depends on WHICH loader produced this value, and
+   * the two are not interchangeable:
+   *
+   *   * from {@link getPublicPageServer}, `data` is EMPTY — `get_public_page`
+   *     withholds every content column at the database while a password is set,
+   *     so the unlock screen renders without the page ever being fetched;
+   *   * from {@link getPublicPageUnlockedServer}, the flag is still true (the
+   *     page IS protected) but `data` is fully populated, because the caller
+   *     proved the password.
+   *
+   * So this flag means "a password guards this page", never "the content in
+   * this object is missing". Test the loader, not the flag.
+   */
+  passwordProtected: boolean;
+}
+
+/**
+ * Every page-level flag, defaulted the way an un-migrated database should read.
+ *
+ * These columns arrive with `20260830232145_add_page_and_account_settings`. Any
+ * row read before that migration lands comes back without them, and every
+ * default here is the behaviour the app had when the flag did not exist —
+ * published, unprotected, not sensitive, owner visits uncounted. So the app
+ * runs identically on either schema and simply gains the switches once the
+ * migration is pushed.
+ */
+// biome-ignore lint/suspicious/noExplicitAny: RPC row is dynamically shaped
+function pageFlags(row: any) {
+  return {
+    indexable: (row.indexable as boolean | null) ?? true,
+    live: (row.live as boolean | null) ?? true,
+    sensitive: (row.sensitive as boolean | null) ?? false,
+    countOwnVisits: (row.count_own_visits as boolean | null) ?? false,
+    passwordProtected: (row.password_protected as boolean | null) ?? false,
+  };
 }
 
 // Shape one `get_public_page` result row into a PublicPage. Shared by the
@@ -86,7 +133,7 @@ function mapPublicPageRow(row: any): PublicPage {
   };
   return {
     username: row.username as string,
-    indexable: (row.indexable as boolean | null) ?? true,
+    ...pageFlags(row),
     data: {
       name: (row.name as string | null) ?? "",
       bio: (row.bio as string | null) ?? "",
@@ -131,6 +178,33 @@ export async function getPublicPageServer(
     return null;
   }
 
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) return null;
+  return mapPublicPageRow(row);
+}
+
+/**
+ * The same page, for a visitor who has supplied its password.
+ *
+ * Returns null for a wrong password, an unprotected page, and an unknown
+ * username alike — the RPC does not distinguish them, and neither should the
+ * caller. Also returns null when the RPC itself is missing (PGRST202, i.e. the
+ * page-password migration hasn't been pushed yet), which lands the visitor back
+ * on the unlock screen rather than crashing the route.
+ */
+export async function getPublicPageUnlockedServer(
+  username: string,
+  password: string,
+): Promise<PublicPage | null> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("get_public_page_unlocked", {
+    page_username: username,
+    page_password: password,
+  });
+  if (error) {
+    console.error("get_public_page_unlocked failed:", error);
+    return null;
+  }
   const row = Array.isArray(data) ? data[0] : data;
   if (!row) return null;
   return mapPublicPageRow(row);

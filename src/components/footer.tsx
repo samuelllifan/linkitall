@@ -5,7 +5,11 @@ import { WhatsNewLink } from "~/components/whats-new-link";
 const LINKS = [
   { href: "/privacy", label: "Privacy Policy" },
   { href: "/terms", label: "Terms of Service" },
-  { href: "/contact", label: "Contact Us" },
+  // Sentence case, unlike the two above it: those are the NAMES of
+  // documents, this is an instruction. It also has to match the heading on
+  // the page it opens, which is the app's house style everywhere else
+  // ("Sign in", "Back home", "Delete account").
+  { href: "/contact", label: "Contact us" },
 ];
 
 export function Footer() {

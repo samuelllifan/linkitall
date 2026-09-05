@@ -25,6 +25,24 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-ring: var(--ring);
+  /* Semantic status hues. Mapped here so `text-success`, `bg-warning/10`,
+     `border-danger/30` etc. all resolve — the app had been reaching straight
+     into Tailwind's own palette (`text-red-400` in one file, `text-green-500`
+     in the next, `#f59e0b` inline in a keyframe) for the same four meanings. */
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-info: var(--info);
+  /* A filled status chip needs a DARK label — see --*-foreground in :root. */
+  --color-success-foreground: var(--success-foreground);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-danger-foreground: var(--danger-foreground);
+  --color-info-foreground: var(--info-foreground);
+  /* The brand purple's steps, individually — see --brand-* in :root. */
+  --color-brand-lilac: var(--brand-lilac);
+  --color-brand-orchid: var(--brand-orchid);
+  --color-brand-violet: var(--brand-violet);
+  --color-brand-indigo: var(--brand-indigo);
   --radius-sm: 0.25rem;
   --radius-md: 0.375rem;
   --radius-lg: 0.5rem;
@@ -73,6 +91,39 @@
   --destructive: oklch(0.396 0.141 25.723);
   --ring: oklch(0.62 0 0);
 
+  /* Status colour, as MEANING rather than decoration — the only colours in the
+     app allowed to carry text. Each one clears 4.5:1 on --background
+     (oklch 0.145 ≈ #0a0a0a): success 8.7:1, warning 9.2:1, danger 6.9:1,
+     info 9.0:1. These four are the ONLY hues outside the brand purple that the
+     UI is allowed to show, which is what makes them legible as meaning: the
+     brand is one colour, so anything that isn't purple is saying something.
+     Tint fills go through the same token (`bg-danger/10`) so a state's surface
+     and its text can never drift apart. */
+  --success: oklch(0.723 0.192 149.6); /* #22c55e */
+  --warning: oklch(0.769 0.163 70.08); /* #f59e0b */
+  /* Danger replaces three near-identical reds that all meant one thing —
+     `text-red-400` (22 sites), `text-rose-400`, and the dark `--destructive`
+     pressed into service as a text colour. Tuned to sit where red-400 (#f87171)
+     already sat, so those 22 sites don't visibly shift, while clearing 6.9:1 on
+     the page and 6.3:1 on a popover (where the delete confirmations live).
+     Deliberately NOT the brand's rose: rose is the Links section's hue, and an
+     error should not be the same colour as a section of the editor. */
+  --danger: oklch(0.704 0.175 22.5); /* #fa6b6c */
+  --info: oklch(0.746 0.145 232.7); /* #38bdf8 */
+
+  /* Labels for FILLED status surfaces. A status colour bright enough to carry
+     text on a near-black page is far too bright to sit under white text — white
+     on --danger is 3.7:1, on --success 2.3:1 — so a filled chip takes a dark
+     label. These exist so nobody has to rediscover that.
+     --destructive above is the opposite animal: a fill-only dark red that is
+     unreadable AS text (which is exactly how the music editor's error message
+     ended up at 1.9:1). Never alias one to the other — it would take every
+     `bg-destructive text-white` button from 10:1 down to 3.7:1. */
+  --success-foreground: oklch(0.145 0 0);
+  --warning-foreground: oklch(0.145 0 0);
+  --danger-foreground: oklch(0.145 0 0);
+  --info-foreground: oklch(0.145 0 0);
+
   /* Motion. Tailwind's own default transition easing is cubic-bezier(0.4,0,0.2,1)
      — byte-for-byte its `ease-in-out` — but almost every place in this codebase
      that names a curve explicitly asks for `ease-out`. Since only ~8% of our
@@ -90,6 +141,21 @@
      splash, the scroll reveals, the landing page's device switch. It was written
      out by hand in four places before it was a token; keep it a token. */
   --ease-settle: cubic-bezier(0.22, 1, 0.36, 1);
+  /* The even, symmetric curve for a large surface that travels out and back
+     along the same path — today the navbar being parked and unparked, and the
+     handle that rides with it.
+     
+     It exists as a TOKEN, and not as the `ease-in-out` utility, because of a
+     trap that cost real debugging: Tailwind's `ease-in-out` emits
+     cubic-bezier(0.4, 0, 0.2, 1), while the CSS KEYWORD `ease-in-out` is
+     cubic-bezier(0.42, 0, 0.58, 1). Two different curves under one name. The
+     bar wore the utility and the tab's own class wore the keyword, and they
+     drifted 19px apart in the middle of a 68px journey — the bar racing ahead
+     and the handle trailing it, which is exactly as broken as it sounds for two
+     things that are supposed to be one object. Anything that has to stay welded
+     to something else must name THIS, on both sides, never the keyword and
+     never the utility. */
+  --ease-glide: cubic-bezier(0.4, 0, 0.2, 1);
 
   /* Duration tiers, named for their job so new code reaches for an existing one
      instead of inventing a fourth number. These are the values the codebase
@@ -105,26 +171,68 @@
      music card has always arrived on (`music-in`), promoted to a token. */
   --dur-reveal: 500ms;
 
-  /* Brand chroma. The UI stays black & white; this rainbow is used as brand /
-     information only — the logo mark, active states, one gradient moment — a
-     spectrum rather than a single key hue (deliberately skips green; green
-     stays functional for Spotify links & success states). */
-  --brand-grad: linear-gradient(
-    100deg,
-    #fbbf24,
-    #fb7185,
-    #f472b6,
-    #a78bfa,
-    #60a5fa,
-    #22d3ee
-  );
-  /* The same spectrum, built to LOOP. Three things make it seamless where
+  /* Site chrome geometry. The navbar is a FLOATING ISLAND: `fixed`, inset from
+     every viewport edge, so it no longer occupies document flow — a spacer in
+     the root layout stands in for it. Anything that sizes itself against "the
+     viewport minus the site chrome" must measure with --nav-space, never a
+     hardcoded height: the bar's height and those calc()s used to be two
+     independent numbers that drifted apart every time the bar changed.
+       --nav-h     the pill's own height
+       --nav-inset the gap between the pill and the top/side of the screen
+       --nav-space the vertical room the floating bar consumes (inset + pill +
+                   an equal inset of breathing room below it) */
+  --nav-h: 3.5rem;
+  --nav-inset: 0.75rem;
+  --nav-space: calc(var(--nav-h) + var(--nav-inset) * 2);
+
+  /* Where a page's OWN fixed overlays start (today just the owner's
+     hidden-links notice; the share button that also used this is unmounted for
+     now). It is a variable and not a calc() at each call site
+     because the bar is no longer guaranteed to be there: a visitor's view of
+     someone else's page has no bar at all, and the owner can collapse it away
+     to preview their page. Both cases retune this to a plain inset below, so a
+     floating control never sits 5rem down the screen pointing at nothing. */
+  --chrome-top: calc(var(--nav-space) + 0.5rem);
+
+  /* The brand purple, decomposed. --brand-grad below is the SWEEP; these are
+     the steps it is made of, as individual colours — because most call sites
+     want ONE of them rather than the whole sweep: the logo mark's SVG stops,
+     the landing showcase's page tints, the editor's section accent.
+     
+     This replaced a six-hue "spectrum" (amber/rose/pink/violet/blue/cyan) that
+     ran the brand across the whole colour wheel. One family reads as a decision;
+     six hues read as an absence of one — and it left the app with no colour that
+     could mean "stacked", because every colour was already in use somewhere.
+     
+     The four steps span 277°–306° of hue and descend in lightness, so a gradient
+     across them travels visibly while never leaving purple. --brand-violet is
+     THE key hue: it is the one that carries text (7.3:1 on the page, 6.8:1 on a
+     card), and the deeper members are fills only — #7c3aed and #9333ea sit at
+     3.5:1 and 3.7:1, so neither may ever be a text colour.
+     
+     Two places MUST keep literal copies and cannot be migrated: the chart
+     palette (lib/chart-colors.ts — its colours reach SVG presentation attributes
+     and a <canvas>, neither of which resolves var()) and src/app/icon.svg, which
+     is served as its own document. Change a step here, change those too. */
+  --brand-lilac: oklch(0.827 0.108 306.4); /* #d8b4fe */
+  --brand-orchid: oklch(0.722 0.177 305.5); /* #c084fc */
+  --brand-violet: oklch(0.709 0.159 293.5); /* #a78bfa — the key hue */
+  --brand-indigo: oklch(0.68 0.158 276.9); /* #818cf8 */
+
+  /* Brand chroma. The UI stays black & white; the purple is used as brand /
+     information only — the logo mark, active states, one gradient moment. The
+     sweep exists so the brand has a signature at the two or three places it
+     actually shows, not so colour can be sprayed around: everything else on
+     screen is still greyscale, and the four status hues are still the only
+     non-purple colours in the app. */
+  --brand-grad: linear-gradient(100deg, #d8b4fe, #c084fc, #a78bfa, #818cf8);
+  /* The same ramp, built to LOOP. Three things make it seamless where
      --brand-grad can't be:
        * `repeating-` gives it a fixed period (800px) instead of stretching to
          whatever box it lands in, so a translation by one period is a no-op;
-       * the stop list is a palindrome, so the wrap from the cool end back to
-         amber runs back through the spectrum instead of cutting across the hue
-         wheel and flashing a dull band at the seam;
+       * the stop list is a palindrome, so the wrap from indigo back to lilac
+         runs back through the ramp instead of jumping the full 30° at the seam
+         and flashing a hard edge;
        * it is a flat 90deg. At any other angle a horizontal translation shifts
          the phase by only cos of the tilt, so one "period" of travel would land
          slightly off and the mismatch would accumulate into a visible jump.
@@ -133,18 +241,35 @@
      cuts the pattern mid-period -- a static seam that no timing can hide. */
   --brand-grad-loop: repeating-linear-gradient(
     90deg,
-    #fbbf24 0px,
-    #fb7185 80px,
-    #f472b6 160px,
-    #a78bfa 240px,
-    #60a5fa 320px,
-    #22d3ee 400px,
-    #60a5fa 480px,
-    #a78bfa 560px,
-    #f472b6 640px,
-    #fb7185 720px,
-    #fbbf24 800px
+    #d8b4fe 0px,
+    #c084fc 133px,
+    #a78bfa 267px,
+    #818cf8 400px,
+    #a78bfa 533px,
+    #c084fc 667px,
+    #d8b4fe 800px
   );
+
+  /* Studio section identity. All five sections now wear the brand violet.
+     
+     They used to wear five different hues sampled out of the old rainbow, so
+     the accent colour itself told you which section was open. That was the
+     single most colourful screen in the app, and it is the reason the five
+     tokens still exist rather than being collapsed into one: the studio asks
+     for `var(--sec-<id>)` by name, `--ring` is derived from `--sec`, and the
+     accent follows you into the preview. Keeping the indirection means the
+     per-section wiring survives, so restoring five hues — or giving one section
+     its own colour for a real reason — stays a five-line change here rather
+     than a refactor of the editor.
+     
+     Nothing was lost in the switch: only one section is ever on screen, and the
+     rail already answers "where am I" with the chip fill, the label and the
+     underline. Hue was the fourth signal saying the same thing. */
+  --sec-profile: var(--brand-violet);
+  --sec-links: var(--brand-violet);
+  --sec-background: var(--brand-violet);
+  --sec-music: var(--brand-violet);
+  --sec-intro: var(--brand-violet);
 }
 
 @layer base {
@@ -152,15 +277,23 @@
     @apply border-border;
   }
   html {
-    /* Stop the elastic rubber-band at the scroll boundaries. It let the sticky
-       navbar bounce down over the fixed edit-mode controls (Background /
-       Templates) when scrolling up fast, causing a brief overlap. */
+    /* Stop the elastic rubber-band at the scroll boundaries. Originally because
+       the then-sticky navbar could bounce down over the editor's fixed controls
+       when scrolling up fast; the navbar is a fixed island now and no longer
+       moves, but the rubber-band still drags the whole page out from under it,
+       which reads as the bar sliding. Keep it. */
     overscroll-behavior-y: none;
     /* Reserve the scrollbar gutter so the always-visible classic scrollbar on
        Windows/Linux doesn't shift the centered layout sideways when moving
        between a scrolling and a non-scrolling page. (No-op with macOS overlay
        scrollbars.) */
     scrollbar-gutter: stable;
+    /* The navbar floats over the page, so any in-page anchor would otherwise
+       land its target underneath the bar. Nothing links to a `#fragment` today,
+       but this is the kind of thing that is invisible until someone adds one and
+       then baffling. Pair with the `scroll-smooth` class on <html> in
+       layout.tsx. */
+    scroll-padding-top: var(--nav-space);
   }
   body {
     @apply bg-background text-foreground;
@@ -196,6 +329,124 @@
   }
 }
 
+/* ── Text selection ─────────────────────────────────────────────────────────
+   Selected text is the one piece of "UI" the reader draws themselves, and until
+   now the app had no opinion about it: there was no ::selection rule anywhere,
+   so every visitor got their BROWSER's default highlight — which under
+   `color-scheme: dark` is the OS accent colour. The site's selection colour was
+   therefore whatever the reader had picked in System Settings, and looked
+   different on two machines side by side.
+
+   It is the brand purple now, and it moves.
+
+   ## Why this is built out of @property and not a plain colour
+
+   ::selection cannot be animated or transitioned. It is a highlight pseudo, it
+   has no independent animation timeline, and `transition`/`animation` declared
+   inside it are ignored by every engine. The one thing that DOES reach it is a
+   registered custom property: animate `--sel-tint` on the root and the
+   highlight repaints with each new value, because the pseudo resolves its
+   `var()` against the originating element and the animation invalidates that.
+   So the timeline lives on :root and the highlight just reads from it.
+
+   Registration (@property) is what makes it interpolate at all. An unregistered
+   custom property has no type, so the UA can only flip between keyframes
+   DISCRETELY — the colour would jump between the four stops instead of
+   travelling through them. `<color>` and `<percentage>` are what buy the
+   in-between frames. `initial-value` has to be a literal: var() is not allowed
+   there, which is also why the keyframes below carry literal hex (the same
+   reason --brand-grad does).
+
+   ## Why it is gated on an attribute
+
+   Both properties `inherit`, so every frame of the sweep invalidates style for
+   the whole document. That is fine for the few seconds someone is holding a
+   selection and completely unacceptable as a permanent background cost — the
+   same objection this file already raises against a bare `.brand-ring` in an
+   editor. `data-selecting` is set on <html> only while a non-collapsed
+   selection actually exists (components/selection-motion.tsx), so the timeline
+   exists only when there is something on screen for it to paint.
+
+   That gate is also what gives the fade its trigger. There is no "selection
+   appeared" event in CSS, so the bloom below is armed by the attribute landing.
+
+   No `color` is set on purpose. A creator's page can carry any background and
+   any per-character text colour, so pinning the selected text to one foreground
+   would be a guess that is wrong on some of them; a translucent tint over the
+   text's own colour is what the browser default does and it cannot fail. */
+@property --sel-tint {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #a78bfa;
+}
+@property --sel-amt {
+  syntax: "<percentage>";
+  inherits: true;
+  initial-value: 34%;
+}
+
+::selection {
+  background-color: color-mix(
+    in oklab,
+    var(--sel-tint) var(--sel-amt),
+    transparent
+  );
+}
+
+/* Two clocks on one element, animating two different properties, so they do not
+   fight: the bloom runs once and holds (`both`), the sweep runs forever. */
+:root[data-selecting] {
+  animation:
+    selection-bloom var(--dur-enter) var(--ease-settle) both,
+    selection-sweep 6s linear infinite;
+}
+
+/* The fade. From 8% rather than 0% deliberately: a highlight that starts at
+   nothing reads as lag while you are still dragging the selection out. Start
+   faintly visible on the first frame and bloom to full. */
+@keyframes selection-bloom {
+  from {
+    --sel-amt: 8%;
+  }
+  to {
+    --sel-amt: 34%;
+  }
+}
+
+/* --brand-grad-loop's ramp, spent in TIME instead of across a box: the same
+   four steps, in the same order, over the same 6s the brand ring takes for one
+   period — so the site has one brand tempo rather than two.
+   Palindromic for the same reason the ring's stop list is: running lilac ->
+   indigo and straight back to lilac would jump the full 30° of hue at the wrap
+   and flash. Going back down the ramp makes the loop seamless.
+   The hues are literal because a registered <color> keyframe is resolved
+   against the property's own registration, and --brand-* is not in scope there.
+   These are --brand-lilac / --brand-orchid / --brand-violet / --brand-indigo;
+   change those and change these. */
+@keyframes selection-sweep {
+  0% {
+    --sel-tint: #d8b4fe;
+  }
+  20% {
+    --sel-tint: #c084fc;
+  }
+  40% {
+    --sel-tint: #a78bfa;
+  }
+  50% {
+    --sel-tint: #818cf8;
+  }
+  60% {
+    --sel-tint: #a78bfa;
+  }
+  80% {
+    --sel-tint: #c084fc;
+  }
+  100% {
+    --sel-tint: #d8b4fe;
+  }
+}
+
 /* iOS Safari zooms the whole page in when a focused input / editable element
    renders below 16px. Our rich-text editor fields (name / bio) and the music
    card's inline fields carry the owner's chosen size inline, which can be
@@ -212,6 +463,28 @@
   }
 }
 
+/* The brand purple as a page-level accent scope.
+   `.studio-shell` (below) sets `--sec` to the editor's active section hue and
+   derives its focus ring from it, so inside the Studio a focused field and a
+   switched-on toggle both wear the brand. Everywhere else `--sec` was unset and
+   `--ring` was a flat neutral grey, which is why the same two controls looked
+   like a different design system depending on which page you were on.
+
+   This is that identical mechanism with the brand purple pinned in rather than a
+   section hue -- deliberately the same two declarations, so there is one way an
+   accent reaches a control and not two. Drop it on a page container and
+   everything inside picks the colour up through the utilities it already
+   carries: `ring-ring/*` and `border-ring` for focus, `.sec-on` for the switch.
+   No component needs to know, and nothing else reads `--sec` outside
+   `.studio-shell`.
+
+   The ring is 70% purple / 30% neutral on purpose: the pure hue at full strength
+   stops reading as a focus ring and starts reading as decoration. */
+.brand-accent {
+  --sec: var(--brand-violet);
+  --ring: color-mix(in oklab, var(--sec) 70%, oklch(0.62 0 0));
+}
+
 /* Card / panel elevation: a hairline top highlight + a soft, tight drop shadow
    so raised surfaces read as lifted off the page. Pairs with the lighter
    --card / --popover tokens above. */
@@ -219,6 +492,100 @@
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.05),
     0 4px 16px -8px rgba(0, 0, 0, 0.55);
+}
+
+/* The floating navbar island (and its mobile drawer). Same elevation vocabulary
+   as .elev-card — a hairline top highlight over a soft drop shadow — but deeper
+   and wider, because this surface floats OVER page content instead of resting on
+   the page background, so it needs to cast onto whatever scrolls beneath it.
+   The shadow only arrives once the page has scrolled (see navbar.tsx): at the
+   top of a page there is nothing underneath to cast onto, and a resting shadow
+   there just reads as grime. */
+.nav-island {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 12px 32px -14px rgba(0, 0, 0, 0.8);
+}
+
+/* ── Whose page is this? ────────────────────────────────────────────────────
+   A creator's page belongs to the creator. When you are looking at someone
+   else's — or at anyone's while signed out — stacked's own bar has no business
+   on it: there is nothing on it you can act on, and it frames their page in our
+   chrome. So the public profile route marks itself `data-page-chrome="off"`
+   for every viewer who is NOT its owner, and this rule takes the bar away.
+
+   Done in CSS off a marker the SERVER renders, rather than in the navbar's own
+   JS, for three reasons that all bit earlier attempts:
+     * no route list. The navbar would otherwise have to know every path that
+       ISN'T a profile (`/`, `/login`, `/edit`, `/dashboard`, …) to recognise
+       the ones that are, and that list goes stale the first time someone adds a
+       route and doesn't think about this file;
+     * no flash. The decision is in the markup of the first paint, so the bar
+       never appears and then leaves;
+     * it cannot disagree with itself. One marker drives both the bar and the
+       overlay offset below.
+
+   The layout's --nav-space spacer deliberately STAYS. The profile page cancels
+   it with an equal negative margin, so the two annihilate and the page starts
+   at the top of the viewport; remove the spacer as well and the negative margin
+   would drag the page up under the viewport's top edge. */
+body:has([data-page-chrome="off"]) [data-site-nav] {
+  display: none;
+}
+
+/* The bar is gone (a visitor's view) or collapsed (the owner previewing their
+   own page): pull the page's floating controls up to a normal inset. The
+   collapsed case is an attribute on <html> set by the navbar, matching how the
+   intro splash already announces itself to the rest of the app. */
+body:has([data-page-chrome="off"]),
+:root[data-nav-hidden] {
+  --chrome-top: 1rem;
+}
+
+/* ── The Studio (/edit) ─────────────────────────────────────────────────────
+   The editor's chrome stays neutral; the one colour in it is the CURRENT
+   SECTION's hue, published once as --sec on the shell root (studio-client.tsx)
+   and read by everything below. One variable, so the whole editor re-tints
+   together when you change section and can never show two hues at once.
+
+   Overriding --ring inside the shell is the highest-leverage line in this file.
+   Every focus ring, selected swatch, open-card border, drag drop-line and BOTH
+   of the preview's hover/selection outlines already point at --ring — including
+   the focus bridge, which writes `outline: 2px solid var(--ring)` from JS. So
+   this single declaration is what makes clicking a thing in the preview and
+   finding its control in the panel read as one gesture in one colour. Mixed
+   with the neutral ring rather than used raw: at full chroma a focus ring stops
+   looking like a ring and starts looking like a highlighter. */
+.studio-shell {
+  --ring: color-mix(in oklab, var(--sec) 70%, oklch(0.62 0 0));
+}
+
+/* Native range inputs paint their filled track and thumb from `accent-color`,
+   and every slider in the editor had been left at the OS default grey.
+   `.gradient-slider` and `.player-slider` paint their own track — there the
+   value IS a colour, or the control is the music scrubber — so both are exempt. */
+.studio-shell input[type="range"]:not(.gradient-slider):not(.player-slider) {
+  accent-color: var(--sec, var(--foreground));
+}
+
+/* An open / selected card in the editor. Replaces `border-ring bg-muted/40`,
+   whose fill computed to about 3% lighter than the card it sat on and was, in
+   practice, invisible — so the entire "which one is open" signal had been
+   resting on a grey hairline. */
+.sec-open {
+  border-color: color-mix(in oklab, var(--sec, var(--ring)) 55%, transparent);
+  background-color: color-mix(
+    in oklab,
+    var(--sec, var(--ring)) 8%,
+    transparent
+  );
+}
+
+/* An "on" switch wears the section hue. The thumb stays --background: all five
+   section hues sit above 0.7 lightness, so a near-black thumb reads against
+   every one of them without a per-hue exception. */
+.sec-on {
+  background-color: var(--sec, var(--foreground));
 }
 
 /* The landing wall's marquee rows. Each row renders its card set twice, so a
@@ -242,7 +609,7 @@
 
 /* The claim-your-name field on the landing hero.
    At rest it's a plain neutral hairline like any other input. On focus the brand
-   spectrum arrives as a 1px ring and pans into place once, then holds still --
+   purple arrives as a 1px ring and pans into place once, then holds still --
    the site's one chromatic moment, spent exactly where a visitor commits to a
    name. Built with the padding-box/border-box background trick rather than a
    border-colour change, so the ring can be a gradient and nothing reflows. */
@@ -250,7 +617,7 @@
   /* The resting hairline. The fill is OPAQUE on purpose: it sits over the
      border-box layer, so a translucent fill would let what's behind the field
      bleed through the middle of it. */
-  --claim-fill: oklch(0.185 0 0);
+  --claim-fill: var(--card);
   position: relative;
   border: 1px solid transparent;
   background:
@@ -264,9 +631,9 @@
   transition-timing-function: var(--default-transition-timing-function);
 }
 
-/* The spectrum ring lives on a pseudo-element so it can FADE.
+/* The gradient ring lives on a pseudo-element so it can FADE.
    `background-image` is not an interpolable property: swapping the border-box
-   layer from a flat colour to a six-stop gradient is a DISCRETE change, so the
+   layer from a flat colour to a gradient is a DISCRETE change, so the
    colour used to snap into existence and only its position animated. Painting
    the gradient on an overlay instead means opacity and the sweep both transition
    normally, and the neutral hairline stays underneath so the edge never jumps.
@@ -321,7 +688,7 @@
 }
 
 /* The claim field's cycling ring, generalised: a 1px border painted with the
-   looping brand spectrum. Same recipe, same keyframe, so every ring in the app
+   looping brand gradient. Same recipe, same keyframe, so every ring in the app
    reads as one idea rather than several near-misses -- fill the box with the
    gradient, then mask the content box out so only the frame survives.
    Host requirements: it must establish a positioning context (this sets
@@ -353,6 +720,26 @@
   animation: brand-ring-cycle 6s linear infinite;
 }
 
+/* .brand-ring, gated on hover/focus. Same recipe .claim-field already uses to
+   gate its ring, so this is the existing idiom rather than a second one: the
+   gradient keeps animating underneath and only the opacity transitions, which is
+   what lets blurring reverse it instead of cutting out. Use this — never bare
+   .brand-ring — on anything that lives on screen for a long time; an
+   unconditional 6s keyframe in an editor is a permanent repaint and a fidget.
+   Host requirements are .brand-ring's: it sets `relative` itself, the host
+   carries the radius, and the host's own border must be TRANSPARENT or the two
+   read as a double outline. */
+.brand-ring-hover::after {
+  opacity: 0;
+  transition-property: opacity;
+  transition-duration: var(--dur-fast);
+  transition-timing-function: var(--default-transition-timing-function);
+}
+.brand-ring-hover:hover::after,
+.brand-ring-hover:focus-visible::after {
+  opacity: 1;
+}
+
 .claim-field:focus-within {
   /* Barely-there halo so the field still lifts off the moving wall behind it. */
   box-shadow: 0 0 0 4px oklch(0.985 0 0 / 0.05);
@@ -376,19 +763,48 @@
 
 /* Gentle amber outline flash for the "unsaved changes" bar when a save is
    skipped. Only the border tints; the mid-keyframes set the color so 0%/100%
-   fall back to the bar's own border (Tailwind v4 @theme inline doesn't expose
-   --color-* vars). */
+   fall back to the bar's own border. `var(--warning)`, NOT `var(--color-warning)`
+   — Tailwind v4's `@theme inline` emits no --color-* custom property, it only
+   generates utilities, so the mapped name does not exist in plain CSS. */
 @keyframes flash {
   30%,
   65% {
-    border-color: #f59e0b;
+    border-color: var(--warning);
   }
 }
 .animate-flash {
-  animation: flash 0.5s ease-in-out;
+  /* --ease-glide, not the `ease-in-out` KEYWORD: a flash travels out to the
+     warning colour and back along the same path, which is exactly the symmetric
+     curve --ease-glide exists for — and the keyword is a different curve from
+     the token (see --ease-glide). */
+  animation: flash var(--dur-reveal) var(--ease-glide);
 }
 
-/* Short, snappy entrance animations for popups: modals, toolbar, and bars. */
+/* ── The base entrance / exit vocabulary ────────────────────────────────────
+   Six utilities: three ways in, three ways out. Between them they animate ~50
+   sites — every modal, toast, inline error and dropdown in the app — so this
+   block is where "does the site move consistently" is actually decided.
+
+   Until this pass it was decided badly. All six were written with LITERAL
+   durations (0.2s / 0.25s) and the CSS KEYWORDS `ease-out` / `ease-in`, and
+   both halves of that were off:
+
+     * `ease-out` the keyword is cubic-bezier(0, 0, 0.58, 1). The app's default
+       transition curve is cubic-bezier(0, 0, 0.2, 1) — a much harder
+       deceleration. This file already warns about that exact confusion twice
+       (see --ease-glide, and the base-layer colour clock), and then the three
+       most-used animations in the codebase were running on the wrong side of
+       it. A popup arriving and the hover it lands on top of were easing
+       differently;
+     * 0.25s is not one of the duration tiers, so `slide-up` and the `.rise`
+       that is documented below as "slide-up plus `both`" were in fact 50ms
+       apart and on two different curves.
+
+   Now every entrance in the app is --dur-enter on --ease-settle, and every exit
+   is --dur-fast on --ease-exit. That is the navbar block's rule (below) applied
+   everywhere rather than in one corner: a thing leaving gets out of the way
+   faster than it arrived. --dur-fast is also POPOVER_EXIT_MS and usePresence's
+   default in lib/use-popover.ts — change one, change those. */
 @keyframes pop-in {
   from {
     opacity: 0;
@@ -400,7 +816,7 @@
   }
 }
 .animate-pop {
-  animation: pop-in 0.2s ease-out;
+  animation: pop-in var(--dur-enter) var(--ease-settle);
 }
 
 @keyframes fade-in {
@@ -412,7 +828,7 @@
   }
 }
 .animate-fade {
-  animation: fade-in 0.2s ease-out;
+  animation: fade-in var(--dur-enter) var(--ease-settle);
 }
 
 @keyframes slide-up {
@@ -426,7 +842,19 @@
   }
 }
 .animate-slide-up {
-  animation: slide-up 0.25s ease-out;
+  animation: slide-up var(--dur-enter) var(--ease-settle);
+}
+
+/* `slide-up` for a LIST that arrives together, staggered by an inline
+   animation-delay. The only difference from `.animate-slide-up` is `both`,
+   which holds the from-frame through the delay -- without it a delayed card
+   flashes at full opacity for the wait and then animates, which looks like a
+   bug rather than a stagger. Same reasoning as `.animate-nav-row`; this one
+   rises from below, for cards rather than menu rows.
+   The duration and curve are spelled out rather than inherited so the two stay
+   visibly identical to `.animate-slide-up` above; they were not, before. */
+.animate-rise {
+  animation: slide-up var(--dur-enter) var(--ease-settle) both;
 }
 
 /* Exit animations — reverse of the entrances. `forwards` holds the final
@@ -442,7 +870,7 @@
   }
 }
 .animate-pop-out {
-  animation: pop-out 0.2s ease-in forwards;
+  animation: pop-out var(--dur-fast) var(--ease-exit) forwards;
 }
 
 @keyframes fade-out {
@@ -454,7 +882,7 @@
   }
 }
 .animate-fade-out {
-  animation: fade-out 0.2s ease-in forwards;
+  animation: fade-out var(--dur-fast) var(--ease-exit) forwards;
 }
 
 @keyframes slide-down {
@@ -468,7 +896,171 @@
   }
 }
 .animate-slide-down {
-  animation: slide-down 0.25s ease-in forwards;
+  animation: slide-down var(--dur-fast) var(--ease-exit) forwards;
+}
+
+/* ── Site chrome motion ─────────────────────────────────────────────────────
+   The navbar's own vocabulary. It gets its own block because the bar is the one
+   piece of UI on screen during every interaction on the site: anything slow in
+   here is something the user waits behind on every single click. So enters run
+   at --dur-enter and exits at --dur-fast — a thing leaving should get out of the
+   way faster than it arrived, which is what makes a menu feel like it obeys
+   rather than like it performs. */
+
+/* Arrival for a popover that hangs off its trigger (the account menu, the
+   mobile drawer). A plain fade reads as "a panel appeared somewhere"; scale plus
+   a few pixels of travel reads as "this came OUT of the control I just
+   pressed" — which is the whole job of the animation, since the panel and its
+   button are two separate boxes that have to be understood as one thing.
+   Pair with an `origin-*` utility: the transform-origin is what aims the growth
+   back at the trigger, and without one it grows from its own middle and the
+   effect is lost. */
+/* --menu-rise is the offset the panel travels FROM, so its sign is the direction
+   the panel hangs. It defaults to -0.5rem for the common case (a menu below its
+   trigger, dropping down); a panel anchored to the BOTTOM of the screen sets it
+   positive so it rises into place instead of sinking. Parameterised rather than
+   duplicated into a second pair of keyframes, so there is still exactly one
+   opening gesture in the app and it cannot drift between the two directions. */
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: scale(0.92) translateY(var(--menu-rise, -0.5rem));
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+.animate-menu-in {
+  animation: menu-in var(--dur-enter) var(--ease-settle);
+}
+
+/* Not the reverse of the entrance: it leaves from closer in (0.97, quarter-rem)
+   and on --ease-exit, so the dismissal is a flick rather than a re-run of the
+   opening backwards. `forwards` holds the hidden frame until the element
+   actually unmounts, or it flashes back at full opacity for a frame. */
+@keyframes menu-out {
+  from {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.97) translateY(var(--menu-fall, -0.25rem));
+  }
+}
+.animate-menu-out {
+  animation: menu-out var(--dur-fast) var(--ease-exit) forwards;
+}
+
+/* Rows inside a just-opened menu, staggered by an inline animation-delay.
+   The step is deliberately tiny (25ms) and the lists are short — four rows at
+   most — because the LAST row still has to land inside ~300ms. Past that a menu
+   stops reading as "opened" and starts reading as "loading", which is the exact
+   failure mode a stagger is supposed to avoid. `both` holds the from-frame
+   during the delay, or a row flashes at full opacity before its turn. */
+@keyframes nav-row-in {
+  from {
+    opacity: 0;
+    transform: translateY(-0.25rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-nav-row {
+  animation: nav-row-in var(--dur-enter) var(--ease-settle) both;
+}
+
+/* The active-page marker slides from link to link instead of vanishing here and
+   reappearing there. It is the one animation in the bar that reports a PAGE
+   CHANGE rather than a pointer, so it gets the slow tier: it is describing a
+   relationship between two places, and at 150ms the eye reads a jump-cut
+   instead of a move.
+
+   Its position comes from measured pixels (see navbar.tsx), which is why it
+   travels on `transform` and not `left` — and why navbar.tsx withholds this
+   class for the first placement of the page, or the marker would fly in from
+   x=0 on first paint. */
+/* The preview tab's two motions run on two different clocks, and they are never
+   running at the same time.
+
+   Its TRAVEL is the bar's move — the slow, even one the two of them share, so
+   the handle and the bar leave and arrive together, as one object. Its FADE is
+   the answer to the pointer entering the top of the screen, and a hover
+   response on the slow clock reads as the page lagging behind you: you point at
+   the top of the window and the handle takes half a second to admit it is
+   there.
+
+   The two cannot overlap, which is what keeps them from looking like separate
+   animations on one element: the fade is driven by the pointer being in the hot
+   zone, and the travel is driven by a click on the tab — which can only happen
+   from inside that zone. So the tab is at a settled opacity before it ever
+   moves, and it holds it for the whole trip. Nothing else here transitions at
+   all: the chevron's colour used to, and it would drop from foreground to
+   muted mid-flight as the tab slid out from under the pointer.
+
+   Comma-separated LONGHANDS, because per-property durations are the only way to
+   give one element two clocks — and because the `transition` shorthand would
+   reset transition-property and silently drop the base layer's colour clock
+   along with it (see @layer base). */
+.nav-tab-motion {
+  transition-property: translate, opacity;
+  transition-duration: var(--dur-reveal), var(--dur-fast);
+  /* --ease-glide, NOT the `ease-in-out` keyword — see the token's comment. The
+     keyword is a different curve from the utility the bar uses, and the two
+     silently pulled apart mid-flight. */
+  transition-timing-function: var(--ease-glide), ease-out;
+}
+
+/* The app's sliding active-marker motion. Shared by the navbar's link row and
+   the settings page's section rail, so "which one am I on" is one gesture the
+   eye learns once rather than two takes on the same idea.
+
+   `height` is in the list for the rail's VERTICAL orientation (a column of
+   sections, where the marker changes height as well as position). The navbar's
+   marker is stretched with `top-0 bottom-0` and has no height of its own, so
+   listing it there is a no-op. */
+.nav-marker {
+  transition-property: transform, width, height, opacity;
+  transition-duration: var(--dur-slow);
+  transition-timing-function: var(--ease-settle);
+}
+
+/* The phone-width settings rail is a horizontal scroller with more entries than
+   fit on a 375px screen, and a hard cut at the edge reads as "that is all there
+   is". Fading the last few pixels says there is more without adding a control.
+   From `sm` up the rail is a column with nothing hidden, so the mask is dropped.
+
+   Both spellings: unprefixed `mask-image` is Safari 15.4+, and this is a phone
+   affordance first. */
+.rail-fade {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    #000 calc(100% - 2.5rem),
+    transparent
+  );
+  mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent);
+}
+
+@media (width >= 40rem) {
+  .rail-fade {
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+}
+
+/* The marker re-arming after a route with no marker of its own (the landing
+   page, /settings). Its last geometry is stale — it belongs to whatever link
+   was active before you left — so sliding from there is a slide from nowhere,
+   toward a link the eye was never watching. Paint the new spot and fade in
+   instead: an arrival, not a journey. Only opacity is listed, so the transform
+   and width committed in the same frame land instantly. */
+.nav-marker-fade {
+  transition-property: opacity;
+  transition-duration: var(--dur-enter);
+  transition-timing-function: var(--ease-settle);
 }
 
 /* Scroll reveal — the shared arrival for landing-page blocks (reveal.tsx adds
@@ -763,6 +1355,64 @@
   animation: music-in var(--dur-reveal) var(--ease-settle) both;
 }
 
+/* The "claim your page" promo card. It arrives on the same tier as the music
+   pill above rather than on the popup tier, because it is the same KIND of
+   thing: floating chrome landing unasked on somebody else's page. A thing
+   nobody asked for should ease in, not pop.
+
+   Three details separate it from `music-in`, which is otherwise the same idea:
+
+     * the opacity finishes EARLY, at 55%, while the transform keeps travelling.
+       A fade stretched over the full 500ms reads as "still arriving" long after
+       the card is legible; landing the opacity first lets the eye start reading
+       while the motion settles underneath it. That split is most of the
+       difference between "smooth" and merely "slow";
+     * it rises from further away (20px) on a gentler scale (0.985). Distance is
+       what makes a slow move read as deliberate; scale is what makes it read as
+       a popup — so trade the second for the first;
+     * `will-change`. The card is `backdrop-blur-xl`, and animating opacity over
+       a backdrop-filter makes Chrome re-rasterize the blurred backdrop every
+       frame unless the element already has its own compositor layer. On a
+       creator's page — often a photo or a video — that is the difference
+       between a glide and a stutter, and it is the one line here that is about
+       performance rather than taste. */
+@keyframes promo-in {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.985);
+  }
+  55% {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.animate-promo-in {
+  animation: promo-in var(--dur-reveal) var(--ease-settle) both;
+  will-change: transform, opacity;
+}
+
+/* Leaving is a flick, not the entrance played backwards: shorter, on
+   --ease-exit, and it DROPS rather than rises, so a dismissal reads as "put
+   away" instead of "un-arrived". `forwards` holds the hidden frame until React
+   unmounts the node, or it flashes back at full opacity for a frame. */
+@keyframes promo-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+  }
+}
+.animate-promo-out {
+  animation: promo-out var(--dur-enter) var(--ease-exit) forwards;
+  will-change: transform, opacity;
+}
+
 /* "Click to enter" splash — the content rises and settles on first paint, then
    the call-to-action breathes gently (a soft opacity + glow pulse) to read as
    "tap me" without a jarring blink. */
@@ -951,7 +1601,15 @@
 /* Soft brand "aurora" glow behind the auth / 404 / error screens — a big,
    blurred, low-opacity gradient blob that slowly wanders so the dark void feels
    alive but calm. The element supplies its own blur + opacity; this drifts it.
-   CSS-only (no WebGL) so it stays safe on every platform. */
+   CSS-only (no WebGL) so it stays safe on every platform — this renders on the
+   error boundary, which is the last place to put a shader.
+
+   There is exactly one element that wears this, and it is
+   `components/aurora-glow.tsx`. Reach for that rather than hand-rolling the
+   blob again: the two hand-written copies (404 and error) sat unnoticed at two
+   different opacities, and the auth screens this comment has always claimed to
+   cover in fact had no glow at all until the component existed to put on
+   them. */
 @keyframes aurora-drift-a {
   0%,
   100% {

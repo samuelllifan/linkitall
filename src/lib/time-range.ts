@@ -132,6 +132,30 @@ export function adminHref(current: RangeCurrent): string {
   return "/admin";
 }
 
+/**
+ * One stored day (`YYYY-MM-DD`) as a person would write it — "Sep 4, 2026".
+ *
+ * Exported because the CALENDAR needs it too. Its footer used to interpolate
+ * the raw stored strings ("2026-09-01 → 2026-09-04") directly under a
+ * Custom pill that was showing the same two days as "Sep 1, 2026 – Sep 4,
+ * 2026" — the same range in two formats, six inches apart, one of them a
+ * database value.
+ *
+ * `timeZone: "UTC"` is load-bearing, not tidiness: analytics days are bucketed
+ * in UTC and these strings are bare dates with no zone, so parsing one and
+ * rendering it locally shifts it a day backwards for anybody west of Greenwich
+ * — which is how a picker starts showing "Sep 3" for the day you clicked.
+ */
+export function dayLabel(day?: string): string {
+  if (!day) return "";
+  return new Date(`${day}T00:00:00.000Z`).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
 /** Short human label for a selection, e.g. "Last 7 days" or "Aug 1 – Aug 8". */
 export function rangeLabel(current: RangeCurrent): string {
   switch (current.preset) {
@@ -141,20 +165,10 @@ export function rangeLabel(current: RangeCurrent): string {
       return "Last 7 days";
     case "30d":
       return "Last 30 days";
-    case "custom": {
-      const fmt = (day?: string) =>
-        day
-          ? new Date(`${day}T00:00:00.000Z`).toLocaleDateString(undefined, {
-              month: "short",
-              day: "numeric",
-              year: "numeric",
-              timeZone: "UTC",
-            })
-          : "";
+    case "custom":
       return current.from && current.to && current.from !== current.to
-        ? `${fmt(current.from)} – ${fmt(current.to)}`
-        : fmt(current.from);
-    }
+        ? `${dayLabel(current.from)} – ${dayLabel(current.to)}`
+        : dayLabel(current.from);
     default:
       return "Lifetime";
   }

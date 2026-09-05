@@ -3,8 +3,10 @@ import { Inter, JetBrains_Mono } from "next/font/google";
 import { Footer } from "~/components/footer";
 import { FooterSlot } from "~/components/footer-slot";
 import { Navbar } from "~/components/navbar";
+import { SelectionMotion } from "~/components/selection-motion";
 import { SessionGuard } from "~/components/session-guard";
 import { WhatsNewDialog } from "~/components/whats-new-dialog";
+import { SITE_DESCRIPTION, SITE_TITLE } from "~/lib/site-meta";
 import { createClient } from "~/lib/supabase/server";
 import { UnsavedGuardProvider } from "~/lib/unsaved-guard";
 import "./globals.css";
@@ -18,24 +20,38 @@ const jetbrainsMono = JetBrains_Mono({
   variable: "--font-jetbrains",
 });
 
+// Copy lives in `~/lib/site-meta` rather than inline: the same description has
+// to appear in three places here plus the share card, and when it was written
+// out four times it went stale in all four.
+//
+// `title` is a default + a template, not a plain string. `default` stays the
+// bare wordmark for anything that sets no title of its own — a tagline here
+// would put the landing page's pitch in the tab of /dashboard and /edit — and
+// `template` is what lets every route name itself in one word ("Settings",
+// "Dashboard") and still be identifiable in a strip of pinned tabs. Before
+// this, every route but four rendered the same "stacked", so a creator with
+// the Studio, their dashboard and their live page open had three
+// indistinguishable tabs.
+//
+// The separator is "·", which is what the profile route already used; /terms
+// and /privacy had hand-written "— stacked" suffixes and are now on the
+// template like everything else. A page that must NOT be suffixed (the landing
+// page, whose title is a full sentence) passes `title: { absolute: … }`.
 export const metadata: Metadata = {
   metadataBase: new URL("https://stacked.page"),
-  title: "stacked",
-  description:
-    "stacked is the fastest, easiest, and most customizable way to create your link-in-bio page.",
+  title: { default: "stacked", template: "%s · stacked" },
+  description: SITE_DESCRIPTION,
   openGraph: {
-    title: "stacked",
-    description:
-      "stacked is the fastest, easiest, and most customizable way to create your link-in-bio page.",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
     url: "https://stacked.page",
     siteName: "stacked",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "stacked",
-    description:
-      "stacked is the fastest, easiest, and most customizable way to create your link-in-bio page.",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
   },
 };
 
@@ -93,6 +109,9 @@ export default async function RootLayout({
       >
         <UnsavedGuardProvider>
           <SessionGuard />
+          {/* Arms the animated ::selection highlight (globals.css) while text is
+              selected. Renders nothing. */}
+          <SelectionMotion />
           <Navbar
             userEmail={user?.email ?? null}
             username={username}
@@ -100,6 +119,13 @@ export default async function RootLayout({
             avatarUrl={avatarUrl}
             displayName={displayName}
           />
+          {/* The navbar is a fixed floating island, so it occupies no document
+              flow. This spacer stands in for it, which keeps every page's own
+              top spacing measured from below the bar exactly as it was when the
+              bar was part of the page. A page that wants to run its background
+              up UNDER the bar (the public profile page) cancels this with a
+              negative margin rather than the spacer being made conditional. */}
+          <div aria-hidden className="h-[var(--nav-space)] shrink-0" />
           {children}
           <FooterSlot>
             <Footer />

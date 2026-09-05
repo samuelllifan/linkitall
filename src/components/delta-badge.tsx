@@ -32,9 +32,9 @@ export function DeltaBadge({
   const up = isNew || (pct !== null && pct > 0);
   const down = pct !== null && pct < 0;
   const tone = up
-    ? "text-emerald-400"
+    ? "text-success"
     : down
-      ? "text-rose-400"
+      ? "text-danger"
       : "text-muted-foreground";
   const arrow = up ? "▲" : down ? "▼" : "•";
   const text = isNew

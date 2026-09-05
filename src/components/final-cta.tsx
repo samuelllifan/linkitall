@@ -69,16 +69,16 @@ export function FinalCta() {
           but the footer rule, and the button needs room under it or the close
           feels cramped against the chrome. */}
       <div className="relative mx-auto flex max-w-2xl flex-col items-center px-6 pt-16 pb-28 text-center sm:pt-20 sm:pb-32 lg:pt-24 lg:pb-40">
-        {/* The brand spectrum, as a rule rather than as text. Same treatment as
+        {/* The brand purple, as a rule rather than as text. Same treatment as
             the navbar's active-tab underline (`brand-bg`, 2px, pill) at closing
             scale, and the same gesture as the step timer in section two: a
-            gradient bar growing from its own centre. One spectrum moment in the
+            gradient bar growing from its own centre. One brand moment in the
             section, on something that isn't type — so it reads as a mark and
             never fights the headline for the eye.
 
-            96px, not the navbar underline's 16px: --brand-grad is a six-stop
-            spectrum, and below roughly this width the cool end never gets a
-            pixel, so the mark reads as a pink smudge instead of as the brand. */}
+            96px, not the navbar underline's 16px: --brand-grad is a four-step
+            ramp, and below roughly this width the indigo end never gets a pixel,
+            so the mark reads as a flat lilac dash instead of as a sweep. */}
         <Reveal className="h-[2px] w-24" rise="0px" aria-hidden>
           <span className="brand-bg reveal-grow block h-full w-full rounded-full" />
         </Reveal>

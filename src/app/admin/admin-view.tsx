@@ -80,19 +80,43 @@ function formatDate(iso: string | null): string {
   });
 }
 
+/**
+ * Stagger between the tiles' arrivals, in ms. The same number the dashboard
+ * uses (`STAT_STAGGER` in dashboard-client.tsx) — these two pages are the same
+ * screen twice over, down to sharing the stat tile's shell, the section card
+ * and the range picker, and admin was the one that simply appeared fully formed
+ * while its twin dealt itself in.
+ */
+const STAT_STAGGER = 45;
+
+/**
+ * When the chart panels below the tiles arrive. One step past the last tile, so
+ * the page deals the top row and then the panels rather than everything at once
+ * — the same relationship the dashboard's Panel has to its own stat row.
+ */
+const PANEL_DELAY: React.CSSProperties = {
+  animationDelay: `${STAT_STAGGER * 5}ms`,
+};
+
 function StatCard({
   label,
   value,
   delta,
+  delay = 0,
 }: {
   label: string;
   /** Preformatted (e.g. "3.2%") or numeric — numbers get thousands grouping. */
   value: number | string;
   /** Optional period-over-period comparison (hidden when previous is null). */
   delta?: { current: number; previous: number | null };
+  /** Stagger, in ms, for the card's arrival. See `.animate-rise`. */
+  delay?: number;
 }) {
   return (
-    <div className="rounded-xl border border-border bg-card p-5">
+    <div
+      className="animate-rise elev-card rounded-xl border border-border bg-card p-5"
+      style={{ animationDelay: `${delay}ms` }}
+    >
       <div className="text-sm text-muted-foreground">{label}</div>
       <div className="mt-1 text-3xl font-bold tabular-nums">
         {typeof value === "number" ? value.toLocaleString() : value}
@@ -172,7 +196,7 @@ export function AdminView({
   }));
 
   return (
-    <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-10">
+    <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-12">
       <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Admin</h1>
@@ -184,7 +208,7 @@ export function AdminView({
       </header>
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
-        <StatCard label="Users" value={totals.users} />
+        <StatCard label="Users" value={totals.users} delay={STAT_STAGGER * 0} />
         <StatCard
           label="Unique visitors"
           value={uniqueVisitors}
@@ -192,11 +216,13 @@ export function AdminView({
             current: uniqueVisitors,
             previous: prevTotals?.uniqueVisitors ?? null,
           }}
+          delay={STAT_STAGGER * 1}
         />
         <StatCard
           label="Views"
           value={totals.views}
           delta={{ current: totals.views, previous: prevTotals?.views ?? null }}
+          delay={STAT_STAGGER * 2}
         />
         <StatCard
           label="Clicks"
@@ -205,16 +231,21 @@ export function AdminView({
             current: totals.clicks,
             previous: prevTotals?.clicks ?? null,
           }}
+          delay={STAT_STAGGER * 3}
         />
         <StatCard
           label="Click-through rate"
           value={`${ctr.toFixed(1)}%`}
           delta={{ current: ctr, previous: prevCtr }}
+          delay={STAT_STAGGER * 4}
         />
       </div>
 
       <div className="mt-8 grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <section className="rounded-xl border border-border bg-card p-5 lg:col-span-2">
+        <section
+          className="animate-rise elev-card rounded-xl border border-border bg-card p-5 lg:col-span-2"
+          style={PANEL_DELAY}
+        >
           <h2 className="mb-4 text-sm font-semibold text-muted-foreground">
             Views &amp; clicks · {granularityNote}
           </h2>
@@ -234,7 +265,10 @@ export function AdminView({
             ]}
           />
         </section>
-        <section className="rounded-xl border border-border bg-card p-5">
+        <section
+          className="animate-rise elev-card rounded-xl border border-border bg-card p-5"
+          style={PANEL_DELAY}
+        >
           <h2 className="mb-4 text-sm font-semibold text-muted-foreground">
             Devices
           </h2>
@@ -243,13 +277,19 @@ export function AdminView({
       </div>
 
       <div className="mt-8 grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <section className="rounded-xl border border-border bg-card p-5 lg:col-span-2">
+        <section
+          className="animate-rise elev-card rounded-xl border border-border bg-card p-5 lg:col-span-2"
+          style={PANEL_DELAY}
+        >
           <h2 className="mb-4 text-sm font-semibold text-muted-foreground">
             New users · {granularityNote}
           </h2>
           <ViewsLineChart data={signupTimeline} />
         </section>
-        <section className="rounded-xl border border-border bg-card p-5">
+        <section
+          className="animate-rise elev-card rounded-xl border border-border bg-card p-5"
+          style={PANEL_DELAY}
+        >
           <h2 className="mb-4 text-sm font-semibold text-muted-foreground">
             Top links · by clicks
           </h2>
@@ -290,7 +330,7 @@ export function AdminView({
         </section>
       </div>
 
-      <section className="mt-8 rounded-xl border border-border bg-card p-5">
+      <section className="elev-card mt-8 rounded-xl border border-border bg-card p-5">
         <h2 className="mb-4 text-sm font-semibold text-muted-foreground">
           Where in the world
         </h2>
@@ -349,7 +389,7 @@ export function AdminView({
         </h2>
         <div className="overflow-x-auto rounded-xl border border-border">
           <table className="w-full min-w-[720px] text-left text-sm">
-            <thead className="border-border border-b bg-muted/40 text-xs text-muted-foreground uppercase">
+            <thead className="border-border border-b bg-muted/40 text-muted-foreground text-xs uppercase tracking-wide">
               <tr>
                 <th className="px-4 py-3 font-medium">User</th>
                 <th className="px-4 py-3 font-medium">Email</th>

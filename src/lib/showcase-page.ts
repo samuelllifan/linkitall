@@ -23,15 +23,20 @@ import type { Background, BoxStyle, PageData, TextStyle } from "~/lib/pages";
 //     cross-faded as stacked layers, so any difference in layout shows up as two
 //     offset copies of the same text instead of a dissolve.
 //
-//  2. TWO HUES FOR THE WHOLE SECTION, and no others: violet #a78bfa and cyan
-//     #22d3ee, the same pair the section's accents, chart lines and backdrop
-//     use. Each page picks ONE of them and shades it -- violet page, cyan page,
-//     and a neutral page that cycles backgrounds -- so three pages that a
-//     visitor sees within ten seconds of each other read as one palette instead
-//     of three moods. This is why there is no pink, no teal and no amber here
-//     even though the editor offers them: a demo has to look composed, and
-//     "every colour is available" is a claim the copy can make in words without
-//     the artwork having to prove it all at once.
+//  2. TWO HUES FOR THE WHOLE SECTION, and no others: violet #a78bfa and orchid
+//     #c084fc -- both steps of the brand purple (--brand-violet, --brand-orchid).
+//     Each page picks ONE of them and shades it -- violet page, orchid page, and
+//     a neutral page that cycles backgrounds -- so three pages that a visitor
+//     sees within ten seconds of each other read as one palette instead of three
+//     moods. This is why there is no pink, no teal and no amber here even though
+//     the editor offers them: a demo has to look composed, and "every colour is
+//     available" is a claim the copy can make in words without the artwork
+//     having to prove it all at once.
+//
+//     The second hue was cyan until the brand collapsed to purple. Two hues is
+//     still the rule -- what changed is that both are now the brand's, so the
+//     showcase sells the product without introducing a colour the product no
+//     longer uses anywhere else.
 //
 //     Within a page, a hue is used at three strengths and never at full: a light
 //     tint for the bio, ~10% of the pure hue as the link fill, and its 900-ish
@@ -52,9 +57,10 @@ import type { Background, BoxStyle, PageData, TextStyle } from "~/lib/pages";
 // slabs stacked over the artwork. `boxCss` keeps a transparent 1px border when a
 // box is disabled, so turning them off costs no height (invariant 1 holds).
 
-/** The section's two hues. Everything below is a shade of one of these. */
+/** The section's two hues, both steps of the brand purple. Everything below is
+ *  a shade of one of these. */
 const VIOLET = "#a78bfa";
-const CYAN = "#22d3ee";
+const ORCHID = "#c084fc";
 
 // Inline gradient-with-initial avatar, so the section needs no image assets and
 // no network request. Same approach as the hero wall's demo pages.
@@ -157,7 +163,7 @@ const KAZE: Persona = {
   bio: "GMV editor. Commissions open.",
   // The one avatar that spans both of the section's hues, since this is the
   // page the section opens on.
-  avatar: ["K", VIOLET, "#38bdf8"],
+  avatar: ["K", VIOLET, "#c084fc"],
   font: "spaceGrotesk",
   links: [
     ["Portfolio", "https://youtube.com/@kazeedits"],
@@ -291,7 +297,7 @@ export const SHOWCASE_STEPS: ShowcaseStep[] = [
           {
             name: "vale",
             bio: "Editor and streamer. Clips daily.",
-            avatar: ["V", CYAN, "#0e7490"],
+            avatar: ["V", ORCHID, "#6b21a8"],
             font: "oswald",
             links: [
               ["Live", "https://twitch.tv/valeclips"],
@@ -308,13 +314,13 @@ export const SHOWCASE_STEPS: ShowcaseStep[] = [
             background: { type: "custom", color: "#06101a" },
             bio: "#a5e8f7",
             linkBox: {
-              color: CYAN,
+              color: ORCHID,
               opacity: 10,
               outline: true,
               outlineColor: "#155e75",
             },
             linkText: "#ecfeff",
-            ring: CYAN,
+            ring: ORCHID,
           },
         ),
       },

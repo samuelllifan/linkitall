@@ -10,8 +10,20 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default: "bg-primary text-primary-foreground hover:bg-primary/90",
-        destructive:
-          "bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:bg-destructive/60 dark:focus-visible:ring-destructive/40",
+        // The app has exactly ONE red — `--danger` (globals.css) — so these two
+        // are it, and the old `destructive` variant is gone: it painted from
+        // `--destructive`, a fill-only dark red that is a visibly different
+        // colour from the `text-danger` used by every error, the navbar's sign
+        // out row, and the danger-tinted settings cards.
+        //
+        // Solid means "this click does the irreversible thing" (a confirm
+        // dialog's final button). Outline means "this click takes you TO it"
+        // (the row that opens that dialog, signing out everywhere). Same hue,
+        // two weights, so the page never has to shout twice for one action.
+        danger:
+          "bg-danger text-danger-foreground hover:bg-danger/90 focus-visible:ring-danger/30",
+        "danger-outline":
+          "border border-danger/40 bg-danger/5 text-danger hover:border-danger/60 hover:bg-danger/12 focus-visible:ring-danger/30",
         outline:
           "border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
         secondary:

@@ -38,6 +38,7 @@ import type {
   TextStyle,
 } from "~/lib/pages";
 import { DEFAULT_AVATAR_CROP } from "~/lib/pages";
+import { usePresence } from "~/lib/use-popover";
 import { cn } from "~/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -1093,18 +1094,7 @@ function useCopied(timeout = 1600) {
  * is copied to the clipboard.
  */
 function CopiedToast({ show }: { show: boolean }) {
-  const [mounted, setMounted] = useState(show);
-  const [visible, setVisible] = useState(show);
-  useEffect(() => {
-    if (show) {
-      setMounted(true);
-      setVisible(true);
-      return;
-    }
-    setVisible(false);
-    const t = setTimeout(() => setMounted(false), 200);
-    return () => clearTimeout(t);
-  }, [show]);
+  const { value: mounted, visible } = usePresence(show);
 
   if (!mounted || typeof document === "undefined") return null;
   // Portal to <body> so the fixed toast anchors to the viewport bottom. Rendered
@@ -1130,7 +1120,7 @@ function CopiedToast({ show }: { show: boolean }) {
           strokeLinecap="round"
           strokeLinejoin="round"
           aria-hidden="true"
-          className="size-4 text-green-500"
+          className="size-4 text-success"
         >
           <path d="M20 6 9 17l-5-5" />
         </svg>
@@ -1175,6 +1165,11 @@ export function LinkAnchor({
       : contrastText(resolved.color);
 
   const [previewOpen, setPreviewOpen] = useState(false);
+  // Kept mounted through the exit, like every other panel that hangs off a
+  // trigger in this app. Deliberately NOT `usePopover` + `useDismissOnOutside`:
+  // the dismiss effect below listens on `pointerdown` rather than `mousedown`
+  // for the iOS reason documented there, and the shared hook uses `mousedown`.
+  const preview = usePresence(previewOpen);
   const wrapRef = useRef<HTMLDivElement>(null);
   const { copied, copy } = useCopied();
 
@@ -1305,7 +1300,7 @@ export function LinkAnchor({
     <div ref={wrapRef} className="relative w-full">
       {trigger}
 
-      {previewOpen ? (
+      {preview.value ? (
         <a
           href={link.href}
           target="_blank"
@@ -1314,7 +1309,12 @@ export function LinkAnchor({
             if (trackUsername) recordClick(trackUsername, link.id, link.label);
             setPreviewOpen(false);
           }}
-          className="absolute top-full left-0 z-30 mt-2 flex w-full animate-pop items-center gap-3 rounded-xl border border-border bg-popover p-3 text-left text-popover-foreground shadow-xl transition-all hover:shadow-2xl"
+          className={cn(
+            // `origin-top` so `menu-in` grows out of the link box above it
+            // rather than out of its own middle.
+            "absolute top-full left-0 z-30 mt-2 flex w-full origin-top items-center gap-3 rounded-xl border border-border bg-popover p-3 text-left text-popover-foreground shadow-xl transition-all hover:shadow-2xl",
+            preview.visible ? "animate-menu-in" : "animate-menu-out",
+          )}
         >
           {/* Favicon of the destination site. */}
           {/* biome-ignore lint/performance/noImgElement: tiny remote favicon; next/image adds no value */}

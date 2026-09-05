@@ -4,6 +4,7 @@ import QRCode from "qrcode";
 import { useEffect, useRef, useState } from "react";
 import { ProfileView } from "~/components/profile-view";
 import { Reveal } from "~/components/reveal";
+import { CHART_COLORS } from "~/lib/chart-colors";
 import type { PageData } from "~/lib/pages";
 import {
   SHOWCASE_BACKGROUNDS,
@@ -100,10 +101,23 @@ const CLICK_SERIES = [2, 4, 3, 6, 5, 8, 7, 10, 8, 12, 11, 15, 13, 17];
 const TOTAL_VIEWS = 1284;
 const TOTAL_CLICKS = 312;
 
-// Pulled from the middle and cool end of --brand-grad, so this section's colour
-// accents and the chart's two series read as one palette rather than two.
-const ACCENT = "#a78bfa";
-const ACCENT_2 = "#22d3ee";
+// The demo's lead accent IS the app's first chart series, read from the one list
+// rather than re-typed: the visitor meets this exact colour again on their own
+// dashboard, and it had already been written out by hand in both places, so the
+// two could drift apart with nothing to catch it. Since the palette was re-led
+// by the brand purple, CHART_COLORS[0] is #a78bfa — so the demo's lead accent
+// and the brand are now the same colour by construction.
+//
+// The SECOND series deliberately does NOT follow CHART_COLORS[1] (#22d3ee).
+// The real dashboard keeps a multi-hue palette because ten categorical series
+// have to be told apart, and that reasoning does not reach down here: this chart
+// has exactly two lines, and two lines separate perfectly well on lightness
+// (#d8b4fe against #a78bfa is 11.2:1 vs 7.3:1 on the page). Following the array
+// blindly would have put the only non-purple pixel on the whole landing page in
+// the middle of the shopfront, to distinguish two things that were never
+// confusable. Keep this a step of the brand ramp.
+const ACCENT = CHART_COLORS[0];
+const ACCENT_2 = "#d8b4fe"; // --brand-lilac
 
 function SlidersIcon({ className }: { className?: string }) {
   return (
@@ -419,7 +433,11 @@ export function HowItWorks() {
                         setPicked(true);
                       }}
                       className={cn(
-                        "relative w-full overflow-hidden rounded-xl border p-4 text-left transition-colors sm:p-5",
+                        // The focus ring is a box-shadow and so is NOT clipped
+                        // by this element's own `overflow-hidden` (that only
+                        // clips children), which is what lets a bordered,
+                        // clipping card still show one.
+                        "relative w-full overflow-hidden rounded-xl border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:p-5",
                         isActive
                           ? // The ring IS the border here, so the element's own
                             // border goes transparent -- otherwise the two stack
@@ -471,7 +489,7 @@ export function HowItWorks() {
                         {s.body}
                       </p>
 
-                      {/* Time left on this step, in the brand spectrum. Absent
+                      {/* Time left on this step, in the brand gradient. Absent
                           once the visitor has taken over, because nothing is
                           counting down any more. Inset by a pixel so the ring's
                           bottom segment doesn't paint over it. */}
@@ -554,7 +572,7 @@ function DeviceSwitch({
               aria-pressed={on}
               onClick={() => onChange(o.key)}
               className={cn(
-                "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 font-medium text-xs transition-colors",
+                "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 font-medium text-xs transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
                 on
                   ? "bg-foreground text-background"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground",
@@ -858,7 +876,7 @@ function Stat({
         <span className="font-mono font-medium text-lg tabular-nums">
           {value.toLocaleString()}
         </span>
-        <span className="text-[0.6875rem] text-emerald-400">{delta}</span>
+        <span className="text-[0.6875rem] text-success">{delta}</span>
       </div>
     </div>
   );

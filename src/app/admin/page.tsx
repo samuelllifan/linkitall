@@ -1,10 +1,14 @@
+import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
+import { mfaChallengePath, needsMfaChallenge } from "~/lib/mfa.server";
 import { createClient } from "~/lib/supabase/server";
 import { type RangeSelection, resolveRange } from "~/lib/time-range";
 import { type AdminOverview, AdminView } from "./admin-view";
 
 // Admin-only overview of every account and site-wide activity. Always live.
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Admin" };
 
 export default async function AdminPage({
   searchParams,
@@ -16,6 +20,13 @@ export default async function AdminPage({
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/login?redirect=/admin");
+
+  // 2FA, if the account has it: an aal1 session gets no further than here. The
+  // gate lives on the routes rather than in the sign-in form so it covers
+  // Google sign-in too — see ~/lib/mfa.server.
+  if (await needsMfaChallenge(supabase)) {
+    redirect(mfaChallengePath("/admin"));
+  }
 
   // Gate on the profile flag. Non-admins get a 404 so the route is invisible.
   const { data: profile } = await supabase

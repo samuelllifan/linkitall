@@ -64,9 +64,9 @@ export function Requirement({
         pending
           ? "text-muted-foreground"
           : met
-            ? "text-green-500"
+            ? "text-success"
             : attempted
-              ? "text-red-400"
+              ? "text-danger"
               : "text-muted-foreground",
       )}
     >

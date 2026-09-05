@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { createClient } from "~/lib/supabase/server";
@@ -5,6 +6,8 @@ import { LoginClient } from "./login-client";
 
 // Auth state is per-request; never cache the signed-in check.
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Sign in" };
 
 export default async function LoginPage({
   searchParams,
@@ -23,8 +26,14 @@ export default async function LoginPage({
     const { redirect: target } = await searchParams;
     // Only follow internal, non-protocol-relative paths (guards against an
     // open redirect via `?redirect=//evil.com`).
+    // `//evil.com` is the obvious attack; a leading `/\` is the same attack,
+    // because the WHATWG URL parser treats a backslash as a slash for http(s)
+    // (`new URL("/\\evil.com", origin).href` === "https://evil.com/"). Testing
+    // the second character for either slash closes both.
     const safe =
-      target?.startsWith("/") && !target.startsWith("//") ? target : "/my-page";
+      target?.startsWith("/") && target[1] !== "/" && target[1] !== "\\"
+        ? target
+        : "/my-page";
     redirect(safe);
   }
 

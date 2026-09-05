@@ -58,7 +58,13 @@ export function PasswordToggle({
       aria-label={visible ? "Hide password" : "Show password"}
       aria-pressed={visible}
       className={cn(
-        "absolute inset-y-0 right-0 flex items-center pr-3 pl-3 text-muted-foreground transition-colors hover:text-foreground",
+        // `rounded-md` + an offset-0 ring rather than the app's usual
+        // `ring-offset-2`: this button is parked inside the field's right edge,
+        // so a ring standing off from it would draw partly outside the input
+        // and read as a second, misaligned border. It had no focus style at all
+        // before, which on a password field is the one control a keyboard user
+        // most needs to find.
+        "absolute inset-y-0 right-0 flex items-center rounded-md pr-3 pl-3 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
         className,
       )}
     >

@@ -1,11 +1,15 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
+import type { CSSProperties } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "~/components/ui/button";
+import { CloseIcon } from "~/components/ui/close-icon";
+import { GLYPH, Glyph } from "~/components/ui/glyph";
 import { type ChangelogEntry, latestEntry } from "~/lib/changelog";
 import { lockBodyScroll, unlockBodyScroll } from "~/lib/scroll-lock";
+import { EXIT_MS } from "~/lib/use-popover";
 import { cn } from "~/lib/utils";
 import { disableAutoShow, markSeen, shouldAutoShow } from "~/lib/whats-new";
 
@@ -19,41 +23,6 @@ const OPEN_EVENT = "whatsnew:open";
 /** Open the "What's New" pop-up from anywhere (e.g. the footer link). */
 export function openWhatsNew() {
   window.dispatchEvent(new Event(OPEN_EVENT));
-}
-
-function MegaphoneIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      className={className}
-    >
-      <path d="m3 11 18-5v12L3 14v-3z" />
-      <path d="M11.6 16.8a3 3 0 1 1-5.8-1.6" />
-    </svg>
-  );
-}
-
-function CloseIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      className={className}
-    >
-      <path d="M18 6 6 18M6 6l12 12" />
-    </svg>
-  );
 }
 
 /**
@@ -126,21 +95,21 @@ export function WhatsNewDialog({
     // re-trigger for this release (a newer entry will show again).
     if (entry) markSeen(entry.id);
     setVisible(false);
-    setTimeout(() => setOpen(false), 200);
+    setTimeout(() => setOpen(false), EXIT_MS);
   }, [entry]);
 
   // "Don't show again" — suppress future auto pop-ups, then send the visitor to
-  // the Accessibility settings where they can turn it back on. When already on
-  // /settings, set the hash directly (fires `hashchange`, which the settings
-  // page listens for); otherwise navigate there fresh.
+  // the Preferences group in settings, where they can turn it back on. When
+  // already on /settings, set the hash directly (fires `hashchange`, which the
+  // settings page listens for); otherwise navigate there fresh.
   const dontShowAgain = useCallback(() => {
     if (entry) disableAutoShow(entry.id);
     setVisible(false);
-    setTimeout(() => setOpen(false), 200);
+    setTimeout(() => setOpen(false), EXIT_MS);
     if (pathname === "/settings") {
-      window.location.hash = "accessibility";
+      window.location.hash = "preferences";
     } else {
-      router.push("/settings#accessibility");
+      router.push("/settings#preferences");
     }
   }, [entry, pathname, router]);
 
@@ -215,21 +184,21 @@ export function WhatsNewDialog({
         aria-modal="true"
         aria-labelledby="whats-new-title"
         className={cn(
-          "relative max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-xl border border-border bg-background shadow-xl",
+          "relative max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-xl border border-border bg-popover text-popover-foreground shadow-xl",
           visible ? "animate-pop" : "animate-pop-out",
         )}
       >
         <div className="p-6">
           <div className="mb-4 flex items-start justify-between gap-3">
             <div className="flex items-center gap-2 text-muted-foreground text-xs font-medium uppercase tracking-wide">
-              <MegaphoneIcon className="size-4 text-foreground" />
+              <Glyph d={GLYPH.megaphone} className="text-foreground" />
               What's new
             </div>
             <div className="-mt-1 -mr-1 flex shrink-0 items-center gap-1">
               <button
                 type="button"
                 onClick={dontShowAgain}
-                className="rounded-md px-2 py-1 text-muted-foreground text-xs transition-colors hover:bg-muted hover:text-foreground"
+                className="rounded-md px-2 py-1 text-muted-foreground text-xs transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
               >
                 Don't show again
               </button>
@@ -237,7 +206,7 @@ export function WhatsNewDialog({
                 type="button"
                 aria-label="Close"
                 onClick={close}
-                className="flex size-10 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                className="flex size-10 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
               >
                 <CloseIcon className="size-5" />
               </button>
@@ -256,16 +225,60 @@ export function WhatsNewDialog({
   );
 }
 
+/**
+ * When each change in the list starts rising.
+ *
+ * `BASE` waits out most of the panel's own 200ms `pop-in`, so the cascade reads
+ * as the list settling INSIDE a panel that has already landed, rather than as
+ * two animations racing. `STEP` is deliberately larger than the account menu's
+ * 25ms: that menu is four one-word rows the eye takes in at a glance, and this
+ * is six two-line paragraphs being read. The last of six starts at 265ms and
+ * lands just under half a second — past that a list stops reading as arriving
+ * and starts reading as loading.
+ */
+const ITEM_BASE_MS = 115;
+const ITEM_STEP_MS = 30;
+const itemDelay = (i: number): CSSProperties => ({
+  animationDelay: `${ITEM_BASE_MS + i * ITEM_STEP_MS}ms`,
+});
+
 function Entry({ entry }: { entry: ChangelogEntry }) {
   return (
     <div>
+      {/* The version carries the heading; the theme trails it in muted text so
+          "Beta 1.2" stays the thing you read first even when the two wrap onto
+          separate lines. Both sit inside the one labelled <h2>, so the dialog's
+          accessible name is the full "Beta 1.2 — Everything around your page". */}
       <h2 id="whats-new-title" className="font-semibold text-lg">
         {entry.title}
+        {entry.subtitle ? (
+          <span className="font-normal text-muted-foreground">
+            {" — "}
+            {entry.subtitle}
+          </span>
+        ) : null}
       </h2>
       <p className="mt-0.5 text-muted-foreground text-sm">{entry.date}</p>
+      {/* The changes arrive in sequence rather than all at once. Every other
+          list in the app that appears as a unit already does this — the account
+          menu's rows, the settings panels, the landing wall's cards — and the
+          release notes, which are the one list a creator is actually asked to
+          read, were the exception: the panel popped and six items were simply
+          there. A cascade also does something a fade can't, which is tell you
+          there is a LIST here and roughly how long it is, before you have read
+          a word of it.
+
+          `.animate-rise` and an inline delay is the app's existing recipe for
+          exactly this (see globals.css) — `both` is what holds each item
+          invisible through its own wait instead of flashing it at full opacity
+          and then animating. */}
       <ul className="mt-4 flex flex-col gap-4">
-        {entry.items.map((item) => (
-          <li key={item.feature} className="flex flex-col gap-0.5">
+        {entry.items.map((item, i) => (
+          <li
+            key={item.feature}
+            className="flex animate-rise flex-col gap-0.5"
+            style={itemDelay(i)}
+          >
             <span className="font-medium text-foreground text-sm">
               {item.feature}
             </span>

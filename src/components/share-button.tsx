@@ -1,7 +1,10 @@
 "use client";
 
 import QRCode from "qrcode";
+import type { CSSProperties } from "react";
 import { useEffect, useRef, useState } from "react";
+import { Skeleton } from "~/components/ui/skeleton";
+import { useDismissOnOutside, usePopover } from "~/lib/use-popover";
 import { cn } from "~/lib/utils";
 
 function ShareIcon({ className }: { className?: string }) {
@@ -109,11 +112,32 @@ function legacyCopy(text: string): boolean {
 }
 
 /**
- * A floating share control for public pages: opens a modal with the page URL
- * (one-click copy) and a scannable QR code that links to the same page.
+ * NOT CURRENTLY MOUNTED. Removed from the public page (see `app/[username]/
+ * page.tsx`) pending a rework of how sharing is presented. Kept because the
+ * fiddly parts are all still correct and worth starting from: QR generation,
+ * the iOS-Safari download workaround, and the legacy clipboard fallback.
+ *
+ * A floating share control for public pages: a button in the BOTTOM-RIGHT
+ * corner that opens a dropdown with the page URL (one-click copy) and a
+ * scannable QR code.
+ *
+ * It used to sit top-right and open a centred modal over a dimmed backdrop.
+ * Both were wrong for what this is: sharing is a side errand, and a modal is
+ * the interaction for something that must be dealt with before anything else
+ * can happen. Taking over the screen also hid the very page the visitor was
+ * about to share. As a corner-anchored dropdown it explains itself — the panel
+ * is visibly attached to the button that opened it — and the page stays on
+ * screen behind it.
+ *
+ * Bottom-right specifically: the top edge is spoken for (the navbar, its pull
+ * tab at centre, the owner's hidden-links notice at top-left), and bottom-left
+ * belongs to the music player. Bottom-right is the only free corner, and it is
+ * where a page-level action is looked for anyway.
  */
 export function ShareButton() {
-  const [open, setOpen] = useState(false);
+  // `open` is "mounted", `shown` is "on screen" — the panel has to outlive the
+  // close by one exit animation. Everything conditional keys off `shown`.
+  const { open, shown, hide, toggle } = usePopover();
   const [url, setUrl] = useState("");
   const [qr, setQr] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -144,49 +168,26 @@ export function ShareButton() {
     };
   }, [open, url]);
 
-  const dialogRef = useRef<HTMLDivElement>(null);
+  // Wraps the trigger AND the panel, so an outside-click is measured against
+  // both — clicking the trigger while open must not count as "outside" and
+  // race the toggle into reopening.
+  const rootRef = useRef<HTMLDivElement>(null);
+  useDismissOnOutside(shown, rootRef, hide);
 
-  // Close on Escape, and keep Tab focus inside the modal (it declares
-  // aria-modal, so focus must not wander to the page behind it).
-  useEffect(() => {
-    if (!open) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        setOpen(false);
-        return;
-      }
-      if (e.key !== "Tab") return;
-      const dialog = dialogRef.current;
-      if (!dialog) return;
-      const focusable = dialog.querySelectorAll<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-      );
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      const active = document.activeElement;
-      if (e.shiftKey && active === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && active === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open]);
-
-  // While open: move focus into the dialog (the Copy button) and restore it to
-  // the share trigger on close, so keyboard users aren't dropped back at the top.
+  // The focus trap that used to live here is gone with the modal. Trapping Tab
+  // is what you do when the rest of the page is inert; this panel deliberately
+  // leaves the page live behind it, so holding focus hostage would be a lie
+  // about the state of the document. Focus still MOVES in (to Copy, the one
+  // action most opens are for) and is restored to the trigger on close, so a
+  // keyboard user is never dropped back at the top of the page.
   const copyBtnRef = useRef<HTMLButtonElement>(null);
   const prevFocusRef = useRef<HTMLElement | null>(null);
   useEffect(() => {
-    if (!open) return;
+    if (!shown) return;
     prevFocusRef.current = document.activeElement as HTMLElement | null;
     copyBtnRef.current?.focus();
     return () => prevFocusRef.current?.focus?.();
-  }, [open]);
+  }, [shown]);
 
   async function copyLink() {
     let ok = false;
@@ -248,103 +249,131 @@ export function ShareButton() {
   }
 
   return (
-    <>
+    // One fixed root in the corner holding the trigger AND the panel, so the
+    // panel can be positioned against the button with plain `absolute` instead
+    // of measured coordinates. `bottom` uses max(1rem, safe-area) so the button
+    // clears an iPhone's home indicator once the viewport opts into cover.
+    <div
+      ref={rootRef}
+      className="fixed right-[max(1rem,env(safe-area-inset-right))] bottom-[max(1rem,env(safe-area-inset-bottom))] z-40"
+    >
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={toggle}
         aria-label="Share this page"
-        className="fixed top-[4.5rem] right-4 z-40 flex size-11 items-center justify-center rounded-full border border-border bg-background/80 text-foreground shadow-sm backdrop-blur transition-colors hover:bg-accent hover:text-accent-foreground"
+        aria-haspopup="dialog"
+        aria-expanded={shown}
+        className={cn(
+          "flex size-11 items-center justify-center rounded-full border border-border bg-background/80 text-foreground shadow-sm backdrop-blur",
+          "transition-[color,background-color,scale] duration-[var(--dur-fast)] hover:bg-accent hover:text-accent-foreground",
+          "active:scale-95 active:duration-[var(--dur-press)]",
+          "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+          shown && "bg-accent text-accent-foreground",
+        )}
       >
         <ShareIcon className="size-5" />
       </button>
 
       {open ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <button
-            type="button"
-            aria-label="Close"
-            className="absolute inset-0 animate-fade bg-black/50"
-            onClick={() => setOpen(false)}
-          />
-          <div
-            ref={dialogRef}
-            role="dialog"
-            aria-modal="true"
-            aria-label="Share this page"
-            className="relative max-h-[calc(100dvh-2rem)] w-full max-w-xs animate-pop overflow-y-auto overscroll-contain rounded-lg border border-border bg-background p-5 shadow-lg"
-          >
-            <h2 className="text-sm font-semibold">Share this page</h2>
+        <div
+          role="dialog"
+          aria-label="Share this page"
+          // Anchored to the trigger's top-right corner and growing up-and-left,
+          // which is the only direction with room in this corner.
+          // `--menu-rise`/`--menu-fall` flip the shared menu animation to rise
+          // instead of drop (see @keyframes menu-in) — without them the panel
+          // would slide DOWN into a position above its trigger, which reads as
+          // the panel escaping rather than opening.
+          //
+          // The width is capped against the viewport so the panel cannot run
+          // off the left edge on a narrow phone, and the height against the
+          // dynamic viewport so a short landscape window scrolls the panel
+          // rather than clipping the QR.
+          style={
+            {
+              "--menu-rise": "0.5rem",
+              "--menu-fall": "0.25rem",
+            } as CSSProperties
+          }
+          className={cn(
+            "absolute right-0 bottom-full mb-3 w-72 max-w-[calc(100vw-2rem)]",
+            "max-h-[calc(100dvh-6rem)] overflow-y-auto overscroll-contain",
+            "origin-bottom-right rounded-2xl border border-border bg-popover p-4 text-popover-foreground nav-island",
+            shown ? "animate-menu-in" : "animate-menu-out",
+          )}
+        >
+          <h2 className="font-semibold text-sm">Share this page</h2>
 
-            {/* QR code on a white plate so it scans in any theme. */}
-            <div className="mt-4 flex justify-center">
-              {qr ? (
-                // biome-ignore lint/performance/noImgElement: generated data-URL QR; next/image adds no value
-                <img
-                  src={qr}
-                  alt="QR code linking to this page"
-                  className="size-44 rounded-lg bg-white p-2"
-                />
-              ) : (
-                <div className="size-44 animate-pulse rounded-lg bg-muted" />
+          {/* QR code on a white plate so it scans in any theme. */}
+          <div className="mt-3 flex justify-center">
+            {qr ? (
+              // biome-ignore lint/performance/noImgElement: generated data-URL QR; next/image adds no value
+              <img
+                src={qr}
+                alt="QR code linking to this page"
+                className="size-40 rounded-lg bg-white p-2"
+              />
+            ) : (
+              <Skeleton className="size-40 rounded-lg" />
+            )}
+          </div>
+
+          {/* URL + copy button. */}
+          <div className="mt-3 flex items-center gap-2 rounded-md border border-border bg-muted/50 p-1 pl-3">
+            <span className="min-w-0 flex-1 truncate text-muted-foreground text-sm">
+              {url}
+            </span>
+            <button
+              ref={copyBtnRef}
+              type="button"
+              onClick={copyLink}
+              className={cn(
+                "flex shrink-0 items-center gap-1.5 rounded px-3 py-1.5 font-medium text-sm transition-colors",
+                "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                copied
+                  ? "bg-success/15 text-success"
+                  : "bg-primary text-primary-foreground hover:bg-primary/90",
               )}
-            </div>
+            >
+              {copied ? (
+                <>
+                  <CheckIcon className="size-4" />
+                  Copied
+                </>
+              ) : (
+                <>
+                  <CopyIcon className="size-4" />
+                  Copy
+                </>
+              )}
+            </button>
+          </div>
 
-            {/* URL + copy button. */}
-            <div className="mt-4 flex items-center gap-2 rounded-md border border-border bg-muted/50 p-1 pl-3">
-              <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
-                {url}
-              </span>
-              <button
-                ref={copyBtnRef}
-                type="button"
-                onClick={copyLink}
-                className={cn(
-                  "flex shrink-0 items-center gap-1.5 rounded px-3 py-1.5 text-sm font-medium transition-colors",
-                  copied
-                    ? "bg-green-500/15 text-green-600 dark:text-green-400"
-                    : "bg-primary text-primary-foreground hover:bg-primary/90",
-                )}
-              >
-                {copied ? (
-                  <>
-                    <CheckIcon className="size-4" />
-                    Copied
-                  </>
-                ) : (
-                  <>
-                    <CopyIcon className="size-4" />
-                    Copy
-                  </>
-                )}
-              </button>
-            </div>
-
-            {/* Secondary actions: save the QR, and (where supported) open the
-                native share sheet. */}
-            <div className="mt-3 flex items-center gap-2">
+          {/* Secondary actions: save the QR, and (where supported) open the
+              native share sheet. */}
+          <div className="mt-2 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={downloadQr}
+              disabled={!qr}
+              className="flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-md border border-border bg-transparent px-3 py-2 font-medium text-foreground text-sm transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50"
+            >
+              <DownloadIcon className="size-4" />
+              Download QR
+            </button>
+            {canShare ? (
               <button
                 type="button"
-                onClick={downloadQr}
-                disabled={!qr}
-                className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-md border border-border bg-transparent px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-50"
+                onClick={nativeShare}
+                className="flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-md border border-border bg-transparent px-3 py-2 font-medium text-foreground text-sm transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
               >
-                <DownloadIcon className="size-4" />
-                Download QR
+                <ShareIcon className="size-4" />
+                Share…
               </button>
-              {canShare ? (
-                <button
-                  type="button"
-                  onClick={nativeShare}
-                  className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-md border border-border bg-transparent px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-                >
-                  <ShareIcon className="size-4" />
-                  Share…
-                </button>
-              ) : null}
-            </div>
+            ) : null}
           </div>
         </div>
       ) : null}
-    </>
+    </div>
   );
 }

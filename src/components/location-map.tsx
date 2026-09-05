@@ -14,7 +14,10 @@ import {
   MAP_WIDTH,
 } from "~/lib/world-map-config";
 
-/** Base map tint — shares CHART_COLORS[0] with the rest of the admin view. */
+/** Base map tint — shares CHART_COLORS[0] with the rest of the admin view.
+ *  Density is expressed as OPACITY over this one hue (a sequential ramp), which
+ *  is why it must stay a single colour rather than joining the categorical
+ *  series rotation. */
 const ACCENT = CHART_COLORS[0];
 
 export interface LocationDatum {
@@ -107,7 +110,10 @@ export function LocationMap({
 
       {hovered && (
         <div
-          className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full rounded-md border border-border bg-popover px-2.5 py-1.5 text-xs shadow-md"
+          // `animate-fade` to match InfoTip, the app's other floating tooltip:
+          // both are a small popover that appears under the pointer, and this
+          // one was the only one that snapped in.
+          className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full animate-fade rounded-md border border-border bg-popover px-2.5 py-1.5 text-xs shadow-md"
           style={{ left: hovered.x, top: hovered.y - 8 }}
         >
           <span className="font-medium">
@@ -126,7 +132,11 @@ export function LocationMap({
         <span
           className="h-2 w-24 rounded-full"
           style={{
-            background: `linear-gradient(to right, ${ACCENT}33, ${ACCENT})`,
+            // `color-mix`, not the old `${ACCENT}33`: string-appending hex
+            // alpha only works while CHART_COLORS happens to hold 6-digit
+            // hexes, and it fails silently — the whole gradient just stops
+            // painting — the moment one entry is anything else.
+            background: `linear-gradient(to right, color-mix(in oklab, ${ACCENT} 20%, transparent), ${ACCENT})`,
           }}
         />
         <span>More</span>

@@ -20,6 +20,8 @@ import {
 import { Button } from "~/components/ui/button";
 import { type PageData, savePage } from "~/lib/pages";
 import { useUnsavedGuard } from "~/lib/unsaved-guard";
+import { usePresence } from "~/lib/use-popover";
+import { useSlidingMarker } from "~/lib/use-sliding-marker";
 import { cn } from "~/lib/utils";
 import {
   type SectionId,
@@ -36,28 +38,15 @@ import {
 } from "./studio-panels";
 import { StudioPreview } from "./studio-preview";
 
-/**
- * Keep a popup mounted through its exit animation: `value` stays set for
- * `duration` ms after `active` goes false, while `visible` flips immediately so
- * the leave transition can play.
- */
-function usePresence(active: boolean, duration = 250) {
-  const [value, setValue] = useState(active);
-  const [visible, setVisible] = useState(active);
-  useEffect(() => {
-    if (active) {
-      setValue(true);
-      setVisible(true);
-      return;
-    }
-    setVisible(false);
-    const t = setTimeout(() => setValue(false), duration);
-    return () => clearTimeout(t);
-  }, [active, duration]);
-  return { value, visible };
-}
-
-function Icon({ id, className }: { id: SectionId; className?: string }) {
+function Icon({
+  id,
+  className,
+  style,
+}: {
+  id: SectionId;
+  className?: string;
+  style?: CSSProperties;
+}) {
   const paths: Record<SectionId, string> = {
     profile: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM5 20a7 7 0 0 1 14 0",
     links:
@@ -77,6 +66,7 @@ function Icon({ id, className }: { id: SectionId; className?: string }) {
       strokeLinejoin="round"
       aria-hidden="true"
       className={className}
+      style={style}
     >
       <path d={paths[id]} />
     </svg>
@@ -212,7 +202,17 @@ function Shell({ username }: { username: string }) {
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [dirty]);
 
-  const unsavedBar = usePresence(dirty, 250);
+  const unsavedBar = usePresence(dirty);
+  // The "Saved" pill lands in the same slot the unsaved bar just left, and that
+  // bar slides away on `animate-slide-down`. Without its own presence this one
+  // simply blinked out of the same few pixels a moment later — the same toast
+  // position behaving two different ways within one second.
+  const savedToast = usePresence(justSaved);
+  // The confirm dialog is the Studio's one remaining hand-rolled modal (the
+  // shared `Modal` in studio-ui carries a ✕ and a smaller title this one does
+  // not want). It still owes the app an exit: settings' two dialogs fade and
+  // scale away and this one used to be deleted mid-frame.
+  const confirmDlg = usePresence(confirmingSave);
 
   function save() {
     setSaveError(null);
@@ -394,8 +394,24 @@ function Shell({ username }: { username: string }) {
     };
   }, [selection, selectNonce]);
 
+  // The section rail's sliding marker — the same one the navbar and the settings
+  // rail wear. `section` is the trigger; the marker finds the active chip by
+  // `[data-rail-active]`.
+  const {
+    ref: markerRef,
+    marker,
+    placed: markerPlaced,
+  } = useSlidingMarker<HTMLElement>(section, "[data-rail-active]");
+
   return (
-    <div className="flex h-[calc(100dvh-3.5rem)] flex-col overflow-hidden bg-background">
+    // `--sec` is the current section's hue, published once here so the controls
+    // AND the preview inherit the same one. `.studio-shell` (globals.css) is what
+    // turns it into --ring, slider accent colours and the .sec-* state classes,
+    // so nothing downstream has to know which section is open.
+    <div
+      style={{ "--sec": `var(--sec-${section})` } as CSSProperties}
+      className="studio-shell flex h-[calc(100dvh-var(--nav-space))] flex-col overflow-hidden bg-background"
+    >
       {/* Top bar — the exit, the page identity, and (phones only) the pane
           toggle. Saving lives in the bottom unsaved-changes bar, and the preview
           itself is the live view. Matches the navbar's h-14 on phones so the
@@ -411,7 +427,15 @@ function Shell({ username }: { username: string }) {
         {/* Below sm the pane toggle takes the room the URL would need, so the
             identity drops out — as the navbar drops its @username. */}
         <span className="hidden text-border sm:inline">|</span>
-        <span className="hidden truncate text-muted-foreground sm:inline">
+        <span className="hidden min-w-0 items-center gap-1.5 truncate text-muted-foreground sm:inline-flex">
+          {/* This page is already public — the header says what it is, and that
+              it is live is the one part that was missing. Green means "good"
+              app-wide and appears nowhere in the brand gradient, so it can only
+              be read as status here. */}
+          <span
+            aria-hidden
+            className="size-1.5 shrink-0 rounded-full bg-success"
+          />
           stacked.page/{username}
         </span>
 
@@ -425,7 +449,7 @@ function Shell({ username }: { username: string }) {
               onClick={() => setView(v.id)}
               aria-pressed={view === v.id}
               className={cn(
-                "flex items-center gap-1.5 rounded-md px-3 py-2 font-medium text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "flex items-center gap-1.5 rounded-md px-3 py-2 font-medium text-xs transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
                 view === v.id
                   ? "bg-foreground text-background"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground",
@@ -452,26 +476,80 @@ function Shell({ username }: { username: string }) {
             view === "edit" ? "flex w-full" : "hidden",
           )}
         >
-          <nav className="grid grid-cols-5 gap-1 border-border border-b p-2">
-            {NAV.map((n) => (
-              <button
-                key={n.id}
-                type="button"
-                onClick={() => setSection(n.id)}
-                aria-pressed={section === n.id}
-                className={cn(
-                  "flex min-w-0 flex-col items-center gap-1 rounded-md px-1 py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  section === n.id
-                    ? "bg-secondary text-foreground"
-                    : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
-                )}
-              >
-                <Icon id={n.id} className="size-[18px] shrink-0" />
-                <span className="w-full truncate text-center text-[10px] leading-none">
-                  {n.label}
-                </span>
-              </button>
-            ))}
+          {/* Section rail. The active section is ONE object that slides between
+              the five chips — the navbar's marker and the settings rail's, the
+              third and last place in the app that answers "where am I".
+
+              It used to be a chip fill plus a 2px bar rendered INSIDE whichever
+              button was active, so the answer vanished here and reappeared
+              there. That was the more expensive failure of the three: the fill
+              is `bg-secondary` and the hover fill is `bg-muted/50`, which
+              resolve to the same token at two opacities, so a crossfade between
+              them is very nearly no signal at all. Moving it is.
+
+              `relative` because the marker measures itself with offsetLeft/Top
+              against this element. The buttons keep their own `relative` too —
+              a positioned marker would otherwise paint over their icons. */}
+          <nav
+            ref={markerRef}
+            className="relative grid grid-cols-5 gap-1 border-border border-b p-2"
+          >
+            {/* Translated AND sized, rather than stretched with top-0/bottom-0
+                the way the navbar's is: this rail has `p-2`, so a stretched
+                marker would overshoot the chips by 8px at each end. */}
+            <span
+              aria-hidden
+              style={{
+                transform: `translate(${marker.x}px, ${marker.y}px)`,
+                width: marker.w,
+                height: marker.h,
+              }}
+              className={cn(
+                "pointer-events-none absolute top-0 left-0 rounded-md bg-secondary",
+                markerPlaced &&
+                  (marker.snap ? "nav-marker-fade" : "nav-marker"),
+                marker.on ? "opacity-100" : "opacity-0",
+              )}
+            >
+              {/* The section hue rides along inside the marker. `var(--sec)` and
+                  not `var(--sec-<id>)`: the shell publishes the CURRENT
+                  section's hue as --sec (see the wrapper above), and the marker
+                  is only ever on the current section — so it re-tints itself and
+                  can never disagree with the panel it belongs to. */}
+              <span
+                className="absolute inset-x-2 bottom-1 h-[2px] rounded-full"
+                style={{ background: "var(--sec)" }}
+              />
+            </span>
+
+            {NAV.map((n) => {
+              const on = section === n.id;
+              return (
+                <button
+                  key={n.id}
+                  type="button"
+                  onClick={() => setSection(n.id)}
+                  aria-pressed={on}
+                  // How the marker finds its target — by attribute, not index.
+                  data-rail-active={on ? "" : undefined}
+                  className={cn(
+                    "relative flex min-w-0 flex-col items-center gap-1 rounded-md px-1 pt-2 pb-2.5 transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                    on
+                      ? "text-foreground"
+                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                  )}
+                >
+                  <Icon
+                    id={n.id}
+                    className="size-[18px] shrink-0"
+                    style={on ? { color: `var(--sec-${n.id})` } : undefined}
+                  />
+                  <span className="w-full truncate text-center text-[10px] leading-none">
+                    {n.label}
+                  </span>
+                </button>
+              );
+            })}
           </nav>
           <div
             ref={panelScrollRef}
@@ -516,7 +594,7 @@ function Shell({ username }: { username: string }) {
           )}
         >
           {saveError ? (
-            <div className="pointer-events-auto max-w-xs rounded-lg border border-red-400/30 bg-background px-4 py-2 text-center text-red-400 text-sm shadow-lg">
+            <div className="pointer-events-auto max-w-xs rounded-lg border border-danger/30 bg-background px-4 py-2 text-center text-danger text-sm shadow-lg">
               {saveError}
             </div>
           ) : null}
@@ -524,11 +602,18 @@ function Shell({ username }: { username: string }) {
             key={flashKey}
             onAnimationEnd={() => setFlashing(false)}
             className={cn(
-              "pointer-events-auto flex items-center gap-4 rounded-lg border border-border bg-background px-4 py-2 shadow-lg",
+              "pointer-events-auto flex items-center gap-4 rounded-lg border border-warning/35 bg-background px-4 py-2 shadow-lg",
               flashing && "animate-flash",
             )}
           >
-            <span className="whitespace-nowrap text-muted-foreground text-sm">
+            <span className="flex items-center gap-2 whitespace-nowrap text-muted-foreground text-sm">
+              <span
+                aria-hidden
+                className={cn(
+                  "size-1.5 shrink-0 rounded-full bg-warning",
+                  saving && "animate-pulse",
+                )}
+              />
               {/* The full sentence plus both buttons overflows a 375px phone. */}
               <span className="sm:hidden">Unsaved changes</span>
               <span className="hidden sm:inline">You have unsaved changes</span>
@@ -546,9 +631,14 @@ function Shell({ username }: { username: string }) {
       ) : null}
 
       {/* Brief "Saved" confirmation — stands in for the bar as it slides away. */}
-      {justSaved ? (
+      {savedToast.value ? (
         <div className="pointer-events-none fixed inset-x-0 bottom-[calc(1.5rem+env(safe-area-inset-bottom))] z-40 flex justify-center px-4">
-          <div className="flex animate-slide-up items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 font-medium text-foreground text-sm shadow-lg">
+          <div
+            className={cn(
+              "flex items-center gap-2 rounded-lg border border-success/35 bg-background px-4 py-2 font-medium text-foreground text-sm shadow-lg",
+              savedToast.visible ? "animate-slide-up" : "animate-slide-down",
+            )}
+          >
             <svg
               viewBox="0 0 24 24"
               fill="none"
@@ -557,7 +647,7 @@ function Shell({ username }: { username: string }) {
               strokeLinecap="round"
               strokeLinejoin="round"
               aria-hidden="true"
-              className="size-4 text-green-500"
+              className="size-4 text-success"
             >
               <path d="M20 6 9 17l-5-5" />
             </svg>
@@ -567,15 +657,30 @@ function Shell({ username }: { username: string }) {
       ) : null}
 
       {/* Confirm save dialog */}
-      {confirmingSave ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {confirmDlg.value ? (
+        <div
+          className={cn(
+            "fixed inset-0 z-50 flex items-center justify-center p-4",
+            // Stop the fading-out dialog from swallowing clicks aimed at the
+            // editor it is uncovering.
+            !confirmDlg.visible && "pointer-events-none",
+          )}
+        >
           <button
             type="button"
             aria-label="Close"
-            className="absolute inset-0 animate-fade bg-black/50"
+            className={cn(
+              "absolute inset-0 bg-black/50",
+              confirmDlg.visible ? "animate-fade" : "animate-fade-out",
+            )}
             onClick={() => setConfirmingSave(false)}
           />
-          <div className="relative w-full max-w-sm animate-pop rounded-lg border border-border bg-background p-6 shadow-lg">
+          <div
+            className={cn(
+              "relative w-full max-w-sm rounded-xl border border-border bg-popover p-6 text-popover-foreground shadow-xl",
+              confirmDlg.visible ? "animate-pop" : "animate-pop-out",
+            )}
+          >
             <h2 className="font-semibold text-lg">Confirm changes</h2>
             <p className="mt-2 text-muted-foreground text-sm">
               Are you sure you want to save these changes?

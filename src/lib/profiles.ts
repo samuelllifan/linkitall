@@ -1,8 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "~/lib/supabase/client";
 
-/** Allowed username: 3–30 characters, letters/numbers/underscore only. */
-export const USERNAME_PATTERN = /^[A-Za-z0-9_]{3,30}$/;
+/** Allowed username: 1–30 characters, letters/numbers/underscore only. */
+export const USERNAME_PATTERN = /^[A-Za-z0-9_]{1,30}$/;
 
 /**
  * Usernames that would collide with an app route (a page lives at /<username>,
@@ -33,7 +33,7 @@ const RESERVED_USERNAMES = new Set([
 
 /** Returns a human-readable problem with the username, or null if it's valid. */
 export function usernameError(username: string): string | null {
-  if (username.length < 3) return "Username must be at least 3 characters.";
+  if (username.length < 1) return "Username must be at least 1 character.";
   if (username.length > 30) return "Username must be at most 30 characters.";
   if (!USERNAME_PATTERN.test(username)) {
     return "Use only letters, numbers, and underscores.";

@@ -2,14 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { AuthCard } from "~/components/auth-card";
 import { Button } from "~/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "~/components/ui/card";
+import { Collapse } from "~/components/ui/collapse";
+import { FormNote } from "~/components/ui/form-note";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { PasswordToggle } from "~/components/ui/password-toggle";
@@ -24,6 +20,8 @@ export default function ResetPasswordPage() {
   const [hasSession, setHasSession] = useState(false);
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  // Drives the height-animated checklist under the field.
+  const [passwordFocused, setPasswordFocused] = useState(false);
   const [attempted, setAttempted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -89,76 +87,70 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <main className="flex flex-1 items-center justify-center px-6 py-16">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle>Set a new password</CardTitle>
-          <CardDescription className="mt-1.5">
-            Choose a new password for your account.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {checking ? (
-            <p className="text-sm text-muted-foreground">
-              Verifying your link…
-            </p>
-          ) : !hasSession ? (
-            <div className="flex flex-col gap-4">
-              <p className="text-sm text-red-400">
-                This reset link is invalid or has expired. Request a new one
-                from the sign-in page.
-              </p>
-              <Button asChild variant="outline">
-                <a href="/login">Back to sign in</a>
-              </Button>
+    <AuthCard
+      title="Set a new password"
+      description="Choose a new password for your account."
+    >
+      {checking ? (
+        <FormNote tone="muted">Verifying your link…</FormNote>
+      ) : !hasSession ? (
+        <div className="flex flex-col gap-4">
+          <FormNote tone="danger">
+            This reset link is invalid or has expired. Request a new one from
+            the sign-in page.
+          </FormNote>
+          <Button asChild variant="outline">
+            <a href="/login">Back to sign in</a>
+          </Button>
+        </div>
+      ) : done ? (
+        <FormNote tone="muted">
+          Password updated. Taking you to your page…
+        </FormNote>
+      ) : (
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="password">New password</Label>
+            <div className="relative">
+              <Input
+                ref={passwordRef}
+                id="password"
+                type={showPassword ? "text" : "password"}
+                autoComplete="new-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onFocus={() => setPasswordFocused(true)}
+                onBlur={() => setPasswordFocused(false)}
+                className="pr-10"
+              />
+              <PasswordToggle
+                visible={showPassword}
+                onToggle={() => setShowPassword((v) => !v)}
+              />
             </div>
-          ) : done ? (
-            <p className="animate-slide-up text-sm text-muted-foreground">
-              Password updated. Taking you to your page…
-            </p>
-          ) : (
-            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="password">New password</Label>
-                <div className="relative">
-                  <Input
-                    ref={passwordRef}
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    autoComplete="new-password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="pr-10"
-                  />
-                  <PasswordToggle
-                    visible={showPassword}
-                    onToggle={() => setShowPassword((v) => !v)}
-                  />
-                </div>
-                <ul className="mt-1 flex flex-col gap-1">
-                  {reqs.map((r) => (
-                    <Requirement
-                      key={r.label}
-                      met={r.met}
-                      attempted={attempted}
-                    >
-                      {r.label}
-                    </Requirement>
-                  ))}
-                </ul>
-              </div>
+            {/* Same height-animated checklist as sign-up, on the same trigger:
+                the rules show once the field is in play and fold away when they
+                have nothing to say. */}
+            <Collapse
+              open={passwordFocused || password.length > 0 || attempted}
+            >
+              <ul className="flex flex-col gap-1 pt-1">
+                {reqs.map((r) => (
+                  <Requirement key={r.label} met={r.met} attempted={attempted}>
+                    {r.label}
+                  </Requirement>
+                ))}
+              </ul>
+            </Collapse>
+          </div>
 
-              {error ? (
-                <p className="animate-slide-up text-sm text-red-400">{error}</p>
-              ) : null}
+          <FormNote tone="danger">{error}</FormNote>
 
-              <Button type="submit" disabled={loading}>
-                {loading ? "Please wait…" : "Update password"}
-              </Button>
-            </form>
-          )}
-        </CardContent>
-      </Card>
-    </main>
+          <Button type="submit" disabled={loading}>
+            {loading ? "Please wait…" : "Update password"}
+          </Button>
+        </form>
+      )}
+    </AuthCard>
   );
 }

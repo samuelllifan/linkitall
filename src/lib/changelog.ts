@@ -5,6 +5,29 @@
  * bumping the top `id` is what re-triggers the pop-up for everyone.
  *
  * Entries are authored here (versioned in git, shipped on deploy) — no database.
+ *
+ * ## How to write one
+ *
+ * This is read once, quickly, over the top of somebody's own page. It is a list
+ * of what changed, not a piece of writing — so the name says WHAT it is and the
+ * line under it says WHAT IT DOES, and neither of them is clever:
+ *
+ *   * THE NAME IS THE FEATURE. "Revamped navbar", "Page privacy controls",
+ *     "Link scheduling". Two or three plain words. Not a slogan, not a pun, and
+ *     not a sentence — a creator scanning six of these should be able to tell
+ *     from the name alone whether the line below is worth reading.
+ *   * THE DESCRIPTION EXPLAINS THE FEATURE. One sentence, two at the very most,
+ *     in second person and present tense: "Set a password on your page, take it
+ *     offline, or add a sensitive-content warning." Not why we built it, not
+ *     what it replaces, not how it feels.
+ *   * NO INTERFACE WORDS. "two-pane", "grouped into sections", "unfurls",
+ *     "toggle", "modal" — a creator does not care what shape our UI is, and half
+ *     of those words mean nothing outside this repo.
+ *   * AMERICAN SPELLING, matching the rest of the product's copy ("color",
+ *     "capitalize").
+ *
+ * The last item of a release is "Fixes and polish" — the small wins that don't
+ * deserve their own line but are the ones people actually notice.
  */
 
 /** A single change: a short bold feature name plus a one-line description. */
@@ -26,6 +49,14 @@ export interface ChangelogEntry {
   date: string;
   /** Release version shown as the heading, e.g. "Beta 1.0". */
   title: string;
+  /**
+   * The release's theme, shown after the version in the pop-up heading
+   * ("Beta 1.2 — Everything around your page"). Optional, and deliberately
+   * separate from {@link title}: Settings → Help renders `title` alone as the
+   * Version chip, so the theme has to live in its own field or it overflows a
+   * control that expects "Beta 1.2".
+   */
+  subtitle?: string;
   /** The individual changes, each a bold feature + description. */
   items: ChangelogItem[];
 }
@@ -33,39 +64,76 @@ export interface ChangelogEntry {
 /** Newest first. The first entry is the one the pop-up announces. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-04",
+    date: "September 4, 2026",
+    title: "Beta 1.2",
+    subtitle: "Everything around your page",
+    items: [
+      {
+        feature: "Revamped navbar",
+        description:
+          "My Page, Studio and Dashboard sit in one row. On a phone they fold into a menu.",
+      },
+      {
+        feature: "New settings page",
+        description:
+          "Your account, password, page and privacy settings, all in one place.",
+      },
+      {
+        feature: "Two-factor authentication",
+        description:
+          "Ask for a code from your phone as well as your password when you sign in.",
+      },
+      {
+        feature: "Page privacy controls",
+        description:
+          "Set a password on your page, take it offline, or add a sensitive-content warning.",
+      },
+      {
+        feature: "Better link previews",
+        description:
+          "Your page gets a proper preview card when you share it, and hidden pages stay hidden.",
+      },
+      {
+        feature: "Fixes and polish",
+        description:
+          "Short usernames, a downloadable QR code, and a full export of your data.",
+      },
+    ],
+  },
+  {
     id: "2026-08-28",
     date: "August 28, 2026",
     title: "Beta 1.1",
     items: [
       {
-        feature: "A rebuilt editor",
+        feature: "Rebuilt editor",
         description:
-          "Everything moved to a two-pane studio: grouped controls on one side, your real page updating live on the other. Editing on a phone switches between the two instead of cramming both in.",
+          "Your controls on one side, your live page on the other. On a phone you switch between them.",
       },
       {
         feature: "Click to enter",
         description:
-          "Put a splash screen in front of your page — your own text over a blurred or solid backdrop — that visitors click through to come in.",
+          "Add a splash screen in front of your page that visitors click through.",
       },
       {
         feature: "Image and video backgrounds",
         description:
-          "Upload a photo or a video and frame it by dragging, with a dimming control so your text stays readable over it.",
+          "Upload one, drag to frame it, and dim it so your text stays readable.",
       },
       {
-        feature: "Crop your profile picture",
-        description:
-          "Drag and pinch to set exactly what the circle keeps, instead of taking whatever the middle of the image happened to be.",
+        feature: "Profile picture cropping",
+        description: "Drag and pinch to choose exactly what the circle keeps.",
       },
       {
-        feature: "A deeper dashboard",
+        feature: "Expanded dashboard",
         description:
-          "Pick any time range and see how it compares with the one before it, plus where your visitors are, what they are on, and when they show up.",
+          "Pick any time range and compare it with the one before. See where your visitors are, what they use, and when they visit.",
       },
       {
         feature: "Fixes and polish",
         description:
-          "Phone keyboards no longer capitalize the first letter of a username, faint text across the site got more readable, and the home page was rebuilt around real pages.",
+          "Phone keyboards no longer capitalize usernames, faint text is easier to read, and the home page was rebuilt.",
       },
     ],
   },
@@ -77,17 +145,15 @@ export const CHANGELOG: ChangelogEntry[] = [
       {
         feature: "Music on your page",
         description:
-          "Add a song by Spotify link or file upload, with autoplay, loop, and clip-to-a-section controls.",
+          "Add a song from Spotify or upload your own. Loop it, autoplay it, or clip it to one section.",
       },
       {
         feature: "Search visibility",
-        description:
-          "Choose whether search engines can list your page, in Privacy settings.",
+        description: "Choose whether search engines can list your page.",
       },
       {
-        feature: "Delete your account",
-        description:
-          "Remove your account yourself, confirmed with your password.",
+        feature: "Account deletion",
+        description: "Delete your own account, confirmed with your password.",
       },
     ],
   },
@@ -99,11 +165,11 @@ export const CHANGELOG: ChangelogEntry[] = [
       {
         feature: "Link scheduling",
         description:
-          "Set any link to appear or hide on its own with a start and end time.",
+          "Give a link a start and end time and it appears and hides on its own.",
       },
       {
         feature: "Richer share previews",
-        description: "Sharing your page now generates a nicer preview card.",
+        description: "Sharing your page generates a preview card.",
       },
     ],
   },
@@ -114,11 +180,11 @@ export const CHANGELOG: ChangelogEntry[] = [
     items: [
       {
         feature: "Redesigned editor",
-        description: "Per-link colors and outlines.",
+        description: "Plus per-link colors and outlines.",
       },
       {
         feature: "New backgrounds",
-        description: "Gradient, grid, and aurora background styles.",
+        description: "Gradient, grid and aurora styles.",
       },
     ],
   },

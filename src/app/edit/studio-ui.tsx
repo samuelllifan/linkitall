@@ -8,54 +8,83 @@
 
 import { type ReactNode, useEffect, useState } from "react";
 import { ColorPicker } from "~/components/text-style-editor";
+import { CloseIcon } from "~/components/ui/close-icon";
+import { Collapse } from "~/components/ui/collapse";
 import { InfoTip } from "~/components/ui/info-tip";
+import { Toggle } from "~/components/ui/toggle";
 import type { BoxStyle } from "~/lib/pages";
+import { usePresence } from "~/lib/use-popover";
 import { cn } from "~/lib/utils";
 import { type Selection, useStudio } from "./studio-context";
 
 /**
- * A small centered modal shared by the Studio's pop-ups (the add-link platform
- * picker, the per-link logo uploader, the avatar adjuster). Closes on the
- * backdrop, the ✕, or Escape; animates in with the app's `animate-*` keyframes.
+ * A small centered modal for the Studio's pop-ups. Closes on the backdrop, the
+ * ✕, or Escape.
+ *
+ * `open` is a PROP rather than the caller mounting it conditionally, which is
+ * what lets it animate out. Mounted behind a `cond ? <Modal/> : null` it went
+ * in with `animate-pop` and then simply ceased to exist — the two dialogs in
+ * settings fade and scale away, and the Studio's snapped, which is the sort of
+ * difference that reads as one of the two being broken. Keep it mounted and let
+ * `usePresence` hold it through the exit.
  */
 export function Modal({
+  open,
   title,
   description,
   onClose,
   size = "md",
   children,
 }: {
+  open: boolean;
   title?: string;
   description?: string;
   onClose: () => void;
   size?: "xs" | "sm" | "md";
   children: ReactNode;
 }) {
+  const { value: mounted, visible } = usePresence(open);
   useEffect(() => {
+    // Only while it is actually open: a closed-but-still-mounted modal must not
+    // swallow the Escape that is meant for whatever is behind it.
+    if (!visible) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [visible, onClose]);
 
   const maxW =
     size === "xs" ? "max-w-xs" : size === "sm" ? "max-w-sm" : "max-w-md";
 
+  if (!mounted) return null;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div
+      className={cn(
+        "fixed inset-0 z-50 flex items-center justify-center p-4",
+        // Stop the fading-out dialog from swallowing clicks aimed at the page
+        // it is uncovering.
+        !visible && "pointer-events-none",
+      )}
+    >
       <button
         type="button"
         aria-label="Close"
         onClick={onClose}
-        className="absolute inset-0 animate-fade bg-black/50"
+        className={cn(
+          "absolute inset-0 bg-black/50",
+          visible ? "animate-fade" : "animate-fade-out",
+        )}
       />
       <div
         role="dialog"
         aria-modal="true"
         aria-label={title ?? "Dialog"}
         className={cn(
-          "relative w-full animate-pop rounded-xl border border-border bg-background p-4 shadow-xl",
+          "relative w-full rounded-xl border border-border bg-popover p-4 text-popover-foreground shadow-xl",
+          visible ? "animate-pop" : "animate-pop-out",
           maxW,
         )}
       >
@@ -75,18 +104,7 @@ export function Modal({
               onClick={onClose}
               className="-mr-1 -mt-1 flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={2}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-                className="size-4"
-              >
-                <path d="M18 6 6 18M6 6l12 12" />
-              </svg>
+              <CloseIcon />
             </button>
           </div>
         ) : null}
@@ -149,16 +167,18 @@ function CollapsibleCard({
       data-focus={focus}
       className={cn(
         "scroll-mt-3 overflow-hidden rounded-lg border transition-colors duration-200",
-        open
-          ? "border-ring bg-muted/40"
-          : "border-border hover:border-muted-foreground/40",
+        // `.sec-open` tints the border AND the fill with the current section's
+        // hue (globals.css). The old open state was `border-ring bg-muted/40`,
+        // a fill that computed ~3% lighter than the card under it — so which
+        // card was open came down to a grey hairline.
+        open ? "sec-open" : "border-border hover:border-muted-foreground/40",
       )}
     >
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className="flex w-full items-center gap-2 px-3 py-2.5 text-left transition-colors hover:bg-muted/40"
+        className="flex w-full items-center gap-2 px-3 py-2.5 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
       >
         <span className="shrink-0 font-semibold text-sm">{title}</span>
         <span className="min-w-0 flex-1 truncate text-right text-muted-foreground text-xs">
@@ -173,28 +193,22 @@ function CollapsibleCard({
           strokeLinejoin="round"
           aria-hidden="true"
           className={cn(
-            "size-4 shrink-0 text-muted-foreground transition-transform duration-200",
+            "size-4 shrink-0 text-muted-foreground transition-transform duration-[var(--dur-enter)] ease-[var(--ease-settle)]",
             open && "rotate-90",
           )}
         >
           <path d="m9 18 6-6-6-6" />
         </svg>
       </button>
-      {/* Smooth height animation via the grid-rows 0fr→1fr trick — children stay
-          mounted (so the height can transition) but are `inert` when collapsed,
-          keeping them out of tab order and pointer events. */}
-      <div
-        className={cn(
-          "grid transition-[grid-template-rows] duration-200 ease-out",
-          open ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
-        )}
-      >
-        <div className="overflow-hidden" inert={!open}>
-          <div className="flex flex-col gap-3 border-border border-t p-3">
-            {children}
-          </div>
+      {/* The shared <Collapse>, not a second copy of the grid-rows 0fr→1fr
+          trick. This card had its own — same idea, but transitioning only the
+          rows (no opacity) on literal timings, so the editor's disclosures and
+          settings' opened at two different speeds and two different curves. */}
+      <Collapse open={open}>
+        <div className="flex flex-col gap-3 border-border border-t p-3">
+          {children}
         </div>
-      </div>
+      </Collapse>
     </div>
   );
 }
@@ -279,37 +293,10 @@ export function Row({
   );
 }
 
-/** A small on/off switch. */
-export function Toggle({
-  checked,
-  onChange,
-  ariaLabel,
-}: {
-  checked: boolean;
-  onChange: (v: boolean) => void;
-  ariaLabel: string;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={ariaLabel}
-      onClick={() => onChange(!checked)}
-      className={cn(
-        "relative h-6 w-10 shrink-0 rounded-full transition-colors",
-        checked ? "bg-foreground" : "bg-muted",
-      )}
-    >
-      <span
-        className={cn(
-          "absolute top-0.5 left-0 size-5 rounded-full bg-background shadow-sm transition-transform",
-          checked ? "translate-x-[18px]" : "translate-x-0.5",
-        )}
-      />
-    </button>
-  );
-}
+/** The app's switch. Re-exported so the Studio's panels keep importing their
+ * controls from one module; the implementation is shared with settings and the
+ * music editor (see ui/toggle.tsx — it was three separate switches before). */
+export { Toggle };
 
 /** A switch with a label on the left; `hint` hides behind an ⓘ tooltip. */
 export function ToggleRow({
@@ -329,7 +316,7 @@ export function ToggleRow({
         <span className="font-medium text-sm">{label}</span>
         {hint ? <InfoTip label={hint} /> : null}
       </div>
-      <Toggle checked={checked} onChange={onChange} ariaLabel={label} />
+      <Toggle checked={checked} onChange={onChange} label={label} />
     </div>
   );
 }
@@ -346,7 +333,7 @@ export function Segmented<T extends string>({
 }) {
   return (
     <div
-      className="grid gap-1 rounded-lg bg-muted p-1"
+      className="grid gap-1 rounded-lg border border-border bg-muted/60 p-1"
       style={{ gridTemplateColumns: `repeat(${options.length}, 1fr)` }}
     >
       {options.map((o) => (
@@ -355,9 +342,18 @@ export function Segmented<T extends string>({
           type="button"
           onClick={() => onChange(o.value)}
           className={cn(
-            "rounded-md px-2 py-1.5 text-center font-medium text-sm transition-colors",
+            "rounded-md px-2 py-1.5 text-center font-medium text-sm transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+            // A white chip, matching the dashboard's range picker and the
+            // editor's own Edit/Preview toggle — the app had four different
+            // answers to "this option is selected" and this is the one the
+            // majority already used. It also fixes an inverted elevation ramp:
+            // the raised chip used to be `bg-background` (0.145) on a `bg-muted`
+            // track (0.269), i.e. the selected option was the DARKEST thing in
+            // the control while everything else in the app raises by lightening.
+            // The section hue is deliberately not spent here — it belongs to the
+            // section rail, where it says where you are.
             value === o.value
-              ? "bg-background text-foreground shadow-sm"
+              ? "bg-foreground text-background"
               : "text-muted-foreground hover:text-foreground",
           )}
         >
@@ -486,7 +482,7 @@ export function BoxControls({
         <Toggle
           checked={on}
           onChange={() => onChange({ enabled: !on })}
-          ariaLabel="Toggle box background"
+          label="Toggle box background"
         />
       </div>
       {on ? (
@@ -522,7 +518,7 @@ export function BoxControls({
           <Toggle
             checked={box.outline}
             onChange={() => onChange({ outline: !box.outline })}
-            ariaLabel="Toggle outline"
+            label="Toggle outline"
           />
         </div>
       </div>

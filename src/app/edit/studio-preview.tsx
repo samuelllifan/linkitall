@@ -15,6 +15,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { EnterOverlay } from "~/components/enter-overlay";
 import { ProfileView } from "~/components/profile-view";
+import { CloseIcon } from "~/components/ui/close-icon";
 import type { MusicConfig } from "~/lib/music";
 import { isLinkLive } from "~/lib/pages";
 import { cn } from "~/lib/utils";
@@ -50,23 +51,6 @@ function ReplayIcon({ className }: { className?: string }) {
       className={className}
     >
       <path d="M3 12a9 9 0 1 0 3-6.7M3 4v4h4" />
-    </svg>
-  );
-}
-
-function CloseIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      className={className}
-    >
-      <path d="M18 6 6 18M6 6l12 12" />
     </svg>
   );
 }
@@ -340,7 +324,7 @@ export function StudioPreview() {
             </PillButton>
           </>
         ) : (
-          <PillButton onClick={startPlay}>
+          <PillButton brand onClick={startPlay}>
             <PlayIcon className="size-3.5" />
             Preview entry
           </PillButton>
@@ -459,16 +443,26 @@ export function StudioPreview() {
 
 function PillButton({
   onClick,
+  brand = false,
   children,
 }: {
   onClick: () => void;
+  /** Marks the pane's one headline action ("Preview entry") with the brand ring
+   *  on hover/focus. `.brand-ring-hover` needs `.brand-ring` for the ring itself
+   *  and a TRANSPARENT host border, or the two stack into a double outline. */
+  brand?: boolean;
   children: React.ReactNode;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="flex items-center gap-1.5 rounded-lg border border-border bg-card/80 px-2.5 py-1.5 font-medium text-foreground text-xs backdrop-blur transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className={cn(
+        "flex items-center gap-1.5 rounded-lg border bg-card/80 px-2.5 py-1.5 font-medium text-foreground text-xs backdrop-blur transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+        brand
+          ? "brand-ring brand-ring-hover border-transparent"
+          : "border-border",
+      )}
     >
       {children}
     </button>
@@ -493,9 +487,12 @@ function DeviceButton({
       aria-label={label}
       aria-pressed={active}
       className={cn(
-        "flex size-7 items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "relative flex size-7 items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+        // `bg-secondary` is byte-identical to `bg-muted`, so the active chip was
+        // the hover state at 2x opacity. The 2px hue bar is what actually says
+        // "this one" — same idiom as the section rail and the navbar.
         active
-          ? "bg-secondary text-foreground"
+          ? "bg-secondary text-foreground after:absolute after:inset-x-1.5 after:bottom-0.5 after:h-[2px] after:rounded-full after:bg-[var(--sec)]"
           : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
       )}
     >

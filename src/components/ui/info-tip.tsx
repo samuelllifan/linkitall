@@ -16,6 +16,7 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
+import { usePresence } from "~/lib/use-popover";
 import { cn } from "~/lib/utils";
 
 /** Half the bubble's max width — used to keep it inside the viewport. */
@@ -36,6 +37,14 @@ export function InfoTip({
     above: boolean;
   } | null>(null);
   const id = useId();
+
+  // `pos` is both the geometry and the open flag, so closing throws away the
+  // one thing an exit animation needs: somewhere to draw the bubble while it
+  // fades. Latch the last real position and paint from that on the way out.
+  const lastPos = useRef<typeof pos>(null);
+  if (pos) lastPos.current = pos;
+  const tip = usePresence(pos !== null);
+  const paint = pos ?? lastPos.current;
 
   const open = useCallback(() => {
     const r = buttonRef.current?.getBoundingClientRect();
@@ -95,18 +104,21 @@ export function InfoTip({
       >
         i
       </button>
-      {pos
+      {tip.value && paint
         ? createPortal(
             <div
               id={id}
               role="tooltip"
               style={{
-                top: pos.top,
-                left: pos.left,
-                transform: `translate(-50%, ${pos.above ? "-100%" : "0"})`,
+                top: paint.top,
+                left: paint.left,
+                transform: `translate(-50%, ${paint.above ? "-100%" : "0"})`,
                 maxWidth: HALF_W * 2,
               }}
-              className="pointer-events-none fixed z-[100] animate-fade rounded-md border border-border bg-popover px-2.5 py-1.5 text-popover-foreground text-xs leading-snug shadow-lg"
+              className={cn(
+                "pointer-events-none fixed z-[100] rounded-md border border-border bg-popover px-2.5 py-1.5 text-popover-foreground text-xs leading-snug shadow-lg",
+                tip.visible ? "animate-fade" : "animate-fade-out",
+              )}
             >
               {label}
             </div>,

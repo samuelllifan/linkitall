@@ -38,6 +38,8 @@ import {
 } from "~/components/profile-view";
 import { ColorPicker, TextStyleEditor } from "~/components/text-style-editor";
 import { Button } from "~/components/ui/button";
+import { CloseIcon } from "~/components/ui/close-icon";
+import { Collapse } from "~/components/ui/collapse";
 import { InfoTip } from "~/components/ui/info-tip";
 import { Input } from "~/components/ui/input";
 import {
@@ -84,7 +86,7 @@ import {
 } from "./studio-ui";
 
 /** Ghost-button styling for destructive actions. */
-const DESTRUCTIVE_GHOST = "text-red-400 hover:bg-red-400/10 hover:text-red-400";
+const DESTRUCTIVE_GHOST = "text-danger hover:bg-danger/10 hover:text-danger";
 
 /** Strip HTML tags from a rich-text value for a one-line collapsed summary. */
 function plainText(value: string): string {
@@ -224,7 +226,7 @@ export function ProfilePanel() {
           ) : null}
         </div>
         {avatarError ? (
-          <p className="text-red-400 text-xs">{avatarError}</p>
+          <p className="text-danger text-xs">{avatarError}</p>
         ) : null}
         {data.avatar ? (
           <AvatarCropper
@@ -408,11 +410,45 @@ const PICKER_OPTIONS = [
  * detected platform's brand icon, else its first letter. Mirrors what the
  * preview renders so the list reads like the page.
  */
+/** The Links section's own glyph, for the empty state. Matches the chain icon
+ *  the section rail draws (studio-client.tsx). */
+function LinkGlyphIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className={className}
+    >
+      <path d="M9 15l6-6M8.5 13 6.5 15a3 3 0 1 0 4 4l2-2m1.5-4 2-2a3 3 0 1 0-4-4l-2 2" />
+    </svg>
+  );
+}
+
 function LinkGlyph({ link }: { link: LinkItem }) {
   const platform = getPlatform(link.href);
   const Icon = platform?.icon;
+  // The tile takes a wash of the platform's own brand colour, so the link list
+  // reads as a coloured index of the page rather than a column of grey chips.
+  // Hex-with-alpha rather than color-mix so it composites over whatever card
+  // fill is behind it. Platforms with no brand colour of their own (x, tiktok,
+  // github, email — the ones that ARE monochrome) keep the neutral tile, which
+  // is correct: that IS their colour.
+  const tint = platform?.color
+    ? {
+        backgroundColor: `${platform.color}1f`,
+        boxShadow: `inset 0 0 0 1px ${platform.color}3d`,
+      }
+    : undefined;
   return (
-    <span className="flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted">
+    <span
+      style={tint}
+      className="flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted"
+    >
       {link.logo ? (
         // biome-ignore lint/performance/noImgElement: small inline data-URL logo
         <img src={link.logo} alt="" className="size-4/5 object-contain" />
@@ -443,31 +479,16 @@ function ScheduleBadge({ link }: { link: LinkItem }) {
     <span
       className={cn(
         "shrink-0 rounded px-1.5 py-0.5 text-[11px]",
+        // Amber for "not yet", danger for "no longer". Scheduled used to be grey,
+        // which reads as disabled — the opposite of "this is deliberate and will
+        // switch itself on".
         status === "ended"
-          ? "bg-red-400/10 text-red-400"
-          : "bg-muted text-muted-foreground",
+          ? "bg-danger/10 text-danger"
+          : "bg-warning/10 text-warning",
       )}
     >
       {status === "ended" ? "Ended" : "Scheduled"}
     </span>
-  );
-}
-
-/** A small ✕ for clearing one bound of a schedule. */
-function ClearIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      className={className}
-    >
-      <path d="M18 6 6 18M6 6l12 12" />
-    </svg>
   );
 }
 
@@ -500,7 +521,7 @@ function ScheduleBound({
             aria-label={`Clear ${label.toLowerCase()}`}
             className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
-            <ClearIcon className="size-4" />
+            <CloseIcon className="size-4" />
           </button>
         ) : null}
       </div>
@@ -581,7 +602,11 @@ function LinkScheduleControls({
           <p
             className={cn(
               "text-xs",
-              status === "live" ? "text-muted-foreground" : "text-foreground",
+              status === "live"
+                ? "text-success"
+                : status === "ended"
+                  ? "text-danger"
+                  : "text-warning",
             )}
           >
             {statusLine}
@@ -724,7 +749,10 @@ export function LinksPanel() {
     dropIndex === s &&
     s !== fromIndex &&
     s !== fromIndex + 1;
-  const dropLine = <div className="mx-1 h-0.5 rounded-full bg-ring" />;
+  // The brand gradient, spent on a line that only exists mid-drag: a deliberate
+  // gesture, on screen for under a second, and it says exactly one thing
+  // ("it lands here"). Cheaper than a permanent chromatic surface.
+  const dropLine = <div className="brand-bg mx-1 h-0.5 rounded-full" />;
 
   return (
     <div className="flex flex-col gap-6">
@@ -749,7 +777,15 @@ export function LinksPanel() {
       {horizontal ? null : (
         <Disclosure
           title="Default link style"
-          summary={data.linkBox || data.linkStyle ? "Custom" : "Default"}
+          summary={
+            data.linkBox || data.linkStyle ? (
+              // "Custom" means this has diverged from the default and is the
+              // half worth noticing; it read as the same grey as "Default".
+              <span className="text-[var(--sec)]">Custom</span>
+            ) : (
+              "Default"
+            )
+          }
         >
           <p className="text-muted-foreground text-xs">
             Applies to every link that hasn't been styled on its own.
@@ -775,6 +811,8 @@ export function LinksPanel() {
           {data.links.map((link) => {
             const active = selection === `link:${link.id}`;
             const dragging = dragId === link.id;
+            // Drives the row's 2px left rail (see the `--plat` style below).
+            const platform = getPlatform(link.href);
             // Carries its own look (including a legacy `color`) rather than
             // following the page-wide default.
             const styled = Boolean(link.box || link.color || link.textStyle);
@@ -787,11 +825,29 @@ export function LinksPanel() {
                     else rowRefs.current.delete(link.id);
                   }}
                   data-focus={`link:${link.id}`}
+                  // `--plat` is this link's platform colour, painted as a 2px
+                  // rail down the left edge. Same open/closed classes as
+                  // CollapsibleCard (studio-ui.tsx) — this row hand-rolls the
+                  // same card, and the two class strings had already been
+                  // duplicated once; `.sec-open` is now the single source.
+                  style={
+                    {
+                      // A recognized platform with no brand colour of its own
+                      // (x, tiktok, github, threads, snapchat — the brands that
+                      // ARE monochrome) still gets a rail, in neutral: rails on
+                      // only some rows read as a rendering bug rather than as
+                      // information. An unrecognized URL gets none, which is the
+                      // honest answer — we don't know what it is.
+                      "--plat": platform
+                        ? (platform.color ?? "var(--muted-foreground)")
+                        : "transparent",
+                    } as CSSProperties
+                  }
                   className={cn(
-                    "scroll-mt-3 overflow-hidden rounded-lg border transition-colors duration-200",
+                    "relative scroll-mt-3 overflow-hidden rounded-lg border transition-colors duration-200 before:absolute before:inset-y-0 before:left-0 before:w-[2px] before:bg-[var(--plat)]",
                     dragging && "opacity-40",
                     active
-                      ? "border-ring bg-muted/40"
+                      ? "sec-open"
                       : "border-border hover:border-muted-foreground/40",
                   )}
                 >
@@ -815,7 +871,7 @@ export function LinksPanel() {
                           moveLink(link.id, 1);
                         }
                       }}
-                      className="-ml-1 flex size-7 shrink-0 cursor-grab touch-none items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing"
+                      className="-ml-1 flex size-7 shrink-0 cursor-grab touch-none items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 active:cursor-grabbing active:text-[var(--sec)]"
                     >
                       <GripIcon className="size-4" />
                     </button>
@@ -827,155 +883,166 @@ export function LinksPanel() {
                     </span>
                     <ScheduleBadge link={link} />
                   </div>
-                  <div
-                    className={cn(
-                      "grid transition-[grid-template-rows] duration-200 ease-out",
-                      active ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
-                    )}
-                  >
-                    <div className="overflow-hidden" inert={!active}>
-                      <div className="flex flex-col gap-2 border-border border-t p-3">
-                        <Input
-                          value={link.label}
-                          onChange={(e) =>
-                            patchLink(link.id, { label: e.target.value })
-                          }
-                          placeholder="Label"
-                        />
-                        {isDiscordLink(link.href) ? (
-                          <div className="flex items-center gap-2">
-                            <div className="flex flex-1 items-center rounded-md border border-border bg-transparent pl-3 focus-within:border-ring">
-                              <span className="text-muted-foreground text-sm">
-                                discord:
-                              </span>
-                              <Input
-                                value={discordUsername(link.href)}
-                                onChange={(e) =>
-                                  patchLink(link.id, {
-                                    href: `discord:${e.target.value.trim()}`,
-                                  })
-                                }
-                                placeholder="username"
-                                className="border-0 bg-transparent px-1 focus-visible:ring-0"
-                              />
-                            </div>
-                            <InfoTip label="Copies the username on click — no link to open." />
+                  {/* The shared <Collapse>. This was a fourth hand-rolled copy
+                      of the grid-rows 0fr→1fr trick, transitioning only the
+                      rows on literal timings — so opening a link card and
+                      opening any other disclosure in the app ran at two
+                      different curves. */}
+                  <Collapse open={active}>
+                    <div className="flex flex-col gap-2 border-border border-t p-3">
+                      <Input
+                        value={link.label}
+                        onChange={(e) =>
+                          patchLink(link.id, { label: e.target.value })
+                        }
+                        placeholder="Label"
+                      />
+                      {isDiscordLink(link.href) ? (
+                        <div className="flex items-center gap-2">
+                          <div className="flex flex-1 items-center rounded-md border border-border bg-transparent pl-3 focus-within:border-ring">
+                            <span className="text-muted-foreground text-sm">
+                              discord:
+                            </span>
+                            <Input
+                              value={discordUsername(link.href)}
+                              onChange={(e) =>
+                                patchLink(link.id, {
+                                  href: `discord:${e.target.value.trim()}`,
+                                })
+                              }
+                              placeholder="username"
+                              className="border-0 bg-transparent px-1 focus-visible:ring-0"
+                            />
                           </div>
-                        ) : (
-                          <Input
-                            value={link.href}
-                            onChange={(e) =>
-                              patchLink(link.id, { href: e.target.value })
-                            }
-                            placeholder="https://…"
-                          />
-                        )}
-                        {!getPlatform(link.href) &&
-                        !isDiscordLink(link.href) ? (
-                          <div className="flex items-center gap-2">
-                            <LinkGlyph link={link} />
-                            <Button
-                              asChild
-                              variant="outline"
-                              size="sm"
-                              className="cursor-pointer"
+                          <InfoTip label="Copies the username on click — no link to open." />
+                        </div>
+                      ) : (
+                        <Input
+                          value={link.href}
+                          onChange={(e) =>
+                            patchLink(link.id, { href: e.target.value })
+                          }
+                          placeholder="https://…"
+                        />
+                      )}
+                      {!getPlatform(link.href) && !isDiscordLink(link.href) ? (
+                        <div className="flex items-center gap-2">
+                          <LinkGlyph link={link} />
+                          <Button
+                            asChild
+                            variant="outline"
+                            size="sm"
+                            className="cursor-pointer"
+                          >
+                            <label>
+                              {link.logo ? "Change logo" : "Upload logo"}
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => pickLogo(link.id, e)}
+                                className="hidden"
+                              />
+                            </label>
+                          </Button>
+                          {link.logo ? (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                patchLink(link.id, { logo: undefined })
+                              }
+                              className="rounded px-1.5 py-0.5 text-muted-foreground text-xs transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
                             >
-                              <label>
-                                {link.logo ? "Change logo" : "Upload logo"}
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  onChange={(e) => pickLogo(link.id, e)}
-                                  className="hidden"
-                                />
-                              </label>
-                            </Button>
-                            {link.logo ? (
+                              Remove logo
+                            </button>
+                          ) : null}
+                        </div>
+                      ) : null}
+                      {logoError?.id === link.id ? (
+                        <p className="text-danger text-xs">
+                          {logoError.message}
+                        </p>
+                      ) : null}
+                      {horizontal ? null : (
+                        <Disclosure
+                          title="Style"
+                          summary={
+                            styled ? (
+                              <span className="text-[var(--sec)]">Custom</span>
+                            ) : (
+                              "Default"
+                            )
+                          }
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="text-muted-foreground text-xs">
+                              {styled
+                                ? "Overriding the default link style."
+                                : "Following the default link style — editing here overrides it for this link only."}
+                            </p>
+                            {styled ? (
                               <button
                                 type="button"
                                 onClick={() =>
-                                  patchLink(link.id, { logo: undefined })
+                                  patchLink(link.id, {
+                                    box: undefined,
+                                    color: undefined,
+                                    textStyle: undefined,
+                                  })
                                 }
-                                className="rounded px-1.5 py-0.5 text-muted-foreground text-xs transition-colors hover:text-foreground"
+                                className="shrink-0 rounded px-1.5 py-0.5 text-muted-foreground text-xs transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
                               >
-                                Remove logo
+                                Use default
                               </button>
                             ) : null}
                           </div>
-                        ) : null}
-                        {logoError?.id === link.id ? (
-                          <p className="text-red-400 text-xs">
-                            {logoError.message}
-                          </p>
-                        ) : null}
-                        {horizontal ? null : (
-                          <Disclosure
-                            title="Style"
-                            summary={styled ? "Custom" : "Default"}
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <p className="text-muted-foreground text-xs">
-                                {styled
-                                  ? "Overriding the default link style."
-                                  : "Following the default link style — editing here overrides it for this link only."}
-                              </p>
-                              {styled ? (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    patchLink(link.id, {
-                                      box: undefined,
-                                      color: undefined,
-                                      textStyle: undefined,
-                                    })
-                                  }
-                                  className="shrink-0 rounded px-1.5 py-0.5 text-muted-foreground text-xs transition-colors hover:bg-muted hover:text-foreground"
-                                >
-                                  Use default
-                                </button>
-                              ) : null}
-                            </div>
-                            <BoxControls
-                              box={resolveLinkBox(link, linkBox)}
-                              onChange={(patch) => patchLinkBox(link, patch)}
+                          <BoxControls
+                            box={resolveLinkBox(link, linkBox)}
+                            onChange={(patch) => patchLinkBox(link, patch)}
+                          />
+                          <div className="flex flex-col gap-3 border-border border-t pt-3">
+                            <TextStyleEditor
+                              style={link.textStyle ?? data.linkStyle ?? {}}
+                              onChange={(patch) => patchLinkText(link, patch)}
+                              defaultSize={14}
                             />
-                            <div className="flex flex-col gap-3 border-border border-t pt-3">
-                              <TextStyleEditor
-                                style={link.textStyle ?? data.linkStyle ?? {}}
-                                onChange={(patch) => patchLinkText(link, patch)}
-                                defaultSize={14}
-                              />
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => applyStyleToAllLinks(link.id)}
-                              >
-                                Apply to all links
-                              </Button>
-                            </div>
-                          </Disclosure>
-                        )}
-                        <LinkScheduleControls
-                          link={link}
-                          onChange={(schedule) =>
-                            patchLink(link.id, { schedule })
-                          }
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removeLink(link.id)}
-                          className="self-start rounded px-1.5 py-0.5 text-red-400 text-xs transition-colors hover:bg-red-400/10"
-                        >
-                          Remove
-                        </button>
-                      </div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => applyStyleToAllLinks(link.id)}
+                            >
+                              Apply to all links
+                            </Button>
+                          </div>
+                        </Disclosure>
+                      )}
+                      <LinkScheduleControls
+                        link={link}
+                        onChange={(schedule) =>
+                          patchLink(link.id, { schedule })
+                        }
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeLink(link.id)}
+                        className="self-start rounded px-1.5 py-0.5 text-danger text-xs transition-colors hover:bg-danger/10 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                      >
+                        Remove
+                      </button>
                     </div>
-                  </div>
+                  </Collapse>
                 </div>
               </Fragment>
             );
           })}
           {showLineAt(data.links.length) ? dropLine : null}
+          {data.links.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 rounded-lg border border-border/70 border-dashed px-4 py-8 text-center">
+              <LinkGlyphIcon className="size-6 text-[var(--sec)] opacity-70" />
+              <p className="text-muted-foreground text-xs">
+                No links yet — add your first one below.
+              </p>
+            </div>
+          ) : null}
         </div>
         <Button
           variant="secondary"
@@ -987,49 +1054,49 @@ export function LinksPanel() {
         </Button>
       </Group>
 
-      {pickerOpen ? (
-        <Modal
-          title="Add a link"
-          description="Pick a platform to pre-fill it, or add a custom link."
-          onClose={() => setPickerOpen(false)}
-        >
-          <div className="grid max-h-[55vh] grid-cols-4 gap-2 overflow-y-auto sm:grid-cols-5">
-            {PICKER_OPTIONS.map((option) => {
-              const count = option.match
-                ? data.links.filter((l) => option.match?.test(l.href)).length
-                : 0;
-              return (
-                <button
-                  key={option.key}
-                  type="button"
-                  title={option.label}
-                  aria-label={option.label}
-                  onClick={() => {
-                    addLink({
-                      label:
-                        option.key === "custom" ? "New link" : option.label,
-                      href: option.prefix,
-                    });
-                    setPickerOpen(false);
-                  }}
-                  className="relative flex aspect-square items-center justify-center rounded-lg border border-border text-foreground transition-colors hover:border-muted-foreground/40 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <BrandIcon
-                    icon={option.icon}
-                    color={option.color}
-                    className="size-5"
-                  />
-                  {count > 0 ? (
-                    <span className="absolute top-1 right-1 flex size-4 items-center justify-center rounded-full bg-foreground font-medium text-[10px] text-background">
-                      {count}
-                    </span>
-                  ) : null}
-                </button>
-              );
-            })}
-          </div>
-        </Modal>
-      ) : null}
+      {/* Always mounted — the Modal owns its own open/close animation, and a
+          `pickerOpen ? … : null` here would take it away before the exit ran. */}
+      <Modal
+        open={pickerOpen}
+        title="Add a link"
+        description="Pick a platform to pre-fill it, or add a custom link."
+        onClose={() => setPickerOpen(false)}
+      >
+        <div className="grid max-h-[55vh] grid-cols-4 gap-2 overflow-y-auto sm:grid-cols-5">
+          {PICKER_OPTIONS.map((option) => {
+            const count = option.match
+              ? data.links.filter((l) => option.match?.test(l.href)).length
+              : 0;
+            return (
+              <button
+                key={option.key}
+                type="button"
+                title={option.label}
+                aria-label={option.label}
+                onClick={() => {
+                  addLink({
+                    label: option.key === "custom" ? "New link" : option.label,
+                    href: option.prefix,
+                  });
+                  setPickerOpen(false);
+                }}
+                className="relative flex aspect-square items-center justify-center rounded-lg border border-border text-foreground transition-colors hover:border-muted-foreground/40 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <BrandIcon
+                  icon={option.icon}
+                  color={option.color}
+                  className="size-5"
+                />
+                {count > 0 ? (
+                  <span className="absolute top-1 right-1 flex size-4 items-center justify-center rounded-full bg-foreground font-medium text-[10px] text-background">
+                    {count}
+                  </span>
+                ) : null}
+              </button>
+            );
+          })}
+        </div>
+      </Modal>
     </div>
   );
 }
@@ -1398,7 +1465,7 @@ export function BackgroundPanel() {
           className="hidden"
         />
         {mediaError ? (
-          <p className="text-red-400 text-xs">{mediaError}</p>
+          <p className="text-danger text-xs">{mediaError}</p>
         ) : null}
         <BackgroundSubControls onReplace={openMediaPicker} />
       </Group>

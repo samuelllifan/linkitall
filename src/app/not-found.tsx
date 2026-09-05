@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AuroraGlow } from "~/components/aurora-glow";
 import { StackedMark } from "~/components/stacked-mark";
 import { Button } from "~/components/ui/button";
 
@@ -8,11 +9,7 @@ export default function NotFound() {
   return (
     <main className="relative flex flex-1 flex-col items-center justify-center overflow-hidden px-6 py-20 text-center">
       {/* Faint brand aurora so the empty state still feels part of the site. */}
-      <div
-        aria-hidden
-        className="aurora-a pointer-events-none absolute left-1/2 top-1/2 h-[380px] w-[520px] max-w-[90vw] rounded-full opacity-[0.1] blur-[120px]"
-        style={{ background: "var(--brand-grad)" }}
-      />
+      <AuroraGlow />
       <StackedMark variant="brand" className="relative size-12" />
       <p className="relative mt-6 font-mono text-sm font-medium uppercase tracking-widest text-muted-foreground">
         404

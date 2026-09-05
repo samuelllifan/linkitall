@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { FONTS, NO_TINT } from "~/components/profile-view";
 import { Button } from "~/components/ui/button";
 import type { TextStyle } from "~/lib/pages";
+import { useDismissOnOutside, usePopover } from "~/lib/use-popover";
 import { cn } from "~/lib/utils";
 
 // Shared text-styling controls: the Font / Size / Style / Align / Text-color
@@ -35,30 +36,16 @@ export function FontSizeInput({
   ariaLabel?: string;
 }) {
   const [text, setText] = useState(String(value));
-  const [open, setOpen] = useState(false);
+  // `usePopover` keeps the menu mounted through its exit animation, and
+  // `useDismissOnOutside` is the outside-click/Escape pair this hand-rolled its
+  // own copy of. Both are the same ones the navbar menu and share panel use.
+  const { open, shown, hide, toggle } = usePopover();
   const wrapRef = useRef<HTMLDivElement | null>(null);
 
   // Re-sync when the external value changes (switching fields/links, reset).
   useEffect(() => setText(String(value)), [value]);
 
-  // Close the preset menu on outside click / Escape.
-  useEffect(() => {
-    if (!open) return;
-    function onDown(e: MouseEvent) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false);
-    }
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
+  useDismissOnOutside(shown, wrapRef, hide);
 
   function commit(raw: string) {
     const n = Number.parseInt(raw, 10);
@@ -95,9 +82,9 @@ export function FontSizeInput({
         type="button"
         aria-label="Preset sizes"
         aria-haspopup="listbox"
-        aria-expanded={open}
+        aria-expanded={shown}
         tabIndex={-1}
-        onClick={() => setOpen((o) => !o)}
+        onClick={toggle}
         className="absolute right-1 flex size-4 items-center justify-center text-muted-foreground hover:text-foreground"
       >
         <svg
@@ -117,7 +104,12 @@ export function FontSizeInput({
         <div
           role="listbox"
           aria-label="Preset text sizes"
-          className="absolute top-full right-0 z-50 mt-1 max-h-52 w-14 animate-pop overflow-y-auto rounded-md border border-border bg-popover p-1 shadow-lg"
+          className={cn(
+            // `origin-top-right` aims `menu-in`'s growth back at the chevron
+            // this hangs off — the whole point of the gesture.
+            "absolute top-full right-0 z-50 mt-1 max-h-52 w-14 origin-top-right overflow-y-auto rounded-md border border-border bg-popover p-1 shadow-lg",
+            shown ? "animate-menu-in" : "animate-menu-out",
+          )}
         >
           {FONT_SIZES.map((s) => (
             <button
@@ -127,10 +119,10 @@ export function FontSizeInput({
               aria-selected={s === value}
               onClick={() => {
                 commit(String(s));
-                setOpen(false);
+                hide();
               }}
               className={cn(
-                "flex w-full items-center justify-center rounded px-2 py-1 text-sm hover:bg-muted",
+                "flex w-full items-center justify-center rounded px-2 py-1 text-sm hover:bg-muted focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
                 s === value && "bg-muted font-medium",
               )}
             >
@@ -237,33 +229,18 @@ export function ColorPicker({
   allowNone?: boolean;
 }) {
   const isNone = allowNone && value === NO_TINT;
-  const [open, setOpen] = useState(false);
+  const { open, shown, hide, toggle } = usePopover();
   const ref = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node))
-        setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("mousedown", onDown);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
+  useDismissOnOutside(shown, ref, hide);
 
   return (
     <div ref={ref} className="relative">
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={toggle}
         aria-label={ariaLabel}
         aria-haspopup="true"
-        aria-expanded={open}
+        aria-expanded={shown}
         className="size-8 rounded-md border border-input p-1 outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         {isNone ? (
@@ -278,10 +255,14 @@ export function ColorPicker({
       {open ? (
         <div
           className={cn(
-            "absolute top-full z-50 mt-1 w-44 animate-pop rounded-md border border-border bg-popover p-2 shadow-lg",
+            "absolute top-full z-50 mt-1 w-44 rounded-md border border-border bg-popover p-2 shadow-lg",
             align === "right"
               ? "right-0 origin-top-right"
               : "left-0 origin-top-left",
+            // The origin utilities above were already here, waiting for an
+            // animation that actually uses them; `animate-pop` scaled from the
+            // middle and ignored them.
+            shown ? "animate-menu-in" : "animate-menu-out",
           )}
         >
           <div className="grid grid-cols-6 gap-1">

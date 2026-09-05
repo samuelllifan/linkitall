@@ -6,6 +6,8 @@ import { DeltaBadge } from "~/components/delta-badge";
 import { LocationMap } from "~/components/location-map";
 import { BrandIcon, getPlatform } from "~/components/profile-view";
 import { TimeRangePicker } from "~/components/time-range-picker";
+import { Button } from "~/components/ui/button";
+import { Skeleton } from "~/components/ui/skeleton";
 import {
   type AnalyticsSummary,
   type DeviceType,
@@ -95,18 +97,26 @@ const TrendIcon = () => (
 
 /* --- Building blocks ------------------------------------------------------- */
 
-function Skeleton({ className }: { className?: string }) {
-  return <div className={cn("animate-pulse rounded-md bg-muted", className)} />;
-}
+/**
+ * Step between the headline cards as they arrive.
+ *
+ * The dashboard used to be the one signed-in page that did not move at all:
+ * /settings rises its cards in on a 45ms stagger and this page — built from the
+ * same `elev-card` shell, one nav click away — simply existed, fully formed, on
+ * first paint. Same number as settings uses, so the two read as one product.
+ */
+const STAT_STAGGER = 45;
 
 /** A headline metric with an icon and a period-over-period delta. */
 function StatCard({
   label,
   value,
   icon,
+  accent,
   loading,
   current,
   previous,
+  delay = 0,
 }: {
   label: string;
   value: string;
@@ -114,14 +124,23 @@ function StatCard({
   loading: boolean;
   current: number;
   previous: number | null;
+  /** This metric's series colour — see the icon tint below. */
+  accent: string;
+  /** Stagger, in ms, for the card's arrival. See `.animate-rise`. */
+  delay?: number;
 }) {
   return (
-    <div className="flex flex-col gap-1 rounded-xl border border-border bg-card p-5">
+    <div
+      className="animate-rise elev-card flex flex-col gap-1 rounded-xl border border-border bg-card p-5"
+      style={{ animationDelay: `${delay}ms` }}
+    >
       <div className="flex items-center justify-between gap-2">
         <span className="text-sm font-medium text-muted-foreground">
           {label}
         </span>
-        <span className="text-muted-foreground/60">{icon}</span>
+        {/* Tinted with this metric's own series colour, so the tile row doubles
+            as the legend for the charts below it. */}
+        <span style={{ color: accent }}>{icon}</span>
       </div>
       {loading ? (
         <>
@@ -151,18 +170,26 @@ function Panel({
   subtitle,
   children,
   className,
+  /**
+   * Stagger, in ms. Defaults to landing just after the stat row above, so the
+   * page arrives in two beats — the headline numbers, then everything under
+   * them — rather than eight panels each announcing themselves separately.
+   */
+  delay = STAT_STAGGER * 4,
 }: {
   title: string;
   subtitle?: string;
   children: React.ReactNode;
   className?: string;
+  delay?: number;
 }) {
   return (
     <section
       className={cn(
-        "flex flex-col rounded-xl border border-border bg-card p-5",
+        "animate-rise elev-card flex flex-col rounded-xl border border-border bg-card p-5",
         className,
       )}
+      style={{ animationDelay: `${delay}ms` }}
     >
       <div className="mb-4 flex items-baseline justify-between gap-3">
         <h2 className="text-sm font-semibold text-muted-foreground">{title}</h2>
@@ -435,42 +462,50 @@ export function DashboardClient({
       ) : null}
 
       {summary?.unavailable ? (
-        <div className="mt-6 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-foreground">
+        <div className="mt-6 rounded-xl border border-warning/35 bg-warning/10 p-4 text-sm text-warning">
           Analytics aren't set up yet. Once the analytics database migration is
           applied, your stats will appear here.
         </div>
       ) : null}
 
       {/* Headline metrics */}
-      <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="mt-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard
+          delay={STAT_STAGGER * 0}
           label="Unique views"
           value={(summary?.uniqueViews ?? 0).toLocaleString()}
           icon={<UsersIcon />}
+          accent={CHART_COLORS[0]}
           loading={loading}
           current={summary?.uniqueViews ?? 0}
           previous={hasPrev ? (summary?.previous?.uniqueViews ?? 0) : null}
         />
         <StatCard
+          delay={STAT_STAGGER * 1}
           label="Total views"
           value={(summary?.totalViews ?? 0).toLocaleString()}
           icon={<EyeIcon />}
+          accent={CHART_COLORS[0]}
           loading={loading}
           current={summary?.totalViews ?? 0}
           previous={hasPrev ? (summary?.previous?.totalViews ?? 0) : null}
         />
         <StatCard
+          delay={STAT_STAGGER * 2}
           label="Total clicks"
           value={(summary?.totalClicks ?? 0).toLocaleString()}
           icon={<ClickIcon />}
+          accent={CHART_COLORS[1]}
           loading={loading}
           current={summary?.totalClicks ?? 0}
           previous={hasPrev ? (summary?.previous?.totalClicks ?? 0) : null}
         />
         <StatCard
+          delay={STAT_STAGGER * 3}
           label="Click-through rate"
           value={`${summary?.clickThroughRate ?? 0}%`}
           icon={<TrendIcon />}
+          accent={CHART_COLORS[1]}
           loading={loading}
           current={summary?.clickThroughRate ?? 0}
           previous={hasPrev ? (summary?.previous?.clickThroughRate ?? 0) : null}
@@ -478,7 +513,7 @@ export function DashboardClient({
       </div>
 
       {/* Views vs. clicks over time — the hero chart */}
-      <Panel title="Views & clicks" subtitle={granularityNote} className="mt-4">
+      <Panel title="Views & clicks" subtitle={granularityNote} className="mt-8">
         {loading ? (
           <Skeleton className="h-52 w-full" />
         ) : (
@@ -492,7 +527,7 @@ export function DashboardClient({
         )}
       </Panel>
 
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <div className="mt-8 grid grid-cols-1 gap-4 lg:grid-cols-3">
         {/* Most-clicked links — every link, icon + count + momentum */}
         <Panel
           title="Most-clicked links"
@@ -539,6 +574,13 @@ export function DashboardClient({
                       className="h-full rounded-full bg-foreground transition-[width] duration-500"
                       style={{
                         width: `${maxLinkClicks > 0 ? (link.clicks / maxLinkClicks) * 100 : 0}%`,
+                        // The row's own platform colour, held slightly back so a
+                        // long bar doesn't out-shout the numbers beside it. The
+                        // monochrome brands (x, tiktok, github) and unrecognized
+                        // URLs keep the neutral bar, which is the honest answer.
+                        backgroundColor:
+                          getPlatform(link.href)?.color ?? undefined,
+                        opacity: getPlatform(link.href)?.color ? 0.85 : 1,
                       }}
                     />
                   </div>
@@ -546,7 +588,14 @@ export function DashboardClient({
               ))}
             </ul>
           ) : (
-            <p className="text-sm text-muted-foreground">No links yet.</p>
+            <div className="flex flex-col items-start gap-3">
+              <p className="text-muted-foreground text-sm">
+                No links yet — add some and their clicks will show up here.
+              </p>
+              <Button asChild variant="outline" size="sm">
+                <Link href="/edit">Add your links</Link>
+              </Button>
+            </div>
           )}
         </Panel>
 
@@ -568,7 +617,7 @@ export function DashboardClient({
       </div>
 
       {/* Where in the world — map + ranked list */}
-      <Panel title="Where in the world" subtitle="by views" className="mt-4">
+      <Panel title="Where in the world" subtitle="by views" className="mt-8">
         {loading ? (
           <Skeleton className="h-48 w-full" />
         ) : locationTotal === 0 ? (
@@ -617,7 +666,7 @@ export function DashboardClient({
         )}
       </Panel>
 
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <div className="mt-8 grid grid-cols-1 gap-4 lg:grid-cols-3">
         {/* Peak activity heatmap */}
         <Panel
           title="When your audience is active"

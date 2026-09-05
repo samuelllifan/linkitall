@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { AuroraGlow } from "~/components/aurora-glow";
 import { StackedMark } from "~/components/stacked-mark";
 import { Button } from "~/components/ui/button";
 
@@ -21,12 +22,9 @@ export default function RootError({
 
   return (
     <main className="relative flex flex-1 flex-col items-center justify-center overflow-hidden px-6 py-20 text-center">
-      {/* Faint brand aurora, kept dim so an error screen stays calm. */}
-      <div
-        aria-hidden
-        className="aurora-a pointer-events-none absolute left-1/2 top-1/2 h-[380px] w-[520px] max-w-[90vw] rounded-full opacity-[0.08] blur-[120px]"
-        style={{ background: "var(--brand-grad)" }}
-      />
+      {/* Faint brand aurora, dimmer than the 404's so an error screen stays
+          calm. */}
+      <AuroraGlow className="opacity-[0.08]" />
       <StackedMark className="relative size-12 text-muted-foreground" />
       <p className="relative mt-6 font-mono text-sm font-medium uppercase tracking-widest text-muted-foreground">
         Error

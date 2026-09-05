@@ -42,7 +42,12 @@ export function HomeHero({
   return (
     <section
       aria-labelledby="hero-heading"
-      className="relative min-h-[calc(100dvh-3.5rem)] overflow-hidden"
+      // Full-bleed: the negative top margin cancels the root layout's navbar
+      // spacer so the wall of pages runs to the very top of the viewport and the
+      // floating bar sits ON the hero instead of in a black strip above it. The
+      // copy column below puts the room back as padding. The existing h-28 top
+      // scrim is what keeps the bar legible over the moving cards.
+      className="relative mt-[calc(var(--nav-space)*-1)] min-h-dvh overflow-hidden"
     >
       {/* Interactive grid background — cells light up around the cursor. */}
       <InteractiveGrid className="absolute inset-0 h-full w-full" />
@@ -106,7 +111,7 @@ export function HomeHero({
       />
 
       {/* Copy + claim. */}
-      <div className="relative z-10 mx-auto flex min-h-[calc(100dvh-3.5rem)] w-full max-w-[100rem] flex-col justify-center px-6 sm:px-10 lg:px-16">
+      <div className="relative z-10 mx-auto flex min-h-dvh w-full max-w-[100rem] flex-col justify-center px-6 pt-[var(--nav-space)] sm:px-10 lg:px-16">
         <div className="max-w-xl">
           <h1
             id="hero-heading"
@@ -160,7 +165,7 @@ function ClaimField({ className }: { className?: string }) {
       )}
     >
       {/* URL-style field: a fixed "stacked.page/" prefix in front of the name.
-          `.claim-field` (globals.css) draws the hairline and the brand-spectrum
+          `.claim-field` (globals.css) draws the hairline and the brand-gradient
           focus ring; the border/fill utilities live there so the gradient ring
           has the border box to itself.
 

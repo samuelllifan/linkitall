@@ -5,6 +5,7 @@ import { baseName } from "~/components/music-edit-controls";
 import { Button } from "~/components/ui/button";
 import { InfoTip } from "~/components/ui/info-tip";
 import { Input } from "~/components/ui/input";
+import { Toggle } from "~/components/ui/toggle";
 import { readFileAsDataUrl } from "~/lib/files";
 import {
   clamp,
@@ -51,24 +52,7 @@ function ToggleRow({
         <span className="text-foreground text-sm">{label}</span>
         {hint ? <InfoTip label={hint} /> : null}
       </span>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        aria-label={label}
-        onClick={() => onChange(!checked)}
-        className={cn(
-          "relative h-6 w-10 shrink-0 rounded-full transition-colors",
-          checked ? "bg-primary" : "bg-input",
-        )}
-      >
-        <span
-          className={cn(
-            "absolute top-0.5 left-0.5 size-5 rounded-full bg-background transition-transform",
-            checked && "translate-x-4",
-          )}
-        />
-      </button>
+      <Toggle checked={checked} onChange={onChange} label={label} />
     </div>
   );
 }
@@ -201,7 +185,7 @@ export function MusicEditor({
               type="button"
               onClick={() => setMode(m)}
               className={cn(
-                "flex-1 rounded-md px-3 py-1.5 font-medium text-sm transition-colors",
+                "flex-1 rounded-md px-3 py-1.5 font-medium text-sm transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
                 mode === m
                   ? "bg-background text-foreground shadow-xs"
                   : "text-muted-foreground hover:text-foreground",
@@ -232,7 +216,7 @@ export function MusicEditor({
               <InfoTip label="Spotify links play a short preview only. Upload a file for the full track." />
             </div>
             {fetchError ? (
-              <p className="text-destructive text-xs">{fetchError}</p>
+              <p className="text-danger text-xs">{fetchError}</p>
             ) : fetchNote ? (
               <p className="text-muted-foreground text-xs">{fetchNote}</p>
             ) : null}
@@ -267,7 +251,7 @@ export function MusicEditor({
               type="button"
               onClick={() => update({ display: o.value })}
               className={cn(
-                "rounded-md px-2 py-1.5 font-medium text-sm transition-colors",
+                "rounded-md px-2 py-1.5 font-medium text-sm transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
                 value.display === o.value
                   ? "bg-background text-foreground shadow-xs"
                   : "text-muted-foreground hover:text-foreground",

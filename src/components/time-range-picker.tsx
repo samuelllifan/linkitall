@@ -1,8 +1,49 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
-import { RANGE_PRESETS, type RangeCurrent, rangeLabel } from "~/lib/time-range";
+import { useId, useRef, useState } from "react";
+import {
+  dayLabel,
+  RANGE_PRESETS,
+  type RangeCurrent,
+  rangeLabel,
+} from "~/lib/time-range";
+import { useDismissOnOutside, usePopover } from "~/lib/use-popover";
 import { cn } from "~/lib/utils";
+
+/**
+ * The month-stepper arrow.
+ *
+ * These two buttons used to hold the text characters "‹" and "›",
+ * which are TYPOGRAPHY, not icons: they render in Inter at whatever weight the
+ * surrounding text is, sit on the text baseline rather than centred in their
+ * box, and are noticeably lighter and smaller than every other chevron in the
+ * app (the navbar's caret, the Studio's disclosure arrows, the accordion rows).
+ * Same drawing as those, at the same stroke weight, mirrored for the back
+ * direction — so the calendar's arrows belong to the same set as the rest.
+ */
+function ChevronIcon({ back }: { back?: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className="size-4"
+    >
+      <path d={back ? "m15 18-6-6 6-6" : "m9 18 6-6-6-6"} />
+    </svg>
+  );
+}
+
+/* The app's control focus ring (the same one the Button primitive and the
+   navbar wear). None of this component's eight buttons had any focus style at
+   all, so keyboard users got the browser's own ring on the one control in the
+   dashboard that opens a panel. A constant rather than eight copies. */
+const FOCUS_RING =
+  " focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50";
 
 const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
 const MONTHS = [
@@ -47,7 +88,12 @@ export function TimeRangePicker({
   onSelect: (current: RangeCurrent) => void;
   className?: string;
 }) {
-  const [open, setOpen] = useState(false);
+  // `usePopover` rather than a bare boolean: the calendar has to stay mounted
+  // through its exit animation, which is the same requirement the navbar menu
+  // and the share panel already solved. `open` is "in the tree", `shown` is "on
+  // screen" — everything that asks whether the calendar is open reads `shown`,
+  // so a panel that is mid-dismissal is already inert.
+  const { open, shown, show, hide } = usePopover();
   const containerRef = useRef<HTMLDivElement>(null);
   const popoverId = useId();
   const today = todayStr();
@@ -66,22 +112,7 @@ export function TimeRangePicker({
     return { y: seed.getUTCFullYear(), m: seed.getUTCMonth() };
   });
 
-  // Close the popover on outside click or Escape.
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (!containerRef.current?.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
+  useDismissOnOutside(shown, containerRef, hide);
 
   const openCalendar = () => {
     // Seed the working range + month from the active selection each time it
@@ -92,7 +123,7 @@ export function TimeRangePicker({
     setEnd(seedTo);
     const base = seedFrom ? new Date(`${seedFrom}T00:00:00.000Z`) : new Date();
     setView({ y: base.getUTCFullYear(), m: base.getUTCMonth() });
-    setOpen(true);
+    show();
   };
 
   const pickDay = (day: string) => {
@@ -113,7 +144,7 @@ export function TimeRangePicker({
 
   const apply = () => {
     if (!start) return;
-    setOpen(false);
+    hide();
     onSelect({ preset: "custom", from: start, to: end ?? start });
   };
 
@@ -150,14 +181,15 @@ export function TimeRangePicker({
               onClick={() => {
                 // Close the calendar too, so a stale Apply can't override the
                 // preset the user just picked.
-                setOpen(false);
+                hide();
                 setStart(undefined);
                 setEnd(undefined);
                 onSelect({ preset: p.key });
               }}
               aria-pressed={active}
               className={cn(
-                "shrink-0 whitespace-nowrap rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm",
+                "shrink-0 whitespace-nowrap rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm" +
+                  FOCUS_RING,
                 active
                   ? "bg-foreground text-background"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground",
@@ -170,13 +202,14 @@ export function TimeRangePicker({
 
         <button
           type="button"
-          onClick={() => (open ? setOpen(false) : openCalendar())}
+          onClick={() => (shown ? hide() : openCalendar())}
           aria-haspopup="dialog"
-          aria-expanded={open}
+          aria-expanded={shown}
           aria-controls={popoverId}
           aria-pressed={customActive}
           className={cn(
-            "shrink-0 whitespace-nowrap rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm",
+            "shrink-0 whitespace-nowrap rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm" +
+              FOCUS_RING,
             customActive
               ? "bg-foreground text-background"
               : "text-muted-foreground hover:bg-muted hover:text-foreground",
@@ -191,16 +224,23 @@ export function TimeRangePicker({
           id={popoverId}
           role="dialog"
           aria-label="Choose a date range"
-          className="absolute top-full right-0 z-20 mt-2 w-72 rounded-xl border border-border bg-card p-3 shadow-lg"
+          className={cn(
+            // `origin-top-right` is what aims the growth back at the Custom
+            // pill: `menu-in` scales up, and without an origin it would grow
+            // from its own middle and read as a panel that appeared somewhere
+            // rather than one that came out of the button just pressed.
+            "absolute top-full right-0 z-30 mt-2 w-72 origin-top-right rounded-xl border border-border bg-popover p-3 text-popover-foreground shadow-lg",
+            shown ? "animate-menu-in" : "animate-menu-out",
+          )}
         >
           <div className="mb-2 flex items-center justify-between">
             <button
               type="button"
               onClick={() => shiftMonth(-1)}
               aria-label="Previous month"
-              className="rounded-md px-2 py-1 text-muted-foreground hover:bg-muted/60"
+              className={`flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground${FOCUS_RING}`}
             >
-              ‹
+              <ChevronIcon back />
             </button>
             <span className="text-sm font-medium">
               {MONTHS[view.m]} {view.y}
@@ -209,9 +249,9 @@ export function TimeRangePicker({
               type="button"
               onClick={() => shiftMonth(1)}
               aria-label="Next month"
-              className="rounded-md px-2 py-1 text-muted-foreground hover:bg-muted/60"
+              className={`flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground${FOCUS_RING}`}
             >
-              ›
+              <ChevronIcon />
             </button>
           </div>
 
@@ -241,7 +281,8 @@ export function TimeRangePicker({
                   disabled={future}
                   onClick={() => pickDay(day)}
                   className={cn(
-                    "h-8 rounded-md text-xs tabular-nums transition-colors",
+                    "h-8 rounded-md text-xs tabular-nums transition-colors" +
+                      FOCUS_RING,
                     future && "text-muted-foreground/40",
                     !future && !edge && !mid && "hover:bg-muted/60",
                     mid && "bg-muted text-foreground",
@@ -255,11 +296,18 @@ export function TimeRangePicker({
           </div>
 
           <div className="mt-3 flex items-center justify-between gap-2">
+            {/* `dayLabel`, not the raw stored day: these strings are
+                `YYYY-MM-DD` database values, and printing them here put
+                "2026-09-01 → 2026-09-04" directly beneath a Custom pill
+                showing the very same range as "Sep 1, 2026 – Sep 4, 2026". One
+                formatter now feeds both (see ~/lib/time-range). The en dash
+                matches the pill too; the arrow was a third spelling of the same
+                idea. */}
             <span className="text-xs text-muted-foreground">
               {start
                 ? end && end !== start
-                  ? `${start} → ${end}`
-                  : start
+                  ? `${dayLabel(start)} – ${dayLabel(end)}`
+                  : dayLabel(start)
                 : "Pick a day or range"}
             </span>
             <button
@@ -267,7 +315,8 @@ export function TimeRangePicker({
               onClick={apply}
               disabled={!start}
               className={cn(
-                "rounded-lg border border-border px-3 py-1.5 text-sm transition-colors",
+                "rounded-lg border border-border px-3 py-1.5 text-sm transition-colors" +
+                  FOCUS_RING,
                 start
                   ? "hover:bg-muted/50"
                   : "cursor-not-allowed text-muted-foreground/50",

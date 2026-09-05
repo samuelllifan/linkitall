@@ -609,7 +609,7 @@ export function MusicPlayer({
           onClick={togglePlay}
           disabled={!hasAudio}
           aria-label={playing ? "Pause" : "Play"}
-          className="flex size-8 shrink-0 items-center justify-center rounded-full transition-transform hover:scale-105 active:scale-95 disabled:opacity-40"
+          className="flex size-8 shrink-0 items-center justify-center rounded-full transition-transform hover:scale-105 active:scale-95 disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
           style={{ backgroundColor: ACCENT, color: PLAY_ICON_COLOR }}
         >
           {playing ? (
@@ -623,7 +623,7 @@ export function MusicPlayer({
           onClick={toggleMute}
           disabled={!hasAudio}
           aria-label={muted ? "Unmute" : "Mute"}
-          className="flex size-7 shrink-0 items-center justify-center text-white/70 transition-colors hover:text-white disabled:opacity-40"
+          className="flex size-7 shrink-0 items-center justify-center text-white/70 transition-colors hover:text-white disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
         >
           <VolumeIcon level={volLevel} className="size-4" />
         </button>
@@ -661,7 +661,7 @@ export function MusicPlayer({
             type="button"
             onClick={() => coverInputRef.current?.click()}
             aria-label="Change cover"
-            className="group relative aspect-square w-16 shrink-0 overflow-hidden rounded-lg bg-white/5 sm:w-20"
+            className="group relative aspect-square w-16 shrink-0 overflow-hidden rounded-lg bg-white/5 sm:w-20 focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
           >
             {meta.albumArt ? (
               // biome-ignore lint/performance/noImgElement: arbitrary remote/data URL
@@ -815,7 +815,7 @@ export function MusicPlayer({
           disabled={!hasAudio}
           aria-label={playing ? "Pause" : "Play"}
           className={cn(
-            "flex size-11 shrink-0 items-center justify-center rounded-full shadow-lg transition-transform hover:scale-105 active:scale-95 disabled:cursor-default disabled:bg-white/20 disabled:text-white/50",
+            "flex size-11 shrink-0 items-center justify-center rounded-full shadow-lg transition-transform hover:scale-105 active:scale-95 disabled:cursor-default disabled:bg-white/20 disabled:text-white/50 focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2",
             needsGesture && !playing && "animate-pulse",
           )}
           style={
@@ -839,7 +839,7 @@ export function MusicPlayer({
           onClick={toggleMute}
           disabled={!hasAudio}
           aria-label={muted ? "Unmute" : "Mute"}
-          className="shrink-0 text-white/70 transition-colors hover:text-white disabled:opacity-40"
+          className="shrink-0 text-white/70 transition-colors hover:text-white disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
         >
           <VolumeIcon level={volLevel} className="size-5" />
         </button>

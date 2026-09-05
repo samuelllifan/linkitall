@@ -1,4 +1,6 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { mfaChallengePath, needsMfaChallenge } from "~/lib/mfa.server";
 import { getPageServer } from "~/lib/pages.server";
 import { createClient } from "~/lib/supabase/server";
 import { getCountryPaths } from "~/lib/world-map";
@@ -7,6 +9,8 @@ import { DashboardClient } from "./dashboard-client";
 // Analytics are per-account and always reflect the latest data.
 export const dynamic = "force-dynamic";
 
+export const metadata: Metadata = { title: "Dashboard" };
+
 export default async function DashboardPage() {
   // The dashboard shows your own analytics — send anonymous visitors to sign in.
   const supabase = await createClient();
@@ -14,6 +18,13 @@ export default async function DashboardPage() {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/login?redirect=/dashboard");
+
+  // 2FA, if the account has it: an aal1 session gets no further than here. The
+  // gate lives on the routes rather than in the sign-in form so it covers
+  // Google sign-in too — see ~/lib/mfa.server.
+  if (await needsMfaChallenge(supabase)) {
+    redirect(mfaChallengePath("/dashboard"));
+  }
 
   const { data } = await supabase
     .from("profiles")
