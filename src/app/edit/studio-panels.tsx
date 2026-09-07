@@ -13,6 +13,7 @@ import {
   type CSSProperties,
   Fragment,
   type ReactNode,
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -22,6 +23,7 @@ import { DEFAULT_MEDIA_FRAME, MediaFramer } from "~/components/media-framer";
 import { MusicEditor } from "~/components/music-editor";
 import {
   BrandIcon,
+  boxCss,
   DEFAULT_BIO_BOX,
   DEFAULT_BIO_STYLE,
   DEFAULT_LINK_BOX,
@@ -33,6 +35,8 @@ import {
   isDiscordLink,
   NO_TINT,
   PLATFORMS,
+  PresenceDot,
+  panelCss,
   resolveLinkBox,
   sanitizeRichHtml,
 } from "~/components/profile-view";
@@ -56,12 +60,17 @@ import {
 } from "~/lib/intro";
 import { DEFAULT_MUSIC_CONFIG } from "~/lib/music";
 import {
+  type AvatarEffect,
   type Background,
   type BackgroundMemory,
   type BoxStyle,
+  DEFAULT_LINK_RADIUS,
   formatScheduleDate,
+  gradientDirectionCss,
   isoToLocalInput,
+  type LinkHighlight,
   type LinkItem,
+  type LinkKind,
   type LinkSchedule,
   linkScheduleStatus,
   localInputToIso,
@@ -70,6 +79,25 @@ import {
   type PanelStyle,
   type TextStyle,
 } from "~/lib/pages";
+import {
+  CLEAR_AFTER_OPTIONS,
+  type ClearAfter,
+  clearAfterToIso,
+  DEFAULT_STATUS_BOX,
+  DEFAULT_STATUS_CONFIG,
+  DEFAULT_STATUS_RADIUS,
+  DEFAULT_STATUS_TEXT_STYLE,
+  PRESENCE_LABELS,
+  type PresenceState,
+  type StatusConfig,
+  statusExpiryLabel,
+} from "~/lib/status";
+import {
+  applyTheme,
+  isThemeActive,
+  type PageTheme,
+  THEMES,
+} from "~/lib/themes";
 import { cn } from "~/lib/utils";
 import { useStudio } from "./studio-context";
 import {
@@ -79,6 +107,7 @@ import {
   Group,
   Modal,
   Row,
+  SectionLabel,
   Segmented,
   Slider,
   Swatch,
@@ -158,13 +187,177 @@ function RichTextField({
 }
 
 // ---------------------------------------------------------------------------
+// Themes
+// ---------------------------------------------------------------------------
+
+/**
+ * A CSS `background` that stands in for a page background in a thumbnail.
+ *
+ * The shader backgrounds (aurora, ripple) get their CSS approximations rather
+ * than a real WebGL surface: this grid mounts eight of these at 60×86px, and
+ * eight live shader canvases behind a control panel is a lot of GPU for a
+ * picture of a decision.
+ */
+function themeBackgroundCss(bg: Background | undefined): string {
+  if (!bg || bg.type === "default") return "oklch(0.145 0 0)";
+  if (bg.type === "custom") return bg.color;
+  if (bg.type === "gradient") return gradientPreview(bg);
+  if (bg.type === "grid") return gridPreview(bg);
+  if (bg.type === "aurora") return auroraPreview(bg.color, bg.baseColor);
+  if (bg.type === "ripple") return ripplePreview(bg);
+  return `url("${bg.src}") center/cover no-repeat`;
+}
+
+/**
+ * A theme's swatch: a miniature of the page it produces.
+ *
+ * Built from the theme's OWN values through the same `boxCss` / `panelCss` the
+ * page renders with, so a swatch can never drift from what applying it does.
+ * That matters more here than anywhere else in the editor — this is the one
+ * control whose entire job is "show me what I'd get".
+ */
+export function ThemeSwatch({ theme }: { theme: PageTheme }) {
+  const s = theme.style;
+  const panel = s.panel ?? DEFAULT_PANEL;
+  const linkBox = s.linkBox ?? DEFAULT_LINK_BOX;
+  // The thumbnail is ~1/6 scale, so the real radius would round a 5px-tall pill
+  // into a circle. Scale it, and cap it at half the miniature button's height.
+  const miniBox = {
+    ...linkBox,
+    radius: Math.min(3, (linkBox.radius ?? 8) / 4),
+  };
+  return (
+    <span
+      style={{ background: themeBackgroundCss(s.background) }}
+      className="flex h-[86px] w-full flex-col items-center justify-center gap-[5px] overflow-hidden rounded-md px-2.5"
+    >
+      <span
+        style={{
+          ...panelCss(panel),
+          // `panelCss` returns `{}` for a transparent panel, and the glass
+          // panel's backdrop-filter is meaningless over a flat CSS thumbnail —
+          // but its rounded plate still reads, which is the part that matters.
+          borderRadius: panel.type === "transparent" ? undefined : 6,
+        }}
+        className="flex w-full flex-col items-center gap-[5px] p-1.5"
+      >
+        <span
+          style={{
+            background: s.avatarOutline?.enabled
+              ? s.avatarOutline.color
+              : "#ffffff59",
+          }}
+          className="size-3.5 rounded-full"
+        />
+        <span
+          style={{ background: s.nameStyle?.color ?? "#ffffffcc" }}
+          className="h-[3px] w-8 rounded-full"
+        />
+        {[0, 1].map((i) => (
+          <span
+            key={i}
+            style={boxCss(miniBox)}
+            className="h-[7px] w-full"
+            aria-hidden
+          />
+        ))}
+      </span>
+    </span>
+  );
+}
+
+/**
+ * The Themes section: eight curated looks, one click each.
+ *
+ * This is the shortest path in the app from "empty page" to "page I'd post",
+ * which is why it sits first in the rail. Everything it writes is an ordinary
+ * edit — it goes through `setData`, so it lands on the undo stack and can be
+ * taken back with one ⌘Z rather than needing a "revert theme" of its own.
+ */
+export function ThemesPanel() {
+  const { data, setData } = useStudio();
+  const active = THEMES.find((t) => isThemeActive(data, t));
+
+  return (
+    <div className="flex flex-col gap-4">
+      <p className="text-muted-foreground text-xs">
+        A starting point for the whole page — background, buttons and type.
+        Everything stays editable afterwards, and your links, photo and music
+        are never touched.
+      </p>
+      {/* Three across once the panel has been dragged wide enough — at 680px
+          two columns leave each swatch 300px wide and 86px tall, which is a
+          letterbox, not a thumbnail. */}
+      <div className="@min-[440px]:grid-cols-3 grid grid-cols-2 gap-3">
+        {THEMES.map((theme) => {
+          const on = active?.key === theme.key;
+          return (
+            <button
+              key={theme.key}
+              type="button"
+              onClick={() => setData((prev) => applyTheme(prev, theme))}
+              aria-pressed={on}
+              className="group flex flex-col gap-1.5 text-left focus-visible:outline-none"
+            >
+              <span
+                className={cn(
+                  "block overflow-hidden rounded-lg border transition-all duration-200 group-hover:brightness-110 group-active:scale-[0.97]",
+                  on
+                    ? "border-[var(--sec)] ring-2 ring-[var(--sec)] ring-offset-2 ring-offset-card"
+                    : "border-border group-hover:border-muted-foreground/50 group-focus-visible:ring-2 group-focus-visible:ring-ring",
+                )}
+              >
+                <ThemeSwatch theme={theme} />
+              </span>
+              <span className="flex min-w-0 flex-col leading-tight">
+                <span
+                  className={cn(
+                    "truncate font-medium text-xs transition-colors",
+                    on
+                      ? "text-foreground"
+                      : "text-muted-foreground group-hover:text-foreground",
+                  )}
+                >
+                  {theme.label}
+                </span>
+                <span className="truncate text-[11px] text-muted-foreground/70">
+                  {on ? "Applied" : theme.hint}
+                </span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      <p className="text-muted-foreground/70 text-[11px]">
+        Applying a theme resets links that were styled individually so they
+        follow the new look. Undo (⌘Z) puts everything back.
+      </p>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Profile
 // ---------------------------------------------------------------------------
 
 export function ProfilePanel() {
   const { data, update, revision } = useStudio();
   const outline = data.avatarOutline;
+  const hidden = data.hidden;
   const [avatarError, setAvatarError] = useState<string | null>(null);
+
+  /**
+   * Flip one part on or off. `true` is written out rather than left implicit so
+   * the stored object says what the owner chose; the key is dropped again when
+   * it goes back to shown, which keeps a page that has never used a switch from
+   * carrying `{avatar: false, name: false, bio: false}` around forever.
+   */
+  function setHidden(part: "avatar" | "name" | "bio", off: boolean) {
+    const next: NonNullable<PageData["hidden"]> = { ...data.hidden };
+    if (off) next[part] = true;
+    else delete next[part];
+    update({ hidden: Object.keys(next).length > 0 ? next : undefined });
+  }
 
   async function pickAvatar(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -193,8 +386,24 @@ export function ProfilePanel() {
       <AccordionCard
         id="avatar"
         title="Avatar"
-        summary={data.avatar ? "Photo set" : "Default"}
+        summary={
+          hidden?.avatar ? "Hidden" : data.avatar ? "Photo set" : "Default"
+        }
       >
+        {/* Same shape as the Music, Intro and Status switches: the controls
+            below stay live while this is off, and the line under it says so —
+            without one, a switch that leaves a full panel of enabled controls
+            behind it reads as broken. */}
+        <ToggleRow
+          label="Show avatar"
+          checked={!hidden?.avatar}
+          onChange={(v) => setHidden("avatar", !v)}
+        />
+        {hidden?.avatar ? (
+          <p className="text-muted-foreground text-xs">
+            Hidden from your page. Your photo and its settings are kept.
+          </p>
+        ) : null}
         <div className="flex gap-2">
           <Button
             asChild
@@ -255,13 +464,26 @@ export function ProfilePanel() {
             />
           </Row>
         ) : null}
+        <div className="border-border border-t pt-3">
+          <AvatarEffectControls />
+        </div>
       </AccordionCard>
 
       <AccordionCard
         id="name"
         title="Name"
-        summary={plainText(data.name) || "Empty"}
+        summary={hidden?.name ? "Hidden" : plainText(data.name) || "Empty"}
       >
+        <ToggleRow
+          label="Show name"
+          checked={!hidden?.name}
+          onChange={(v) => setHidden("name", !v)}
+        />
+        {hidden?.name ? (
+          <p className="text-muted-foreground text-xs">
+            Hidden from your page. Your text and its styling are kept.
+          </p>
+        ) : null}
         <RichTextField
           key={`name-${revision}`}
           initialHtml={data.name}
@@ -292,8 +514,18 @@ export function ProfilePanel() {
       <AccordionCard
         id="bio"
         title="Bio"
-        summary={plainText(data.bio) || "Empty"}
+        summary={hidden?.bio ? "Hidden" : plainText(data.bio) || "Empty"}
       >
+        <ToggleRow
+          label="Show bio"
+          checked={!hidden?.bio}
+          onChange={(v) => setHidden("bio", !v)}
+        />
+        {hidden?.bio ? (
+          <p className="text-muted-foreground text-xs">
+            Hidden from your page. Your text and its styling are kept.
+          </p>
+        ) : null}
         <RichTextField
           key={`bio-${revision}`}
           initialHtml={data.bio}
@@ -323,6 +555,107 @@ export function ProfilePanel() {
           }
         />
       </AccordionCard>
+    </div>
+  );
+}
+
+/** The stock settings each avatar effect starts from when it is first picked. */
+const AVATAR_FX_DEFAULTS = {
+  particles: {
+    type: "particles",
+    color: "#a78bfa",
+    speed: 5,
+    size: 4,
+    amount: 5,
+  },
+  shine: { type: "shine", speed: 5 },
+} satisfies Record<string, AvatarEffect>;
+
+/**
+ * The animated decoration on the profile picture — the guns.lol-style flourish
+ * this app's audience expects, restored from a data model that never went away.
+ *
+ * Switching type keeps nothing: `particles` and `shine` share only `speed`, and
+ * carrying one value across a switch that changes every other control is more
+ * confusing than starting from a tuned default.
+ */
+function AvatarEffectControls() {
+  const { data, update } = useStudio();
+  const effect = data.avatarEffect ?? { type: "none" };
+
+  const choose = (type: AvatarEffect["type"]) => {
+    if (type === effect.type) return;
+    update({
+      avatarEffect:
+        type === "none" ? undefined : { ...AVATAR_FX_DEFAULTS[type] },
+    });
+  };
+
+  // Narrowed copies, so the per-type controls below can patch just their own
+  // fields without re-proving the union to TypeScript at every call site.
+  const patch = (p: Partial<Extract<AvatarEffect, { type: "particles" }>>) => {
+    if (effect.type !== "particles") return;
+    update({ avatarEffect: { ...effect, ...p } });
+  };
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-1.5">
+        <span className="font-medium text-sm">Effect</span>
+        <InfoTip label="An animated decoration around your profile picture." />
+      </div>
+      <Segmented
+        options={[
+          { value: "none", label: "None" },
+          { value: "particles", label: "Particles" },
+          { value: "shine", label: "Shine" },
+        ]}
+        value={effect.type}
+        onChange={choose}
+      />
+      {effect.type === "particles" ? (
+        <>
+          <Row label="Color">
+            <ColorPicker
+              value={effect.color}
+              onChange={(color) => patch({ color })}
+              ariaLabel="Particle color"
+            />
+          </Row>
+          <Slider
+            label="Speed"
+            value={effect.speed}
+            min={1}
+            max={10}
+            onChange={(speed) => patch({ speed })}
+          />
+          <Slider
+            label="Size"
+            value={effect.size}
+            min={1}
+            max={10}
+            onChange={(size) => patch({ size })}
+          />
+          <Slider
+            label="Amount"
+            value={effect.amount}
+            min={1}
+            max={10}
+            onChange={(amount) => patch({ amount })}
+          />
+        </>
+      ) : null}
+      {effect.type === "shine" ? (
+        <Slider
+          label="Speed"
+          value={effect.speed}
+          min={1}
+          max={10}
+          onChange={(speed) =>
+            update({ avatarEffect: { type: "shine", speed } })
+          }
+        />
+      ) : null}
     </div>
   );
 }
@@ -384,6 +717,52 @@ function ImageIcon({ className }: { className?: string }) {
   );
 }
 
+/**
+ * Whether a link's URL is worth offering an "open it" button for: a complete
+ * http(s) URL with something after the scheme. A bare "https://" placeholder or
+ * a `discord:` username has nothing to open, and a button that opened a blank
+ * tab would be worse than no button.
+ */
+function isTestableHref(href: string): boolean {
+  return /^https?:\/\/[^\s/]+/i.test(href.trim());
+}
+
+/** An "open in a new tab" arrow. */
+function OpenIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className={className}
+    >
+      <path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+    </svg>
+  );
+}
+
+/** The heading glyph — the "Header" block in the add picker and its list row. */
+function HeadingIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className={className}
+    >
+      <path d="M6 5v14M18 5v14M6 12h12" />
+    </svg>
+  );
+}
+
 /** The add-link catalog: every known platform (pre-fills its URL prefix) plus a
  *  blank custom link. Mirrors the old editor's picker. */
 const PICKER_OPTIONS = [
@@ -404,6 +783,99 @@ const PICKER_OPTIONS = [
     color: undefined as string | undefined,
   },
 ];
+
+/**
+ * The two non-platform rows a creator can add, kept out of the platform grid.
+ *
+ * They are the two things you reach for when you know the grid does NOT have
+ * what you want, so burying them as the 21st and 22nd tile among the brand
+ * icons was exactly backwards — you had to scan every logo to rule them out.
+ */
+const BLOCK_OPTIONS: {
+  kind: LinkKind;
+  key: string;
+  label: string;
+  hint: string;
+  icon: typeof LinkIcon;
+}[] = [
+  {
+    kind: "link",
+    key: "custom",
+    label: "Custom link",
+    hint: "Any URL",
+    icon: LinkIcon,
+  },
+  {
+    kind: "header",
+    key: "header",
+    label: "Header",
+    hint: "Groups the links under it",
+    icon: HeadingIcon,
+  },
+];
+
+/** The per-link attention animations, in the order the picker shows them. */
+const HIGHLIGHTS: { value: LinkHighlight; label: string }[] = [
+  { value: "none", label: "None" },
+  { value: "pulse", label: "Pulse" },
+  { value: "bounce", label: "Bounce" },
+  { value: "shake", label: "Shake" },
+  { value: "glow", label: "Glow" },
+];
+
+/**
+ * The per-link attention animation. Each chip plays its own effect on hover
+ * rather than continuously: five tiles bouncing and shaking at once is noise,
+ * and the point of this feature is that ONE link moves.
+ */
+function HighlightPicker({
+  value,
+  onChange,
+}: {
+  value: LinkHighlight;
+  onChange: (v: LinkHighlight) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center gap-1.5">
+        <span className="text-muted-foreground text-sm">Attention</span>
+        <InfoTip label="Animates the button so visitors look at it first. Best used on one link." />
+      </div>
+      <div className="grid grid-cols-5 gap-1 rounded-lg border border-border bg-muted/60 p-1">
+        {HIGHLIGHTS.map((h) => {
+          const on = value === h.value;
+          return (
+            <button
+              key={h.value}
+              type="button"
+              onClick={() => onChange(h.value)}
+              aria-pressed={on}
+              className={cn(
+                "rounded-md px-1 py-1.5 text-center font-medium text-[11px] transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                on
+                  ? "bg-foreground text-background"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {/* `.link-fx-*` are `animation-play-state: paused` on hover, which
+                  is the opposite of what a preview chip wants — so the chip
+                  drives them with its own hover rule instead (see
+                  `.fx-demo` in globals.css). */}
+              <span
+                className={cn(
+                  "inline-block",
+                  h.value !== "none" && `fx-demo fx-demo-${h.value}`,
+                )}
+              >
+                {h.label}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 /**
  * The link's real logo in a uniform tile — its custom uploaded logo, else the
@@ -430,6 +902,16 @@ function LinkGlyphIcon({ className }: { className?: string }) {
 }
 
 function LinkGlyph({ link }: { link: LinkItem }) {
+  // A header isn't a destination, so there is no platform to detect and no
+  // logo to show — it gets the heading glyph, in the section hue, which is
+  // also what separates it at a glance from the links it groups.
+  if (link.kind === "header") {
+    return (
+      <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-[var(--sec)]/12 text-[var(--sec)]">
+        <HeadingIcon className="size-4" />
+      </span>
+    );
+  }
   const platform = getPlatform(link.href);
   const Icon = platform?.icon;
   // The tile takes a wash of the platform's own brand colour, so the link list
@@ -627,6 +1109,7 @@ export function LinksPanel() {
     addLink,
     patchLink,
     removeLink,
+    duplicateLink,
     moveLink,
     moveLinkTo,
   } = useStudio();
@@ -636,6 +1119,74 @@ export function LinksPanel() {
 
   // The add-link platform picker.
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerQuery, setPickerQuery] = useState("");
+
+  /**
+   * Focus the search field the moment it exists.
+   *
+   * A callback ref rather than an effect keyed on `pickerOpen`: the Modal holds
+   * its content back by one commit (usePresence flips `value` from an effect),
+   * so on the tick the flag turns true there is no field to focus yet — an
+   * effect there fires into an empty ref and the picker opens unfocused.
+   *
+   * Skipped on touch, where the software keyboard would immediately cover the
+   * grid of platform tiles the picker exists to show.
+   */
+  const focusSearch = useCallback((el: HTMLInputElement | null) => {
+    if (el && window.matchMedia("(pointer: fine)").matches) el.focus();
+  }, []);
+
+  // Reset the query on open so the picker never reopens pre-filtered.
+  useEffect(() => {
+    if (pickerOpen) setPickerQuery("");
+  }, [pickerOpen]);
+
+  const closePicker = () => setPickerOpen(false);
+
+  // "Custom link" lives in the Blocks row now, so it is filtered out of the
+  // platform grid — except when a search actually matches it, which is how you
+  // find it by typing "custom".
+  const query = pickerQuery.trim().toLowerCase();
+  const filteredPlatforms = PICKER_OPTIONS.filter((o) => {
+    if (!query) return o.key !== "custom";
+    return o.label.toLowerCase().includes(query) || o.key.includes(query);
+  });
+
+  /**
+   * The list's one-line census. Scheduled and expired links are the ones worth
+   * calling out: they are the only rows a visitor can't see, and until this
+   * existed the only way to notice was to open every card.
+   *
+   * Time-dependent, so it renders as a plain count until mount — a server render
+   * that decided a link had expired could disagree with the client's clock and
+   * trip hydration.
+   */
+  const [countsReady, setCountsReady] = useState(false);
+  useEffect(() => setCountsReady(true), []);
+  const linkCounts = (() => {
+    const rows = data.links;
+    const headers = rows.filter((l) => l.kind === "header").length;
+    const icons = rows.filter((l) => l.kind === "icon").length;
+    const links = rows.length - headers - icons;
+    const hidden = countsReady
+      ? rows.filter(
+          (l) => l.kind !== "header" && linkScheduleStatus(l) !== "live",
+        ).length
+      : 0;
+    const parts = [`${links} link${links === 1 ? "" : "s"}`];
+    if (icons > 0) parts.push(`${icons} icon${icons === 1 ? "" : "s"}`);
+    if (headers > 0) parts.push(`${headers} header${headers === 1 ? "" : "s"}`);
+    if (hidden > 0) parts.push(`${hidden} hidden`);
+    return { links, icons, headers, hidden, summary: parts.join(" · ") };
+  })();
+
+  function addFromPicker(option: (typeof PICKER_OPTIONS)[number]) {
+    addLink({
+      label: option.key === "custom" ? "New link" : option.label,
+      href: option.prefix,
+    });
+    closePicker();
+  }
   // Which link's logo upload failed, so the message sits on that link's card.
   const [logoError, setLogoError] = useState<{
     id: string;
@@ -792,6 +1343,7 @@ export function LinksPanel() {
           </p>
           <BoxControls
             box={linkBox}
+            defaultRadius={DEFAULT_LINK_RADIUS}
             onChange={(patch) => update({ linkBox: { ...linkBox, ...patch } })}
           />
           <div className="border-border border-t pt-3">
@@ -806,13 +1358,35 @@ export function LinksPanel() {
         </Disclosure>
       )}
 
-      <Group label="Links">
+      <Group>
+        {/* A header that answers the two questions a long list raises — how
+            many are there, and is any of them invisible to visitors — plus an
+            Add that doesn't require scrolling past twenty rows to reach. */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-baseline gap-2">
+            <SectionLabel>Links</SectionLabel>
+            <span className="truncate text-[11px] text-muted-foreground/70">
+              {linkCounts.summary}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setPickerOpen(true)}
+            className="-mr-1 shrink-0 rounded px-1.5 py-0.5 font-medium text-[var(--sec)] text-xs transition-colors hover:bg-[var(--sec)]/10 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          >
+            + Add
+          </button>
+        </div>
         <div className="flex flex-col gap-2">
           {data.links.map((link) => {
             const active = selection === `link:${link.id}`;
             const dragging = dragId === link.id;
+            const isHeader = link.kind === "header";
+            // An icon link draws no button surface and no label, so the box /
+            // text / attention controls have nothing to act on.
+            const isIcon = link.kind === "icon";
             // Drives the row's 2px left rail (see the `--plat` style below).
-            const platform = getPlatform(link.href);
+            const platform = isHeader ? undefined : getPlatform(link.href);
             // Carries its own look (including a legacy `color`) rather than
             // following the page-wide default.
             const styled = Boolean(link.box || link.color || link.textStyle);
@@ -838,9 +1412,14 @@ export function LinksPanel() {
                       // only some rows read as a rendering bug rather than as
                       // information. An unrecognized URL gets none, which is the
                       // honest answer — we don't know what it is.
-                      "--plat": platform
-                        ? (platform.color ?? "var(--muted-foreground)")
-                        : "transparent",
+                      // A header's rail is the section hue: it is not a
+                      // platform, and the rail is what makes a group divider
+                      // scannable down the left edge of a long list.
+                      "--plat": isHeader
+                        ? "var(--sec)"
+                        : platform
+                          ? (platform.color ?? "var(--muted-foreground)")
+                          : "transparent",
                     } as CSSProperties
                   }
                   className={cn(
@@ -876,11 +1455,43 @@ export function LinksPanel() {
                       <GripIcon className="size-4" />
                     </button>
                     <LinkGlyph link={link} />
-                    <span className="min-w-0 flex-1 truncate font-medium text-sm">
-                      {link.label || (
-                        <span className="text-muted-foreground">Untitled</span>
+                    <span
+                      className={cn(
+                        "min-w-0 flex-1 truncate font-medium text-sm",
+                        // A header reads in the list the way it reads on the
+                        // page — quieter and tracked out — so the two match
+                        // without having to open the row to find out which it is.
+                        isHeader &&
+                          "text-muted-foreground text-xs uppercase tracking-wider",
                       )}
+                    >
+                      {link.label ||
+                        (isHeader ? (
+                          <span className="text-muted-foreground">
+                            Untitled section
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">
+                            Untitled
+                          </span>
+                        ))}
                     </span>
+                    {isIcon ? (
+                      <span
+                        title="Shown as a bare icon, sharing a row with the icon links next to it"
+                        className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground uppercase tracking-wide"
+                      >
+                        Icon
+                      </span>
+                    ) : null}
+                    {link.highlight && link.highlight !== "none" ? (
+                      <span
+                        title={`Attention: ${link.highlight}`}
+                        className="shrink-0 rounded bg-[var(--sec)]/12 px-1.5 py-0.5 text-[10px] text-[var(--sec)] uppercase tracking-wide"
+                      >
+                        {link.highlight}
+                      </span>
+                    ) : null}
                     <ScheduleBadge link={link} />
                   </div>
                   {/* The shared <Collapse>. This was a fourth hand-rolled copy
@@ -895,9 +1506,47 @@ export function LinksPanel() {
                         onChange={(e) =>
                           patchLink(link.id, { label: e.target.value })
                         }
-                        placeholder="Label"
+                        placeholder={isHeader ? "Section title" : "Label"}
                       />
-                      {isDiscordLink(link.href) ? (
+                      {isHeader ? (
+                        <>
+                          <p className="text-muted-foreground text-xs">
+                            A label for the links below it. Not clickable, and
+                            hidden in the Logos layout.
+                          </p>
+                          <Disclosure
+                            title="Style"
+                            summary={
+                              link.textStyle ? (
+                                <span className="text-[var(--sec)]">
+                                  Custom
+                                </span>
+                              ) : (
+                                "Default"
+                              )
+                            }
+                          >
+                            {/* A header's own style only — it inherits just the
+                                font from the page link style (see LinkHeader),
+                                so seeding this editor from `data.linkStyle`
+                                would show a size and colour the header is not
+                                actually using. */}
+                            <TextStyleEditor
+                              style={{
+                                fontFamily: data.linkStyle?.fontFamily,
+                                ...link.textStyle,
+                              }}
+                              onChange={(patch) =>
+                                patchLink(link.id, {
+                                  textStyle: { ...link.textStyle, ...patch },
+                                })
+                              }
+                              defaultSize={12}
+                            />
+                          </Disclosure>
+                        </>
+                      ) : null}
+                      {isHeader ? null : isDiscordLink(link.href) ? (
                         <div className="flex items-center gap-2">
                           <div className="flex flex-1 items-center rounded-md border border-border bg-transparent pl-3 focus-within:border-ring">
                             <span className="text-muted-foreground text-sm">
@@ -917,15 +1566,60 @@ export function LinksPanel() {
                           <InfoTip label="Copies the username on click — no link to open." />
                         </div>
                       ) : (
-                        <Input
-                          value={link.href}
-                          onChange={(e) =>
-                            patchLink(link.id, { href: e.target.value })
-                          }
-                          placeholder="https://…"
-                        />
+                        <div className="flex items-center gap-1.5">
+                          <Input
+                            value={link.href}
+                            onChange={(e) =>
+                              patchLink(link.id, { href: e.target.value })
+                            }
+                            placeholder="https://…"
+                          />
+                          {/* Check the destination without leaving the editor.
+                              Clicks in the PREVIEW are swallowed on purpose —
+                              there you are pointing at a link to edit it, not
+                              to use it — which left no way at all to find out
+                              whether a pasted URL actually goes anywhere. */}
+                          {isTestableHref(link.href) ? (
+                            <a
+                              href={link.href}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title="Open this link in a new tab"
+                              aria-label="Open this link in a new tab"
+                              className="flex size-9 shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                            >
+                              <OpenIcon className="size-4" />
+                            </a>
+                          ) : null}
+                        </div>
                       )}
-                      {!getPlatform(link.href) && !isDiscordLink(link.href) ? (
+                      {/* Button vs bare icon. In the Logos layout every link is
+                          already an icon, so the choice would be a no-op. */}
+                      {isHeader || horizontal ? null : (
+                        <div className="flex flex-col gap-1.5 pt-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-muted-foreground text-sm">
+                              Show as
+                            </span>
+                            <InfoTip label="Icons sit side by side in a row. Links next to each other in the list share one row." />
+                          </div>
+                          <Segmented
+                            options={[
+                              { value: "link", label: "Button" },
+                              { value: "icon", label: "Icon" },
+                            ]}
+                            value={link.kind === "icon" ? "icon" : "link"}
+                            onChange={(v) =>
+                              patchLink(link.id, {
+                                kind: v === "icon" ? "icon" : undefined,
+                              })
+                            }
+                          />
+                        </div>
+                      )}
+                      {!isHeader &&
+                      !getPlatform(link.href) &&
+                      !isDiscordLink(link.href) ? (
                         <div className="flex items-center gap-2">
                           <LinkGlyph link={link} />
                           <Button
@@ -962,7 +1656,7 @@ export function LinksPanel() {
                           {logoError.message}
                         </p>
                       ) : null}
-                      {horizontal ? null : (
+                      {horizontal || isHeader || isIcon ? null : (
                         <Disclosure
                           title="Style"
                           summary={
@@ -997,6 +1691,7 @@ export function LinksPanel() {
                           </div>
                           <BoxControls
                             box={resolveLinkBox(link, linkBox)}
+                            defaultRadius={DEFAULT_LINK_RADIUS}
                             onChange={(patch) => patchLinkBox(link, patch)}
                           />
                           <div className="flex flex-col gap-3 border-border border-t pt-3">
@@ -1015,19 +1710,46 @@ export function LinksPanel() {
                           </div>
                         </Disclosure>
                       )}
-                      <LinkScheduleControls
-                        link={link}
-                        onChange={(schedule) =>
-                          patchLink(link.id, { schedule })
-                        }
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeLink(link.id)}
-                        className="self-start rounded px-1.5 py-0.5 text-danger text-xs transition-colors hover:bg-danger/10 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
-                      >
-                        Remove
-                      </button>
+                      {/* Every layout draws these, icons included — the
+                          animations run on a wrapper, so they need no button.
+                          Only a header has nothing to animate. */}
+                      {isHeader ? null : (
+                        <div className="border-border border-t pt-3">
+                          <HighlightPicker
+                            value={link.highlight ?? "none"}
+                            onChange={(highlight) =>
+                              patchLink(link.id, {
+                                highlight:
+                                  highlight === "none" ? undefined : highlight,
+                              })
+                            }
+                          />
+                        </div>
+                      )}
+                      {isHeader ? null : (
+                        <LinkScheduleControls
+                          link={link}
+                          onChange={(schedule) =>
+                            patchLink(link.id, { schedule })
+                          }
+                        />
+                      )}
+                      <div className="flex items-center justify-between gap-2 border-border border-t pt-3">
+                        <button
+                          type="button"
+                          onClick={() => duplicateLink(link.id)}
+                          className="rounded px-1.5 py-0.5 text-muted-foreground text-xs transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                        >
+                          Duplicate
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeLink(link.id)}
+                          className="rounded px-1.5 py-0.5 text-danger text-xs transition-colors hover:bg-danger/10 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                        >
+                          Remove
+                        </button>
+                      </div>
                     </div>
                   </Collapse>
                 </div>
@@ -1058,43 +1780,104 @@ export function LinksPanel() {
           `pickerOpen ? … : null` here would take it away before the exit ran. */}
       <Modal
         open={pickerOpen}
-        title="Add a link"
-        description="Pick a platform to pre-fill it, or add a custom link."
-        onClose={() => setPickerOpen(false)}
+        title="Add to your page"
+        description="Pick a platform to pre-fill it, or start from a blank block."
+        onClose={closePicker}
       >
-        <div className="grid max-h-[55vh] grid-cols-4 gap-2 overflow-y-auto sm:grid-cols-5">
-          {PICKER_OPTIONS.map((option) => {
-            const count = option.match
-              ? data.links.filter((l) => option.match?.test(l.href)).length
-              : 0;
-            return (
-              <button
-                key={option.key}
-                type="button"
-                title={option.label}
-                aria-label={option.label}
-                onClick={() => {
-                  addLink({
-                    label: option.key === "custom" ? "New link" : option.label,
-                    href: option.prefix,
-                  });
-                  setPickerOpen(false);
-                }}
-                className="relative flex aspect-square items-center justify-center rounded-lg border border-border text-foreground transition-colors hover:border-muted-foreground/40 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <BrandIcon
-                  icon={option.icon}
-                  color={option.color}
-                  className="size-5"
-                />
-                {count > 0 ? (
-                  <span className="absolute top-1 right-1 flex size-4 items-center justify-center rounded-full bg-foreground font-medium text-[10px] text-background">
-                    {count}
-                  </span>
-                ) : null}
-              </button>
-            );
-          })}
+        {/* Autofocused, so the picker opens ready to type: twenty-plus brand
+            tiles is past the point where scanning beats searching, and the
+            fastest path to "Bluesky" is the four letters, not the hunt. */}
+        <Input
+          ref={focusSearch}
+          value={pickerQuery}
+          onChange={(e) => setPickerQuery(e.target.value)}
+          onKeyDown={(e) => {
+            // Enter takes the top hit — the other half of type-to-add.
+            if (e.key !== "Enter") return;
+            e.preventDefault();
+            const first = filteredPlatforms[0];
+            if (first) addFromPicker(first);
+          }}
+          placeholder="Search platforms…"
+          aria-label="Search platforms"
+          className="mb-3"
+        />
+
+        <div className="flex max-h-[55vh] flex-col gap-3 overflow-y-auto">
+          {pickerQuery ? null : (
+            <div className="flex flex-col gap-1.5">
+              <SectionLabel>Blocks</SectionLabel>
+              <div className="grid grid-cols-2 gap-2">
+                {BLOCK_OPTIONS.map((b) => (
+                  <button
+                    key={b.key}
+                    type="button"
+                    onClick={() => {
+                      addLink(
+                        b.kind === "header"
+                          ? { label: "Section", kind: "header" }
+                          : { label: "New link", href: "https://" },
+                      );
+                      closePicker();
+                    }}
+                    className="flex items-center gap-2.5 rounded-lg border border-border px-3 py-2.5 text-left transition-colors hover:border-[var(--sec)]/50 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-[var(--sec)]/12 text-[var(--sec)]">
+                      <b.icon className="size-4" />
+                    </span>
+                    <span className="flex min-w-0 flex-col">
+                      <span className="truncate font-medium text-sm">
+                        {b.label}
+                      </span>
+                      <span className="truncate text-[11px] text-muted-foreground">
+                        {b.hint}
+                      </span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="flex flex-col gap-1.5">
+            {pickerQuery ? null : <SectionLabel>Platforms</SectionLabel>}
+            {filteredPlatforms.length === 0 ? (
+              <p className="py-6 text-center text-muted-foreground text-xs">
+                No platform matches “{pickerQuery}”. Add it as a custom link
+                instead.
+              </p>
+            ) : (
+              <div className="grid grid-cols-4 gap-2 sm:grid-cols-5">
+                {filteredPlatforms.map((option) => {
+                  const count = option.match
+                    ? data.links.filter((l) => option.match?.test(l.href))
+                        .length
+                    : 0;
+                  return (
+                    <button
+                      key={option.key}
+                      type="button"
+                      title={option.label}
+                      aria-label={option.label}
+                      onClick={() => addFromPicker(option)}
+                      className="relative flex aspect-square items-center justify-center rounded-lg border border-border text-foreground transition-colors hover:border-[var(--sec)]/50 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <BrandIcon
+                        icon={option.icon}
+                        color={option.color}
+                        className="size-5"
+                      />
+                      {count > 0 ? (
+                        <span className="absolute top-1 right-1 flex size-4 items-center justify-center rounded-full bg-foreground font-medium text-[10px] text-background">
+                          {count}
+                        </span>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </Modal>
     </div>
@@ -1112,6 +1895,7 @@ type BgKind = Background["type"];
 type GradientConfig = NonNullable<BackgroundMemory["gradient"]>;
 type GridConfig = NonNullable<BackgroundMemory["grid"]>;
 type AuroraConfig = NonNullable<BackgroundMemory["aurora"]>;
+type RippleConfig = NonNullable<BackgroundMemory["ripple"]>;
 
 /**
  * The Aurora swatch, drawn from the shader's own horizon rather than eyeballed.
@@ -1148,6 +1932,99 @@ function auroraPreview(color: string, baseColor: string): string {
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}") center/100% 100% no-repeat, ${baseColor}`;
 }
 
+/**
+ * Swatch art for the three shader backgrounds.
+ *
+ * These are SVG stand-ins, not the shaders. A swatch is 48px of a picker that
+ * shows nine of them at once, and putting a live WebGL context behind each
+ * would mean three more contexts alongside the Studio's own preview — against a
+ * browser cap of about sixteen, for artwork the size of a stamp. Each one is
+ * drawn from the SAME settings the shader would use, so the swatch still
+ * answers the question the picker asks ("what would choosing this give me?")
+ * in the creator's own colours.
+ *
+ * Every position below is a literal. Nothing here may use Math.random(): these
+ * render on the server too, and a random layout mismatches on hydration.
+ */
+
+/**
+ * Ripple: the shader's construction, run through SVG filter primitives.
+ *
+ * Two things this deliberately is not. It is not STRETCHED — the art carries
+ * intrinsic `width`/`height` and is painted with `cover`, because this swatch is
+ * `h-12 w-full` in a 3-column grid and that is about 5:1 in the Studio's
+ * single-column layout against about 1.25:1 in the two-pane one. Painting one
+ * picture at `100% 100%` squashed it into two different shapes. And it is not
+ * DRAWN — hand-drawn strokes have to be blurred heavily before they stop reading
+ * as strokes, and that blur is what made the old version mushy.
+ *
+ * Instead it mirrors RIPPLE_FRAG exactly, one step at a time:
+ *
+ *   turbulence           the field, as |noise| — the shader's own `d`.
+ *                        numOctaves=1 matches the shader's single octave; extra
+ *                        octaves fray the contour into smoke at every scale,
+ *                        which is exactly why the shader uses one.
+ *   narrow table         lights only where d is near zero. That contour IS the
+ *                        line.
+ *   wide table + blur    the same contour read wide and dim. Light through a
+ *                        medium scatters, so the line is never a bare stroke
+ *                        on black.
+ *
+ * Both readings come from the one turbulence field, so they are perfectly
+ * concentric — the same reason the shader's core and glow can never disagree
+ * about where the line is. Anisotropic `baseFrequency` (y above x) reproduces the shader's
+ * vertical squash, so filaments run wide and flat here too.
+ */
+function ripplePreview(w: RippleConfig): string {
+  const W = 96;
+  const H = 48;
+  // Detail drives the pattern size on the page, so it drives it here too — the
+  // picker's promise is that a swatch shows the settings it would restore.
+  // 0.70 mirrors the shader's calmness factor on top of Detail (RIPPLE_FRAG),
+  // so the swatch thins out by the same amount the page did.
+  const f = 0.011 * 0.7 * Math.max(w.scale, 1);
+  const svg =
+    `<svg xmlns='http://www.w3.org/2000/svg' width='${W}' height='${H}' viewBox='0 0 ${W} ${H}'>` +
+    `<defs><filter id='c' x='0' y='0' width='100%' height='100%'>` +
+    `<feTurbulence type='turbulence' baseFrequency='${f.toFixed(4)} ${(f * 1.6).toFixed(4)}' numOctaves='1' seed='9' result='t'/>` +
+    // Move turbulence's red channel into alpha; the colour channels go unused.
+    `<feColorMatrix in='t' type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0' result='am'/>` +
+    // `turbulence`, NOT `fractalNoise`, and that choice is what makes these two
+    // tables exact rather than approximate. Turbulence sums |noise|, so its
+    // output IS the shader's `d = abs(n)`: zero along the contour, rising away
+    // from it. fractalNoise instead centres on 0.5, which needs a symmetric
+    // triangle to find the contour — and since a smooth field piles its values
+    // up near the centre, that triangle lit most of the frame however narrow it
+    // was made.
+    //
+    // `feFuncA type='table'` spreads entries evenly across 0..1, so N entries
+    // starting at 1 give a ramp reaching zero at 1/(N-1). Eleven entries is
+    // `1 - d * 10` and four is `1 - d * 3` — the shader's two lines, transcribed.
+    `<feComponentTransfer in='am' result='coreBand'><feFuncA type='table' tableValues='1 0 0 0 0 0 0 0 0 0'/></feComponentTransfer>` +
+    `<feComponentTransfer in='coreBand' result='core'><feFuncA type='gamma' amplitude='1' exponent='1.35' offset='0'/></feComponentTransfer>` +
+    `<feComponentTransfer in='am' result='glowBand'><feFuncA type='table' tableValues='1 0 0 0'/></feComponentTransfer>` +
+    // amplitude below 1 is what dims the halo; blurring alone would only spread it.
+    `<feComponentTransfer in='glowBand' result='glowA'><feFuncA type='gamma' amplitude='0.26' exponent='2.2' offset='0'/></feComponentTransfer>` +
+    `<feGaussianBlur in='glowA' stdDeviation='1.0' result='glow'/>` +
+    `<feFlood flood-color='${w.glowColor}' result='fill'/>` +
+    // in2 is the ridge, NOT SourceGraphic: SourceGraphic here is a fully opaque
+    // rect, so compositing into it paints a solid block and discards the chain.
+    `<feComposite in='fill' in2='glow' operator='in' result='glowLit'/>` +
+    `<feComposite in='fill' in2='core' operator='in' result='coreLit'/>` +
+    `<feMerge><feMergeNode in='glowLit'/><feMergeNode in='coreLit'/></feMerge>` +
+    `</filter>` +
+    // Lit from above, as the shader is.
+    `<linearGradient id='lit' x1='0' y1='0' x2='0' y2='1'>` +
+    `<stop offset='0' stop-color='${w.glowColor}' stop-opacity='0.09'/>` +
+    `<stop offset='1' stop-color='${w.glowColor}' stop-opacity='0'/>` +
+    `</linearGradient></defs>` +
+    `<rect width='${W}' height='${H}' fill='${w.baseColor}'/>` +
+    `<rect width='${W}' height='${H}' fill='url(#lit)'/>` +
+    `<rect width='${W}' height='${H}' filter='url(#c)' opacity='0.9'/>` +
+    `</svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}") center/cover no-repeat, ${w.baseColor}`;
+}
+
 /** A grid thumbnail. The cell is forced small so several lines show however
  *  large the real cell is. */
 function gridPreview(g: GridConfig): string {
@@ -1161,7 +2038,7 @@ function gridPreview(g: GridConfig): string {
 
 /** The gradient exactly as `PageBackground` paints it. */
 function gradientPreview(g: GradientConfig): string {
-  const dir = g.direction === "horizontal" ? "to right" : "to bottom";
+  const dir = gradientDirectionCss(g.direction);
   return `linear-gradient(${dir}, ${g.from}, ${g.distribution ?? 50}%, ${g.to})`;
 }
 
@@ -1180,17 +2057,58 @@ const BG_DEFAULTS = {
     thickness: 1,
   },
   aurora: { color: "#e6e6e6", baseColor: "#000000", speed: 5 },
+  // Neutral by default, the same near-black/soft-white pair Aurora uses. A
+  // coloured default made this effect shout; monochrome is the look it is
+  // actually best at, and any creator who wants colour is two clicks away.
+  ripple: { baseColor: "#0a0a0a", glowColor: "#e6e6e6", scale: 3, speed: 5 },
 } satisfies {
   custom: string;
   gradient: GradientConfig;
   grid: GridConfig;
   aurora: AuroraConfig;
+  ripple: RippleConfig;
 };
+
+/**
+ * Ripple's swatch art, built ONCE from the defaults and never from live state.
+ *
+ * Every other swatch here tracks the creator's own settings, which is the
+ * picker's usual promise. This one deliberately does not, for two reasons.
+ *
+ * It flickered. The art is an SVG data URI containing an feTurbulence filter, so
+ * re-deriving it from state meant encoding a new URI and re-rasterizing a
+ * turbulence filter on every pointermove of the Detail and Speed sliders — a new
+ * image decode per frame, in a 48px box, while the real preview was already
+ * re-rendering beside it.
+ *
+ * And it was answering a question nobody asked. A swatch says "this is what
+ * choosing me gives you". Once Ripple is already selected, its own swatch
+ * restating the settings you can see full-size in the preview is redundant
+ * motion in the corner of the eye.
+ *
+ * The cost is that a creator who sets Ripple to, say, bright green still sees a
+ * monochrome swatch. That is the intended trade: the swatch identifies the
+ * background, the preview shows their version of it.
+ */
+const RIPPLE_SWATCH = ripplePreview(BG_DEFAULTS.ripple);
 
 /** Minimum accepted resolution for an imported background image/video. */
 const MIN_MEDIA = { w: 640, h: 480 };
-/** Cap on an imported file's size — its data URL lives inline in the draft. */
-const MAX_MEDIA_BYTES = 8 * 1024 * 1024;
+/**
+ * Cap on an imported file's size.
+ *
+ * Until Save runs it lives inline in the draft as a base64 data URL, which is
+ * ~4/3 the file — so 20 MB in means ~27 MB of string held in memory and fed to
+ * the preview's <video>/<img>. That is affordable; what is not is letting it
+ * reach the row. `savePage` lifts it into the page-assets bucket first, and
+ * that bucket carries a matching 20 MB ceiling (see the
+ * `set_page_assets_size_limit` migration) — the two MUST be raised together.
+ * If Storage rejects the upload, `persistAsset` falls back to keeping the data
+ * URL inline in the pages jsonb, and a 27 MB row is re-downloaded by every
+ * visitor on every page load.
+ */
+const MAX_MEDIA_MB = 20;
+const MAX_MEDIA_BYTES = MAX_MEDIA_MB * 1024 * 1024;
 
 /*
  * Each type's settings resolve "active background → remembered → default". That
@@ -1235,6 +2153,18 @@ function resolveAurora(d: PageData): AuroraConfig {
   return { color: m.color, baseColor: m.baseColor, speed: m.speed };
 }
 
+function resolveRipple(d: PageData): RippleConfig {
+  const bg = d.background;
+  const m = bg?.type === "ripple" ? bg : d.bgMemory?.ripple;
+  if (!m) return { ...BG_DEFAULTS.ripple };
+  return {
+    baseColor: m.baseColor,
+    glowColor: m.glowColor,
+    scale: m.scale,
+    speed: m.speed,
+  };
+}
+
 function resolveMedia(d: PageData): MediaBackground | undefined {
   const bg = d.background;
   if (bg?.type !== "media") return d.bgMemory?.media;
@@ -1264,6 +2194,7 @@ function rememberActive(d: PageData): BackgroundMemory | undefined {
   else if (type === "gradient") memory.gradient = resolveGradient(d);
   else if (type === "grid") memory.grid = resolveGrid(d);
   else if (type === "aurora") memory.aurora = resolveAurora(d);
+  else if (type === "ripple") memory.ripple = resolveRipple(d);
   else if (type === "media") memory.media = resolveMedia(d);
   return memory;
 }
@@ -1316,6 +2247,7 @@ export function BackgroundPanel() {
       label: "Aurora",
       preview: auroraPreview(aurora.color, aurora.baseColor),
     },
+    { kind: "ripple", label: "Ripple", preview: RIPPLE_SWATCH },
     { kind: "grid", label: "Grid", preview: gridPreview(resolveGrid(data)) },
     {
       // Whatever the owner imported — or the picture glyph when there's nothing
@@ -1347,7 +2279,9 @@ export function BackgroundPanel() {
       return;
     }
     if (file.size > MAX_MEDIA_BYTES) {
-      setMediaError("That file is too large. Please keep it under 8 MB.");
+      setMediaError(
+        `That file is too large. Please keep it under ${MAX_MEDIA_MB} MB.`,
+      );
       return;
     }
     try {
@@ -1424,6 +2358,14 @@ export function BackgroundPanel() {
           ...prev,
           background: { type: "aurora", ...a },
           bgMemory: { ...memory, aurora: a },
+        };
+      }
+      if (next === "ripple") {
+        const w = memory?.ripple ?? { ...BG_DEFAULTS.ripple };
+        return {
+          ...prev,
+          background: { type: "ripple", ...w },
+          bgMemory: { ...memory, ripple: w },
         };
       }
       if (next === "media") {
@@ -1521,6 +2463,16 @@ function BackgroundSubControls({ onReplace }: { onReplace: () => void }) {
       };
     });
 
+  const patchRipple = (patch: Partial<RippleConfig>) =>
+    setData((prev) => {
+      const next = { ...resolveRipple(prev), ...patch };
+      return {
+        ...prev,
+        background: { type: "ripple", ...next },
+        bgMemory: { ...prev.bgMemory, ripple: next },
+      };
+    });
+
   const patchMedia = (patch: Partial<MediaBackground>) =>
     setData((prev) => {
       const current = resolveMedia(prev);
@@ -1579,6 +2531,7 @@ function BackgroundSubControls({ onReplace }: { onReplace: () => void }) {
           options={[
             { value: "vertical", label: "Vertical" },
             { value: "horizontal", label: "Horizontal" },
+            { value: "diagonal", label: "Diagonal" },
           ]}
           value={bg.direction ?? "vertical"}
           onChange={(v) => patchGradient({ direction: v })}
@@ -1660,6 +2613,44 @@ function BackgroundSubControls({ onReplace }: { onReplace: () => void }) {
           min={0}
           max={10}
           onChange={(v) => patchAurora({ speed: v })}
+        />
+      </div>
+    );
+  }
+
+  if (bg.type === "ripple") {
+    return (
+      <div className="flex flex-col gap-3">
+        <Row label="Base color">
+          <ColorPicker
+            value={bg.baseColor}
+            onChange={(c) => patchRipple({ baseColor: c })}
+            ariaLabel="Ripple base color"
+          />
+        </Row>
+        <Row label="Glow color">
+          <ColorPicker
+            value={bg.glowColor}
+            onChange={(c) => patchRipple({ glowColor: c })}
+            ariaLabel="Ripple glow color"
+          />
+        </Row>
+        {/* Larger scale = a finer, busier net (the value multiplies the noise
+            coordinates). Labelled "Detail" rather than "Scale" so the slider
+            reads in the direction it moves. */}
+        <Slider
+          label="Detail"
+          value={bg.scale}
+          min={1}
+          max={9}
+          onChange={(v) => patchRipple({ scale: v })}
+        />
+        <Slider
+          label="Speed"
+          value={bg.speed}
+          min={0}
+          max={10}
+          onChange={(v) => patchRipple({ speed: v })}
         />
       </div>
     );
@@ -1882,6 +2873,245 @@ export function MusicPanel() {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Status
+// ---------------------------------------------------------------------------
+
+/** The presence choices, plus the "no dot at all" option, in Discord's order. */
+const PRESENCE_CHOICES: { value: PresenceState | "none"; label: string }[] = [
+  { value: "online", label: PRESENCE_LABELS.online },
+  { value: "idle", label: PRESENCE_LABELS.idle },
+  { value: "dnd", label: PRESENCE_LABELS.dnd },
+  { value: "offline", label: PRESENCE_LABELS.offline },
+  { value: "none", label: "No dot" },
+];
+
+/**
+ * Emoji worth one tap: around, free, busy, away, and the four things people are
+ * most often doing. Typing an emoji means leaving the keyboard for the system
+ * picker on every platform, and this is a field people edit several times a
+ * week.
+ *
+ * Deliberately generic — the states anyone has, not one trade's workflow.
+ */
+const STATUS_EMOJI = ["👋", "✅", "❌", "💤", "🎮", "🎧", "💻", "📩"];
+
+/** The presence picker: the real dot next to each label, so the shapes teach
+ *  themselves. Two columns, because "Do not disturb" does not fit in five. */
+function PresencePicker({
+  value,
+  onChange,
+}: {
+  value: PresenceState | undefined;
+  onChange: (v: PresenceState | undefined) => void;
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-1 rounded-lg border border-border bg-muted/60 p-1">
+      {PRESENCE_CHOICES.map((choice) => {
+        const on = (value ?? "none") === choice.value;
+        return (
+          <button
+            key={choice.value}
+            type="button"
+            aria-pressed={on}
+            onClick={() =>
+              onChange(
+                choice.value === "none"
+                  ? undefined
+                  : (choice.value as PresenceState),
+              )
+            }
+            className={cn(
+              // "No dot" is the odd one out and sits alone on the last row.
+              choice.value === "none" && "col-span-2",
+              "flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-center font-medium text-xs transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+              on
+                ? "bg-foreground text-background"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {choice.value === "none" ? null : (
+              <PresenceDot
+                state={choice.value as PresenceState}
+                srLabel={false}
+              />
+            )}
+            {choice.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * The Status section: a presence dot, a message, and a "clear after" timer so a
+ * status that has stopped being true retires itself.
+ */
+export function StatusPanel() {
+  const { data, update } = useStudio();
+  // Default OFF when unset, like Music and Intro: a page that has never had a
+  // status must not render its switch as though it does.
+  const status = data.status ?? { ...DEFAULT_STATUS_CONFIG, enabled: false };
+  const patch = (p: Partial<StatusConfig>) =>
+    update({ status: { ...status, ...p } });
+
+  // Which "clear after" chip is lit. An absolute instant can't say which chip
+  // produced it — 4pm could be "4 hours" or "today" — so the chip is remembered
+  // for this sitting only and the read-out below carries the real answer.
+  // "Never" is the one choice the draft itself can state, so it is read from the
+  // draft rather than from memory and survives a reload.
+  const [picked, setPicked] = useState<ClearAfter | null>(null);
+  const selectedClear: ClearAfter | null = status.expiresAt ? picked : "never";
+  const expiry = statusExpiryLabel(status);
+  const expired = Boolean(status.expiresAt) && expiry.startsWith("Expired");
+
+  // Same resolution the page renders with: no box of its own → the bio box, so
+  // the sliders describe what is actually on screen under the current theme.
+  // Touching any of them writes an explicit box and pins the pill's look.
+  const box = status.box ?? data.bioBox ?? DEFAULT_STATUS_BOX;
+  const summary =
+    [status.emoji?.trim(), status.text?.trim()].filter(Boolean).join(" ") ||
+    "Empty";
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-1.5">
+        <ToggleRow
+          label="Status"
+          checked={status.enabled}
+          onChange={(v) => patch({ enabled: v })}
+        />
+        {/* Only when off. The controls below stay live under the switch — same
+            as Music and Intro — and without a line saying so the switch reads
+            broken. Saying where the status appears while it IS on is what the
+            preview to the right is for. */}
+        {status.enabled ? null : (
+          <p className="text-muted-foreground text-xs">
+            Off — nothing shows under your name. Your message is kept.
+          </p>
+        )}
+      </div>
+
+      <Group label="Presence">
+        <PresencePicker
+          value={status.presence}
+          onChange={(v) => patch({ presence: v })}
+        />
+      </Group>
+
+      {/* Owns the pill's surface as well as its words, the way the Name and Bio
+          cards own theirs — there is only one thing here to style. */}
+      <AccordionCard id="status" title="Message" summary={summary}>
+        <div className="flex items-start gap-2">
+          <Input
+            value={status.emoji ?? ""}
+            onChange={(e) => patch({ emoji: e.target.value || undefined })}
+            placeholder="👋"
+            aria-label="Status emoji"
+            maxLength={12}
+            className="w-16 shrink-0 text-center"
+          />
+          <Input
+            value={status.text ?? ""}
+            onChange={(e) => patch({ text: e.target.value })}
+            placeholder="back in an hour"
+            aria-label="Status message"
+            maxLength={80}
+          />
+        </div>
+        <div className="flex flex-wrap gap-1">
+          {STATUS_EMOJI.map((emoji) => {
+            const on = status.emoji === emoji;
+            return (
+              <button
+                key={emoji}
+                type="button"
+                // Clicking the chosen one again clears it, so the palette is
+                // also the way back out of it — no separate Clear button.
+                onClick={() => patch({ emoji: on ? undefined : emoji })}
+                aria-label={`Use ${emoji}`}
+                aria-pressed={on}
+                className={cn(
+                  "flex size-8 items-center justify-center rounded-md border text-base transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                  on
+                    ? "border-foreground bg-muted"
+                    : "border-border hover:border-muted-foreground/40",
+                )}
+              >
+                {emoji}
+              </button>
+            );
+          })}
+        </div>
+        <TextStyleEditor
+          style={{ ...DEFAULT_STATUS_TEXT_STYLE, ...status.textStyle }}
+          onChange={(p) => patch({ textStyle: { ...status.textStyle, ...p } })}
+          defaultSize={14}
+        />
+        <BoxControls
+          box={box}
+          onChange={(p) => patch({ box: { ...box, ...p } })}
+          defaultRadius={DEFAULT_STATUS_RADIUS}
+        />
+      </AccordionCard>
+
+      <Group label="Clear after">
+        <div className="grid grid-cols-5 gap-1 rounded-lg border border-border bg-muted/60 p-1">
+          {CLEAR_AFTER_OPTIONS.map((option) => {
+            const on = selectedClear === option.value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                aria-pressed={on}
+                onClick={() => {
+                  setPicked(option.value);
+                  patch({ expiresAt: clearAfterToIso(option.value) });
+                }}
+                className={cn(
+                  "rounded-md px-1 py-1.5 text-center font-medium text-[11px] transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                  on
+                    ? "bg-foreground text-background"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+        <p
+          className={cn(
+            "text-xs",
+            expired ? "text-danger" : "text-muted-foreground",
+          )}
+        >
+          {status.expiresAt
+            ? `${expiry} · ${formatScheduleDate(status.expiresAt)}`
+            : "Stays up until you change it."}
+        </p>
+      </Group>
+
+      {/* As with music and the intro: the switch above keeps the message and
+          its styling for later, Remove drops the whole thing. */}
+      {data.status ? (
+        <>
+          <hr className="border-border" />
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => update({ status: undefined })}
+            className={cn("self-start", DESTRUCTIVE_GHOST)}
+          >
+            Remove status
+          </Button>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 const INTRO_BACKDROPS: { value: IntroBackdrop; label: string }[] = [
   { value: "blur", label: "Blur" },
   { value: "solid", label: "Solid" },
@@ -1900,12 +3130,23 @@ export function IntroPanel() {
     // sit in the open, and only the two heavy text editors (each carrying a full
     // TextStyleEditor) collapse.
     <div data-focus="intro" className="scroll-mt-3 flex flex-col gap-6">
-      <ToggleRow
-        label="Click to enter"
-        hint="A splash visitors tap to reveal the page."
-        checked={intro.enabled}
-        onChange={(v) => patch({ enabled: v })}
-      />
+      <div className="flex flex-col gap-1.5">
+        <ToggleRow
+          label="Click to enter"
+          hint="A splash visitors tap to reveal the page."
+          checked={intro.enabled}
+          onChange={(v) => patch({ enabled: v })}
+        />
+        {/* Same reason as the music switch: the controls below stay live while
+            this is off, and without a line saying so the switch reads broken.
+            It also points at "Preview entry", which is the only way to see a
+            splash you have just spent five minutes styling. */}
+        <p className="text-muted-foreground text-xs">
+          {intro.enabled
+            ? "Visitors see this splash first. Use Preview entry above the page to try it."
+            : "Off — the page opens straight away. Your splash text is kept."}
+        </p>
+      </div>
 
       <Group label="Appearance">
         <Segmented

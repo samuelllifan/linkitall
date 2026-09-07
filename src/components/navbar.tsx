@@ -522,12 +522,18 @@ export function Navbar({
             <Link
               href="/"
               onClick={(e) => navClick(e, "/")}
-              className="group flex shrink-0 items-center gap-2 rounded-full font-semibold tracking-tight focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              className="flex shrink-0 items-center gap-2 rounded-full font-semibold tracking-tight focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
             >
-              <StackedMark
-                variant="brand"
-                className="size-5 transition-transform duration-300 group-hover:scale-110 group-active:scale-95 group-active:duration-75"
-              />
+              {/* The logo is deliberately static: no hover or press scale on
+                  either the mark or the wordmark. It is the one piece of chrome
+                  present on every screen, and the bar it sits in already moves
+                  plenty (it floats, hides on scroll and swaps to the island
+                  treatment). Leaving the logo still is what gives the rest of
+                  that motion something fixed to read against. Its affordance is
+                  the pointer and the focus ring, which is all a wordmark needs.
+                  No `group` on the Link above for the same reason -- nothing in
+                  here reacts to it any more. */}
+              <StackedMark variant="brand" className="size-5" />
               <span>
                 stacked<span className="brand-text">.</span>
               </span>

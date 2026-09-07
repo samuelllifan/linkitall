@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { sliderFill } from "~/lib/utils";
 
 /**
  * A direct-manipulation framer for an imported image/video background — the
@@ -222,10 +223,12 @@ export function MediaFramer({
         )}
       </div>
 
-      <label className="flex flex-col gap-1.5 text-sm">
+      <label className="group flex flex-col gap-1.5 text-sm">
         <span className="flex justify-between text-muted-foreground">
           <span>Zoom</span>
-          <span className="tabular-nums">{value.zoom.toFixed(2)}×</span>
+          <span className="tabular-nums transition-colors group-hover:text-foreground group-focus-within:text-foreground">
+            {value.zoom.toFixed(2)}×
+          </span>
         </span>
         <input
           type="range"
@@ -235,7 +238,8 @@ export function MediaFramer({
           value={value.zoom}
           onChange={(e) => commit({ zoom: Number(e.target.value) })}
           aria-label="Zoom"
-          className="w-full"
+          style={sliderFill(value.zoom, MIN_ZOOM, MAX_ZOOM)}
+          className="studio-slider w-full"
         />
       </label>
 

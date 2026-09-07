@@ -265,9 +265,11 @@
      Nothing was lost in the switch: only one section is ever on screen, and the
      rail already answers "where am I" with the chip fill, the label and the
      underline. Hue was the fourth signal saying the same thing. */
+  --sec-themes: var(--brand-violet);
   --sec-profile: var(--brand-violet);
   --sec-links: var(--brand-violet);
   --sec-background: var(--brand-violet);
+  --sec-status: var(--brand-violet);
   --sec-music: var(--brand-violet);
   --sec-intro: var(--brand-violet);
 }
@@ -560,12 +562,167 @@ body:has([data-page-chrome="off"]),
   --ring: color-mix(in oklab, var(--sec) 70%, oklch(0.62 0 0));
 }
 
-/* Native range inputs paint their filled track and thumb from `accent-color`,
-   and every slider in the editor had been left at the OS default grey.
-   `.gradient-slider` and `.player-slider` paint their own track — there the
-   value IS a colour, or the control is the music scrubber — so both are exempt. */
-.studio-shell input[type="range"]:not(.gradient-slider):not(.player-slider) {
+/* Fallback for any range input in the editor that has not been given
+   `.studio-slider` — it will at least wear the section accent rather than OS
+   grey. The three that matter all carry the class; this is a safety net for a
+   fourth added later. */
+.studio-shell
+input[type="range"]:not(.gradient-slider):not(.player-slider):not(
+  .studio-slider
+) {
   accent-color: var(--sec, var(--foreground));
+}
+
+/* ---------------------------------------------------------------------------
+   Studio slider — the control behind every numeric setting in the editor.
+
+   These were native range inputs wearing nothing but `accent-color`, which is
+   the one property a native range lets you set. That buys the right hue and
+   nothing else: OS-shaped thumb, OS-shaped track, no hover state, no press, and
+   a look that changes between Chrome, Firefox and Safari. Next to the rest of
+   the editor — which answers every interaction with a 300ms scale and settles
+   on a `ring/50` focus ring — it read as an unstyled browser control dropped
+   into a designed panel.
+
+   This is the same construction as `.player-slider` (the music scrubber), which
+   is the app's existing answer to "a range input that looks like it belongs",
+   with the editor's own accent and gesture language on top.
+
+   The track height is deliberately CONSTANT. Thickening it on hover — which
+   `.player-slider` does — means the thumb's centring offset has to move by the
+   same amount in the same frame, and the two transitions do not stay in step
+   during a fast pointer sweep, so the thumb visibly detaches from the bar. The
+   interaction is carried by the thumb instead, which has nothing to stay
+   aligned with. */
+.studio-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  width: 100%;
+  /* The BOX is 1.25rem so the drag target clears the ~24px touch minimum; the
+     visible bar is the track pseudo-element at less than a third of it. */
+  height: 1.25rem;
+  background: transparent;
+  outline: none;
+  cursor: pointer;
+  touch-action: none;
+}
+
+/* --- track (WebKit) ---
+   Two layers: the brand ramp on top, sized to the filled width, over a flat
+   faint remainder.
+
+   `background-size: var(--fill)` rather than a hard colour stop, and that is the
+   whole trick. `--brand-grad` runs lilac -> violet -> indigo, so painting it
+   across the FULL track and clipping at the value would show only the lilac end
+   at low values — the indigo end would never get a pixel until the slider was
+   nearly full (the same failure the closing rule in `final-cta` documents).
+   Sizing the layer to the fill instead squeezes the entire ramp into whatever is
+   filled, so every value shows the whole sweep and the colour travels as you
+   drag rather than just getting longer.
+
+   This spends `--brand-grad` where `--sec` used to be, so a slider no longer
+   follows a per-section hue. That costs nothing today — all five `--sec-*`
+   tokens are `--brand-violet` — but if per-section hues are ever restored, this
+   is one of the places that has to opt back in. */
+.studio-slider::-webkit-slider-runnable-track {
+  height: 0.375rem;
+  border-radius: 9999px;
+  background-image:
+    var(--brand-grad),
+    linear-gradient(
+      color-mix(in oklab, var(--foreground) 13%, transparent) 0 100%
+    );
+  background-size:
+    var(--fill, 0%) 100%,
+    100% 100%;
+  background-position:
+    left center,
+    left center;
+  background-repeat: no-repeat, no-repeat;
+}
+
+/* --- thumb (WebKit) --- */
+.studio-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 0.875rem;
+  width: 0.875rem;
+  border-radius: 9999px;
+  background: var(--foreground);
+  border: none;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.55);
+  /* Centre the thumb on the track: (track - thumb) / 2. WebKit aligns the thumb
+     to the TOP of the runnable track, unlike Firefox which centres it. */
+  margin-top: calc((0.375rem - 0.875rem) / 2);
+  transition:
+    transform 0.3s ease-out,
+    box-shadow 0.2s ease-out;
+}
+/* The editor's gesture, matched: scale up on hover, press in on 75ms. Same
+   numbers as the link tiles and the claim button. */
+.studio-slider:hover::-webkit-slider-thumb {
+  transform: scale(1.18);
+  box-shadow:
+    0 1px 3px rgb(0 0 0 / 0.55),
+    0 0 0 5px color-mix(in oklab, var(--brand-violet) 20%, transparent);
+}
+.studio-slider:active::-webkit-slider-thumb {
+  transform: scale(0.94);
+  transition-duration: 75ms;
+  box-shadow:
+    0 1px 3px rgb(0 0 0 / 0.55),
+    0 0 0 7px color-mix(in oklab, var(--brand-violet) 26%, transparent);
+}
+.studio-slider:focus-visible::-webkit-slider-thumb {
+  box-shadow:
+    0 1px 3px rgb(0 0 0 / 0.55),
+    0 0 0 3px color-mix(in oklab, var(--ring) 50%, transparent);
+}
+
+/* --- Firefox ---
+   `::-moz-range-progress` paints the filled portion natively, so this half does
+   not need `--fill` at all. */
+.studio-slider::-moz-range-track {
+  height: 0.375rem;
+  border-radius: 9999px;
+  background: color-mix(in oklab, var(--foreground) 13%, transparent);
+}
+/* Firefox sizes this element to the value already, so the ramp compresses into
+   the filled width on its own — no `--fill` needed. */
+.studio-slider::-moz-range-progress {
+  height: 0.375rem;
+  border-radius: 9999px;
+  background: var(--brand-grad);
+}
+.studio-slider::-moz-range-thumb {
+  height: 0.875rem;
+  width: 0.875rem;
+  border-radius: 9999px;
+  background: var(--foreground);
+  border: none;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.55);
+  transition:
+    transform 0.3s ease-out,
+    box-shadow 0.2s ease-out;
+}
+.studio-slider:hover::-moz-range-thumb {
+  transform: scale(1.18);
+  box-shadow:
+    0 1px 3px rgb(0 0 0 / 0.55),
+    0 0 0 5px color-mix(in oklab, var(--brand-violet) 20%, transparent);
+}
+.studio-slider:active::-moz-range-thumb {
+  transform: scale(0.94);
+  transition-duration: 75ms;
+  box-shadow:
+    0 1px 3px rgb(0 0 0 / 0.55),
+    0 0 0 7px color-mix(in oklab, var(--brand-violet) 26%, transparent);
+}
+.studio-slider:focus-visible::-moz-range-thumb {
+  box-shadow:
+    0 1px 3px rgb(0 0 0 / 0.55),
+    0 0 0 3px color-mix(in oklab, var(--ring) 50%, transparent);
 }
 
 /* An open / selected card in the editor. Replaces `border-ring bg-muted/40`,
@@ -1169,6 +1326,11 @@ body:has([data-page-chrome="off"]),
   border-radius: 9999px;
   outline: none;
 }
+/* The thumb keeps its ring shape rather than `.studio-slider`'s solid dot: this
+   track is an arbitrary two-colour gradient, so a solid thumb disappears
+   whenever the blend point passes under a colour close to it. A dark centre
+   inside a light ring stays legible against both ends. The gestures are the
+   same, so the two controls still read as one family. */
 .gradient-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
@@ -1178,6 +1340,19 @@ body:has([data-page-chrome="off"]),
   background: var(--background);
   border: 2px solid var(--foreground);
   cursor: pointer;
+  transition:
+    transform 0.3s ease-out,
+    box-shadow 0.2s ease-out;
+}
+.gradient-slider:hover::-webkit-slider-thumb {
+  transform: scale(1.18);
+}
+.gradient-slider:active::-webkit-slider-thumb {
+  transform: scale(0.94);
+  transition-duration: 75ms;
+}
+.gradient-slider:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 50%, transparent);
 }
 .gradient-slider::-moz-range-thumb {
   height: 1.1rem;
@@ -1186,6 +1361,19 @@ body:has([data-page-chrome="off"]),
   background: var(--background);
   border: 2px solid var(--foreground);
   cursor: pointer;
+  transition:
+    transform 0.3s ease-out,
+    box-shadow 0.2s ease-out;
+}
+.gradient-slider:hover::-moz-range-thumb {
+  transform: scale(1.18);
+}
+.gradient-slider:active::-moz-range-thumb {
+  transform: scale(0.94);
+  transition-duration: 75ms;
+}
+.gradient-slider:focus-visible::-moz-range-thumb {
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 50%, transparent);
 }
 .gradient-slider::-moz-range-track {
   background: transparent;
@@ -1275,14 +1463,22 @@ body:has([data-page-chrome="off"]),
   -webkit-text-fill-color: transparent;
   background: none;
 }
+/* The brand ramp, not the old six-hue spectrum this used to run (indigo →
+   violet → pink → amber). "Gradient" is the tasteful one of the three effects
+   and the one most pages will actually wear, so it should look like stacked;
+   a creator who wants the full wheel has "Rainbow" one click away. Literal
+   hexes rather than var(--brand-*) because this stop list has to match
+   --brand-grad's own literals, which are documented as the copy of record. */
 .text-anim-gradient {
   background-image: linear-gradient(
     90deg,
-    #6366f1,
-    #8b5cf6,
-    #ec4899,
-    #f59e0b,
-    #6366f1
+    #d8b4fe,
+    #c084fc,
+    #a78bfa,
+    #818cf8,
+    #a78bfa,
+    #c084fc,
+    #d8b4fe
   );
   animation: text-slide 5s linear infinite;
 }
@@ -1313,6 +1509,216 @@ body:has([data-page-chrome="off"]),
 @keyframes text-slide {
   to {
     background-position: 200% center;
+  }
+}
+
+/* The Studio's preview pane — the surface the device frame floats on.
+
+   It used to be a flat `bg-black/20`, which put a grey rectangle next to the
+   single most colourful thing on the screen and made the editor's own chrome
+   read as the unfinished half. Three cheap layers fix that without spending any
+   attention: a dot grid that says "canvas" the way every design tool's does, a
+   soft brand bloom from the top so the pane belongs to stacked rather than to
+   no one, and a base that is darker than the panel beside it so the frame reads
+   as sitting ON something.
+
+   All three are backgrounds on one element — no extra DOM, nothing animated,
+   and the whole thing composites once. */
+.studio-stage {
+  background-color: oklch(0.115 0.008 300);
+  background-image:
+    radial-gradient(
+      120% 60% at 50% -10%,
+      color-mix(in oklab, var(--brand-violet) 13%, transparent),
+      transparent 65%
+    ),
+    radial-gradient(
+      circle at 1px 1px,
+      color-mix(in oklab, var(--foreground) 9%, transparent) 1px,
+      transparent 0
+    );
+  background-size:
+    100% 100%,
+    22px 22px;
+}
+
+/* ---------------------------------------------------------------------------
+   Link attention animations (LinkItem.highlight — see profile-view's
+   `linkHighlightClass`). These mark the ONE link a creator wants read first.
+
+   Every one of them runs on a WRAPPER around the button, never on the button
+   itself: the link box already animates `transform` for its hover lift, and a
+   keyframe animation on the same element beats the transition outright — the
+   button would stop responding to hover. Animating the parent leaves the
+   child's own transform free.
+
+   They also all rest at the identity transform and pause on hover, so pointing
+   at the link holds it still long enough to actually be clicked — a bouncing
+   target that keeps moving under the cursor is the failure mode of every
+   version of this feature.
+   --------------------------------------------------------------------------- */
+.link-fx-pulse,
+.link-fx-bounce,
+.link-fx-shake {
+  /* The wrapper is a layout box only; give it a rendering hint so a whole
+     column of them doesn't repaint on the main thread. */
+  will-change: transform;
+}
+.link-fx-glow {
+  /* Glow animates `filter`, not `transform` — hinting the wrong property is
+     worse than hinting none, since it promotes a layer that never changes. */
+  will-change: filter;
+}
+.link-fx-pulse:hover,
+.link-fx-bounce:hover,
+.link-fx-shake:hover,
+.link-fx-glow:hover {
+  animation-play-state: paused;
+}
+
+.link-fx-pulse {
+  animation: link-pulse 2s ease-in-out infinite;
+}
+@keyframes link-pulse {
+  0%,
+  70%,
+  100% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(1.035);
+  }
+}
+
+.link-fx-bounce {
+  animation: link-bounce 2.2s ease-in-out infinite;
+}
+@keyframes link-bounce {
+  0%,
+  55%,
+  100% {
+    transform: translateY(0);
+  }
+  30% {
+    transform: translateY(-6px);
+  }
+  42% {
+    transform: translateY(-2px);
+  }
+}
+
+/* Short, hard, and mostly rest: a shake that ran continuously read as a broken
+   page rather than as emphasis. One 0.5s burst every three seconds. */
+.link-fx-shake {
+  animation: link-shake 3s ease-in-out infinite;
+}
+@keyframes link-shake {
+  0%,
+  10%,
+  100% {
+    transform: translateX(0) rotate(0deg);
+  }
+  2% {
+    transform: translateX(-4px) rotate(-0.7deg);
+  }
+  4% {
+    transform: translateX(4px) rotate(0.7deg);
+  }
+  6% {
+    transform: translateX(-3px) rotate(-0.5deg);
+  }
+  8% {
+    transform: translateX(3px) rotate(0.5deg);
+  }
+}
+
+/* The one that isn't a transform: a bloom behind the button. A `blur()` on the
+   wrapper would blur the button itself, so this is a drop-shadow — which
+   follows the button's real (rounded, possibly transparent) silhouette rather
+   than boxing it.
+
+   `--fx-glow` is set inline to the button's own fill colour (see ProfileView),
+   so a green Terminal button blooms green instead of brand purple. The fallback
+   covers the Studio's preview chips, which have no button to sample. */
+.link-fx-glow {
+  animation: link-glow 2.4s ease-in-out infinite;
+}
+
+/* The Studio's preview chips for the animations above. They reuse the same
+   keyframes so a chip can never show something the page won't do, but they run
+   ONLY while hovered: five tiles bouncing and shaking at once in a control
+   panel is noise, and the whole point of the feature is that one link moves.
+   (This is also why they can't just wear `.link-fx-*` — those PAUSE on hover.) */
+.fx-demo {
+  animation-play-state: paused;
+  animation-iteration-count: infinite;
+}
+.fx-demo:hover,
+button:hover > .fx-demo,
+button:focus-visible > .fx-demo {
+  animation-play-state: running;
+}
+.fx-demo-pulse {
+  animation-name: link-pulse;
+  animation-duration: 1.4s;
+  animation-timing-function: ease-in-out;
+}
+.fx-demo-bounce {
+  animation-name: link-bounce;
+  animation-duration: 1.4s;
+  animation-timing-function: ease-in-out;
+}
+/* The real shake rests for most of its 3s cycle, which as a hover preview reads
+   as "nothing happened". Compressed to the burst alone. */
+.fx-demo-shake {
+  animation-name: fx-shake-demo;
+  animation-duration: 0.6s;
+  animation-timing-function: ease-in-out;
+}
+@keyframes fx-shake-demo {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-3px);
+  }
+  40% {
+    transform: translateX(3px);
+  }
+  60% {
+    transform: translateX(-2px);
+  }
+  80% {
+    transform: translateX(2px);
+  }
+}
+.fx-demo-glow {
+  animation-name: link-glow;
+  animation-duration: 1.6s;
+  animation-timing-function: ease-in-out;
+}
+@keyframes link-glow {
+  0%,
+  100% {
+    filter: drop-shadow(
+      0 0 2px
+        color-mix(
+          in oklab,
+          var(--fx-glow, var(--brand-violet)) 40%,
+          transparent
+        )
+    );
+  }
+  50% {
+    filter: drop-shadow(
+      0 0 12px
+        color-mix(
+          in oklab,
+          var(--fx-glow, var(--brand-violet)) 85%,
+          transparent
+        )
+    );
   }
 }
 
@@ -1621,4 +2027,27 @@ body:has([data-page-chrome="off"]),
 }
 .aurora-a {
   animation: aurora-drift-a 20s ease-in-out infinite;
+}
+
+/* Presence dot halo for the status pill — a Discord-style "I'm actually here"
+   tell. The halo is a SECOND circle behind the dot that expands and fades; the
+   dot itself never moves, so the mark stays crisp and readable while only the
+   glow breathes. Slow (2.4s) and low-contrast on purpose: this sits inches from
+   the creator's name and a fast blink would pull the eye off it.
+
+   `transform` + `opacity` only, so it composites on the GPU and costs nothing
+   on a page that may already be running a background shader. */
+@keyframes status-dot-halo {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  70%,
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+.status-dot-halo {
+  animation: status-dot-halo 2.4s ease-out infinite;
 }

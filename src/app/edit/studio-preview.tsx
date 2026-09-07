@@ -297,7 +297,7 @@ export function StudioPreview() {
       // element stays mounted either way, so its scroll position, outlines and
       // ResizeObserver survive the switch.
       className={cn(
-        "relative min-w-0 flex-1 flex-col bg-black/20 lg:flex",
+        "studio-stage relative min-w-0 flex-1 flex-col lg:flex",
         view === "preview" ? "flex" : "hidden",
       )}
     >
@@ -361,7 +361,11 @@ export function StudioPreview() {
 
       {/* The device frame fills the available space (up to the device cap), so
           the page's background shows all around the centered profile. */}
-      <div className="flex min-h-0 flex-1 justify-center p-3 sm:p-5">
+      {/* Enough margin for the canvas underneath to actually read. At the old
+          `p-3` the frame all but filled the pane in Desktop mode, so it stopped
+          looking like a device sitting on a workspace and started looking like
+          a second panel butted against the first. */}
+      <div className="flex min-h-0 flex-1 justify-center p-4 sm:p-6 lg:p-8">
         <div
           // `transform` makes this the containing block for any `position:fixed`
           // descendants (e.g. the "hidden" music player's floating control), so

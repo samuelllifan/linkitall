@@ -12,9 +12,9 @@ import { CloseIcon } from "~/components/ui/close-icon";
 import { Collapse } from "~/components/ui/collapse";
 import { InfoTip } from "~/components/ui/info-tip";
 import { Toggle } from "~/components/ui/toggle";
-import type { BoxStyle } from "~/lib/pages";
+import { type BoxShadow, type BoxStyle, DEFAULT_BOX_RADIUS } from "~/lib/pages";
 import { usePresence } from "~/lib/use-popover";
-import { cn } from "~/lib/utils";
+import { cn, sliderFill } from "~/lib/utils";
 import { type Selection, useStudio } from "./studio-context";
 
 /**
@@ -390,10 +390,16 @@ export function Slider({
   track?: string;
 }) {
   return (
-    <label className="flex flex-col gap-1.5 text-sm">
+    // `group`, so the read-out can answer the slider being touched. The number
+    // is the only feedback for a value with no visible unit, and leaving it at
+    // `muted` the whole time meant the control looked equally inert whether you
+    // were dragging it or not.
+    <label className="group flex flex-col gap-1.5 text-sm">
       <span className="flex justify-between text-muted-foreground">
         <span>{label}</span>
-        <span className="tabular-nums">{format ? format(value) : value}</span>
+        <span className="tabular-nums transition-colors group-hover:text-foreground group-focus-within:text-foreground">
+          {format ? format(value) : value}
+        </span>
       </span>
       <input
         type="range"
@@ -403,8 +409,11 @@ export function Slider({
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
         aria-label={label}
-        style={track ? { background: track } : undefined}
-        className={cn("w-full", track && "gradient-slider")}
+        // A colour track owns its own background, so it keeps `.gradient-slider`
+        // and paints it inline. Everything else is `.studio-slider`, whose fill
+        // is a hard-stop gradient driven by `--fill`.
+        style={track ? { background: track } : sliderFill(value, min, max)}
+        className={cn("w-full", track ? "gradient-slider" : "studio-slider")}
       />
     </label>
   );
@@ -470,9 +479,16 @@ export function Swatch({
 export function BoxControls({
   box,
   onChange,
+  defaultRadius = DEFAULT_BOX_RADIUS,
 }: {
   box: BoxStyle;
   onChange: (patch: Partial<BoxStyle>) => void;
+  /**
+   * What an unset radius renders as for THIS surface — link buttons and the
+   * name/bio card have different historical defaults (see DEFAULT_BOX_RADIUS).
+   * Getting it wrong here means the slider reads 8px over a button drawn at 6.
+   */
+  defaultRadius?: number;
 }) {
   const on = box.enabled !== false;
   return (
@@ -522,6 +538,155 @@ export function BoxControls({
           />
         </div>
       </div>
+      <CornerControl
+        value={box.radius ?? defaultRadius}
+        onChange={(radius) => onChange({ radius })}
+      />
+      <ShadowControl
+        value={box.shadow ?? "none"}
+        onChange={(shadow) => onChange({ shadow })}
+      />
     </div>
   );
 }
+
+/** The three named corner shapes, and the radius each one means. */
+const CORNER_PRESETS: { label: string; radius: number }[] = [
+  { label: "Square", radius: 0 },
+  { label: "Rounded", radius: 12 },
+  { label: "Pill", radius: 999 },
+];
+
+/**
+ * Corner shape: three named presets over a fine-grained slider.
+ *
+ * Both, rather than either alone. The slider by itself buries the only three
+ * values most people want behind a drag; the presets by themselves can't
+ * express the 6px a creator matching a brand actually asked for. The slider's
+ * top stop is the pill — a radius past half the button's height is
+ * indistinguishable from one at exactly half, so the scale ends where the shape
+ * stops changing.
+ */
+function CornerControl({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  // Anything at or above the pill threshold reads as "Pill", however it was
+  // stored — a legacy 999 and a slider-dragged 28 are the same shape.
+  const shown = Math.min(value, PILL_RADIUS);
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="grid grid-cols-3 gap-1 rounded-lg border border-border bg-muted/60 p-1">
+        {CORNER_PRESETS.map((p) => {
+          const on =
+            p.radius === 999 ? value >= PILL_RADIUS : shown === p.radius;
+          return (
+            <button
+              key={p.label}
+              type="button"
+              onClick={() =>
+                onChange(p.radius === 999 ? PILL_RADIUS : p.radius)
+              }
+              aria-pressed={on}
+              className={cn(
+                "flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 font-medium text-xs transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                on
+                  ? "bg-foreground text-background"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {/* A tile wearing the shape it names — the chips are their own
+                  legend, the same idea as the text-effect picker. */}
+              <span
+                aria-hidden
+                style={{
+                  borderRadius: p.radius === 999 ? 999 : p.radius / 2,
+                }}
+                className="size-3 border border-current"
+              />
+              {p.label}
+            </button>
+          );
+        })}
+      </div>
+      <Slider
+        label="Corners"
+        value={shown}
+        min={0}
+        max={PILL_RADIUS}
+        step={1}
+        onChange={onChange}
+        format={(v) => (v >= PILL_RADIUS ? "Pill" : `${v}px`)}
+      />
+    </div>
+  );
+}
+
+/** Where the corner slider tops out — past this a button reads as a pill. */
+const PILL_RADIUS = 28;
+
+const SHADOWS: { value: BoxShadow; label: string }[] = [
+  { value: "none", label: "None" },
+  { value: "soft", label: "Soft" },
+  { value: "hard", label: "Hard" },
+  { value: "glow", label: "Glow" },
+];
+
+/** Drop-shadow picker, each chip previewing its own shadow on a small tile. */
+function ShadowControl({
+  value,
+  onChange,
+}: {
+  value: BoxShadow;
+  onChange: (v: BoxShadow) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5 text-sm">
+      <span className="text-muted-foreground">Shadow</span>
+      <div className="grid grid-cols-4 gap-1 rounded-lg border border-border bg-muted/60 p-1">
+        {SHADOWS.map((s) => {
+          const on = value === s.value;
+          return (
+            <button
+              key={s.value}
+              type="button"
+              onClick={() => onChange(s.value)}
+              aria-pressed={on}
+              className={cn(
+                "flex flex-col items-center gap-1 rounded-md px-1 py-1.5 font-medium text-xs transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                on
+                  ? "bg-foreground text-background"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <span
+                aria-hidden
+                style={{ boxShadow: SHADOW_SWATCH[s.value] }}
+                className={cn(
+                  "h-2.5 w-5 rounded-[3px]",
+                  // The tile is the surface the shadow falls off, so it has to
+                  // stay light on both chip states — on the selected chip the
+                  // background is `--foreground`, i.e. near-white, and a
+                  // `currentColor` tile would vanish into it.
+                  on ? "bg-background/70" : "bg-foreground/70",
+                )}
+              />
+              {s.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** Miniatures of `boxShadowCss`, scaled to the 20×10px chip swatch. */
+const SHADOW_SWATCH: Record<BoxShadow, string | undefined> = {
+  none: undefined,
+  soft: "0 3px 6px -1px rgba(0, 0, 0, 0.7)",
+  hard: "2px 2px 0 0 rgba(0, 0, 0, 0.85)",
+  glow: "0 0 6px 0 var(--brand-violet)",
+};

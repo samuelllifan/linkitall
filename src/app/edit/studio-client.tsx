@@ -35,8 +35,11 @@ import {
   LinksPanel,
   MusicPanel,
   ProfilePanel,
+  StatusPanel,
+  ThemesPanel,
 } from "./studio-panels";
 import { StudioPreview } from "./studio-preview";
+import { Modal } from "./studio-ui";
 
 function Icon({
   id,
@@ -48,10 +51,16 @@ function Icon({
   style?: CSSProperties;
 }) {
   const paths: Record<SectionId, string> = {
+    // A paint-roller-ish swatch: the one control that repaints the whole page.
+    themes:
+      "M4.5 4.5h11v5h-11zM15.5 7h3a1.5 1.5 0 0 1 1.5 1.5V12a1.5 1.5 0 0 1-1.5 1.5H12v2M10.5 15.5h3v5h-3z",
     profile: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM5 20a7 7 0 0 1 14 0",
     links:
       "M9 15l6-6M8.5 13 6.5 15a3 3 0 1 0 4 4l2-2m1.5-4 2-2a3 3 0 1 0-4-4l-2 2",
     background: "M4 5h16v14H4zM4 15l4-4 4 4 3-3 5 5",
+    // A speech bubble wearing a presence dot: the two halves of a status line.
+    status:
+      "M4 6.5A2.5 2.5 0 0 1 6.5 4h8A2.5 2.5 0 0 1 17 6.5v5a2.5 2.5 0 0 1-2.5 2.5H9l-4 3.5v-3.5H6.5A2.5 2.5 0 0 1 4 11.5zM19 6.5a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z",
     music:
       "M9 18V6l10-2v12M9 18a2 2 0 1 1-4 0 2 2 0 0 1 4 0Zm10-2a2 2 0 1 1-4 0 2 2 0 0 1 4 0Z",
     intro: "M12 3l2.1 5.9L20 11l-5.9 2.1L12 19l-2.1-5.9L4 11l5.9-2.1L12 3Z",
@@ -109,6 +118,135 @@ function EyeIcon({ className }: { className?: string }) {
   );
 }
 
+/** Undo / redo. Mirrored rather than two separate arrows, so the pair reads as
+ *  one control with two directions.
+ *
+ *  The arc is a half turn, not the near-complete circle it used to be: a 350°
+ *  sweep plus an arrowhead reads as "reload", which is the one thing undo must
+ *  not be mistaken for, and at 16px the gap closed up into a blob. A chevron
+ *  head on a clean semicircle keeps the direction legible at that size, and its
+ *  bounding box is centred in the 24-box so the two sit level in their track. */
+function UndoIcon({ className, flip }: { className?: string; flip?: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className={className}
+      style={flip ? { transform: "scaleX(-1)" } : undefined}
+    >
+      <path d="M9 14 4 9l5-5" />
+      <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H10" />
+    </svg>
+  );
+}
+
+function CopyIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className={className}
+    >
+      <rect x="9" y="9" width="12" height="12" rx="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </svg>
+  );
+}
+
+function CheckIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className={className}
+    >
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
+  );
+}
+
+function ExternalIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className={className}
+    >
+      <path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+    </svg>
+  );
+}
+
+function KeyboardIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className={className}
+    >
+      <rect x="2" y="6" width="20" height="12" rx="2" />
+      <path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8" />
+    </svg>
+  );
+}
+
+/** A header icon button for one direction of the history. Square and sized in
+ *  whole pixels, so the two are identical mirrored blocks rather than a pair of
+ *  padded icons whose optical weight drifts with the glyph. Hover fills to full
+ *  --muted, a clear step up from the 40%-strength fill of the track behind it,
+ *  so the highlight still reads now that the pair sits inside a box. */
+function HistoryButton({
+  label,
+  hint,
+  disabled,
+  onClick,
+  flip,
+}: {
+  label: string;
+  hint: string;
+  disabled: boolean;
+  onClick: () => void;
+  flip?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={`${label} (${hint})`}
+      aria-label={label}
+      className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:bg-transparent disabled:opacity-30 lg:size-7"
+    >
+      <UndoIcon className="size-4 lg:size-3.5" flip={flip} />
+    </button>
+  );
+}
+
 const VIEWS: { id: StudioView; label: string; icon: typeof WrenchIcon }[] = [
   { id: "edit", label: "Edit", icon: WrenchIcon },
   { id: "preview", label: "Preview", icon: EyeIcon },
@@ -118,6 +256,25 @@ const VIEWS: { id: StudioView; label: string; icon: typeof WrenchIcon }[] = [
 const ASIDE_MIN = 300;
 const ASIDE_MAX = 680;
 
+/** Where "don't ask again on this device" for the publish dialog is kept. */
+const SKIP_CONFIRM_KEY = "studio:skipSaveConfirm";
+
+/**
+ * Whether a keydown landed in something the user is typing into — an input, a
+ * textarea, or the contentEditable name/bio field. Bare-letter shortcuts have
+ * to stand down inside these, or they eat the character.
+ */
+function isTypingTarget(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null;
+  if (!el || !el.tagName) return false;
+  return (
+    el.tagName === "INPUT" ||
+    el.tagName === "TEXTAREA" ||
+    el.tagName === "SELECT" ||
+    el.isContentEditable
+  );
+}
+
 /** A link whose URL is empty or a bare scheme — not safe to publish. */
 function isBlankHref(href: string): boolean {
   const t = href.trim();
@@ -125,21 +282,34 @@ function isBlankHref(href: string): boolean {
 }
 
 const NAV: { id: SectionId; label: string }[] = [
+  // Themes first: it is where a new page should start, and one click there
+  // does more than twenty in any other section.
+  { id: "themes", label: "Themes" },
   { id: "profile", label: "Profile" },
   { id: "links", label: "Links" },
-  { id: "background", label: "Background" },
+  // "Page" rather than "Background": the section owns the page surface AND the
+  // panel behind the profile block, and at six chips the longer word was the
+  // one label in the rail that truncated.
+  { id: "background", label: "Page" },
+  // Status sits with the identity sections (it renders under the name), ahead
+  // of the two page-wide extras.
+  { id: "status", label: "Status" },
   { id: "music", label: "Music" },
   { id: "intro", label: "Intro" },
 ];
 
 function SectionBody({ section }: { section: SectionId }) {
   switch (section) {
+    case "themes":
+      return <ThemesPanel />;
     case "profile":
       return <ProfilePanel />;
     case "links":
       return <LinksPanel />;
     case "background":
       return <BackgroundPanel />;
+    case "status":
+      return <StatusPanel />;
     case "music":
       return <MusicPanel />;
     case "intro":
@@ -147,7 +317,13 @@ function SectionBody({ section }: { section: SectionId }) {
   }
 }
 
-function Shell({ username }: { username: string }) {
+function Shell({
+  username,
+  demo = false,
+}: {
+  username: string;
+  demo?: boolean;
+}) {
   const {
     data,
     section,
@@ -160,6 +336,10 @@ function Shell({ username }: { username: string }) {
     markSaved,
     view,
     setView,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
   } = useStudio();
   const liveHref = `/${username}`;
 
@@ -174,6 +354,56 @@ function Shell({ username }: { username: string }) {
   const [flashKey, setFlashKey] = useState(0);
   const [flashing, setFlashing] = useState(false);
   const confirmSaveBtnRef = useRef<HTMLButtonElement>(null);
+  const [copied, setCopied] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+
+  // "Don't ask again" for the publish confirmation. Read after mount rather
+  // than in the initializer so the server render and the first client render
+  // agree; the flag only gates a dialog, so a first paint without it is
+  // harmless (nothing can be saved before the user clicks).
+  const [skipConfirm, setSkipConfirmState] = useState(false);
+  useEffect(() => {
+    try {
+      setSkipConfirmState(localStorage.getItem(SKIP_CONFIRM_KEY) === "1");
+    } catch {
+      /* ignore — the dialog just keeps asking, which is the safe default */
+    }
+  }, []);
+  const setSkipConfirm = useCallback((v: boolean) => {
+    setSkipConfirmState(v);
+    try {
+      if (v) localStorage.setItem(SKIP_CONFIRM_KEY, "1");
+      else localStorage.removeItem(SKIP_CONFIRM_KEY);
+    } catch {
+      /* ignore — the preference just won't survive a reload */
+    }
+  }, []);
+
+  // Copy the page's public URL. Built from the live origin rather than a
+  // hard-coded stacked.page so a preview deployment copies its own address
+  // instead of one that points at production.
+  const copyLink = useCallback(() => {
+    const url = `${window.location.origin}/${username}`;
+    navigator.clipboard
+      ?.writeText(url)
+      .then(() => {
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 1600);
+      })
+      .catch(() => {
+        /* Clipboard denied (insecure context, or the user said no). The URL is
+           right there in the header to select by hand — no error worth a toast. */
+      });
+  }, [username]);
+
+  // The history shortcuts, spelled the way this keyboard spells them. Resolved
+  // after mount so the server render and the first client render agree.
+  const [isMac, setIsMac] = useState(false);
+  useEffect(() => {
+    setIsMac(/mac/i.test(navigator.platform || navigator.userAgent));
+  }, []);
+  const undoHint = isMac ? "\u2318Z" : "Ctrl+Z";
+  const redoHint = isMac ? "\u21e7\u2318Z" : "Ctrl+Y";
 
   const flash = useCallback(() => {
     setFlashKey((k) => k + 1);
@@ -183,24 +413,26 @@ function Shell({ username }: { username: string }) {
   // Block in-app navbar navigation while dirty; a blocked click flashes the bar.
   const guard = useUnsavedGuard();
   useEffect(() => {
-    guard.setDirty(dirty);
-    guard.setOnBlocked(dirty ? flash : null);
+    // The sandbox has nothing to lose, so it never blocks navigation.
+    const guarded = dirty && !demo;
+    guard.setDirty(guarded);
+    guard.setOnBlocked(guarded ? flash : null);
     return () => {
       guard.setDirty(false);
       guard.setOnBlocked(null);
     };
-  }, [dirty, guard, flash]);
+  }, [dirty, demo, guard, flash]);
 
   // Also prompt on hard navigations — reload, tab close, OS/back gesture.
   useEffect(() => {
-    if (!dirty) return;
+    if (!dirty || demo) return;
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
       e.preventDefault();
       e.returnValue = "";
     };
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
-  }, [dirty]);
+  }, [dirty, demo]);
 
   const unsavedBar = usePresence(dirty);
   // The "Saved" pill lands in the same slot the unsaved bar just left, and that
@@ -218,10 +450,17 @@ function Shell({ username }: { username: string }) {
     setSaveError(null);
     // Don't let a half-finished link (blank/placeholder URL) save silently — it
     // would render as a dead entry. Jump to the first offender instead.
-    const blank = data.links.find((l) => isBlankHref(l.href));
+    // Headers are labels, not destinations — they have no URL to be missing.
+    const blank = data.links.find(
+      (l) => l.kind !== "header" && isBlankHref(l.href),
+    );
     if (blank) {
       select(`link:${blank.id}`);
       setSaveError("Add a URL to every link before saving.");
+      return;
+    }
+    if (skipConfirm) {
+      confirmSaveRef.current();
       return;
     }
     setConfirmingSave(true);
@@ -234,8 +473,10 @@ function Shell({ username }: { username: string }) {
     try {
       // `savePage` also lifts any inline base64 avatar/media into Storage before
       // it writes the row. It's given the draft, so the local baseline stays the
-      // pre-upload draft.
-      await savePage(data);
+      // pre-upload draft. The sandbox skips the write entirely — everything
+      // else about the flow (the pill, the toast, the baseline advancing) is
+      // exactly what a real save does, which is the point of the demo.
+      if (!demo) await savePage(data);
       markSaved();
       setJustSaved(true);
       window.setTimeout(() => setJustSaved(false), 2000);
@@ -269,20 +510,47 @@ function Shell({ username }: { username: string }) {
 
   // Guard the Studio's own "Back" link the same way the navbar links are guarded.
   function guardedBack(e: React.MouseEvent) {
-    if (dirty) {
+    if (dirty && !demo) {
       e.preventDefault();
       flash();
     }
   }
 
-  // Global shortcuts: Cmd/Ctrl+S saves; Escape clears the selection (collapsing
-  // the focused card). A ref keeps the handler current without re-subscribing on
-  // every keystroke.
+  // Global shortcuts: Cmd/Ctrl+S saves; Cmd/Ctrl+Z steps through the history;
+  // Escape clears the selection (collapsing the focused card). A ref keeps the
+  // handler current without re-subscribing on every keystroke.
   const shortcutRef = useRef<(e: KeyboardEvent) => void>(() => {});
   shortcutRef.current = (e: KeyboardEvent) => {
-    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
+    const mod = e.metaKey || e.ctrlKey;
+    if (mod && e.key.toLowerCase() === "s") {
       e.preventDefault();
       if (dirty && !confirmingSave) save();
+      return;
+    }
+    // Undo/redo owns the whole draft, so it fires from inside a text field too.
+    // Every field here renders from the draft, and leaving the browser's own
+    // per-field undo running underneath would let the two stacks drift apart —
+    // one Cmd+Z restoring a word the preview never agreed to. Ctrl+Y is here for
+    // the Windows muscle memory that never learned Ctrl+Shift+Z.
+    if (mod && !confirmingSave) {
+      const key = e.key.toLowerCase();
+      if (key === "z") {
+        e.preventDefault();
+        if (e.shiftKey) redo();
+        else undo();
+        return;
+      }
+      if (key === "y") {
+        e.preventDefault();
+        redo();
+        return;
+      }
+    }
+    // "?" opens the shortcut sheet — but only from outside a text field, or it
+    // would swallow the question mark in a bio.
+    if (e.key === "?" && !mod && !isTypingTarget(e.target)) {
+      e.preventDefault();
+      setShortcutsOpen((v) => !v);
       return;
     }
     if (e.key === "Escape" && !confirmingSave && selection) {
@@ -427,21 +695,86 @@ function Shell({ username }: { username: string }) {
         {/* Below sm the pane toggle takes the room the URL would need, so the
             identity drops out — as the navbar drops its @username. */}
         <span className="hidden text-border sm:inline">|</span>
-        <span className="hidden min-w-0 items-center gap-1.5 truncate text-muted-foreground sm:inline-flex">
-          {/* This page is already public — the header says what it is, and that
-              it is live is the one part that was missing. Green means "good"
-              app-wide and appears nowhere in the brand gradient, so it can only
-              be read as status here. */}
-          <span
-            aria-hidden
-            className="size-1.5 shrink-0 rounded-full bg-success"
-          />
-          stacked.page/{username}
-        </span>
+        {/* The page's address, and the two things anyone ever wants to do with
+            it: copy it, or go look at it. It used to be inert text, so the
+            single most common task after editing a link-in-bio page — send
+            someone the link — meant retyping the URL from the header by hand. */}
+        <div className="hidden min-w-0 items-center gap-0.5 sm:flex">
+          <button
+            type="button"
+            onClick={copyLink}
+            title="Copy your page link"
+            className="flex min-w-0 items-center gap-1.5 rounded-md px-1.5 py-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          >
+            {/* This page is already public — the header says what it is, and
+                that it is live is the one part that was missing. Green means
+                "good" app-wide and appears nowhere in the brand gradient, so it
+                can only be read as status here. */}
+            <span
+              aria-hidden
+              className="size-1.5 shrink-0 rounded-full bg-success"
+            />
+            <span className="truncate">stacked.page/{username}</span>
+            {copied ? (
+              <CheckIcon className="size-3.5 shrink-0 text-success" />
+            ) : (
+              <CopyIcon className="size-3.5 shrink-0 opacity-60" />
+            )}
+          </button>
+          <a
+            href={liveHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Open your live page in a new tab"
+            aria-label="Open your live page in a new tab"
+            className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          >
+            <ExternalIcon className="size-3.5" />
+          </a>
+        </div>
+
+        {/* Undo / redo. In the header rather than beside any one control: it
+            belongs to the draft as a whole, and it has to be in the same place
+            whichever section is open.
+
+            The two share one recessed track with a hairline divider between
+            them. Loose, they read as two unrelated round glyphs adrift in the
+            header — the same mistake the section rail used to make. Boxed, they
+            are one control with two directions, which is what they are, and the
+            box gives the disabled state something to be dim against. */}
+        <div className="ml-auto flex items-center gap-1">
+          <div className="flex items-center rounded-lg border border-border bg-muted/40 p-0.5">
+            <HistoryButton
+              label="Undo"
+              hint={undoHint}
+              disabled={!canUndo}
+              onClick={undo}
+            />
+            <span aria-hidden className="h-4 w-px shrink-0 bg-border" />
+            <HistoryButton
+              label="Redo"
+              hint={redoHint}
+              disabled={!canRedo}
+              onClick={redo}
+              flip
+            />
+          </div>
+          {/* Discoverability for the shortcuts that already existed. ⌘S, ⌘Z and
+              Escape were all live and documented nowhere on screen. */}
+          <button
+            type="button"
+            onClick={() => setShortcutsOpen(true)}
+            title="Keyboard shortcuts (?)"
+            aria-label="Keyboard shortcuts"
+            className="hidden size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 lg:flex"
+          >
+            <KeyboardIcon className="size-4" />
+          </button>
+        </div>
 
         {/* Phone pane toggle: the controls and the preview each take the whole
             screen, so one of them is always fully usable. */}
-        <div className="ml-auto flex gap-1 rounded-lg border border-border bg-card p-1 lg:hidden">
+        <div className="flex gap-1 rounded-lg border border-border bg-card p-1 lg:hidden">
           {VIEWS.map((v) => (
             <button
               key={v.id}
@@ -492,7 +825,7 @@ function Shell({ username }: { username: string }) {
               a positioned marker would otherwise paint over their icons. */}
           <nav
             ref={markerRef}
-            className="relative grid grid-cols-5 gap-1 border-border border-b p-2"
+            className="relative grid grid-cols-6 gap-1 border-border border-b p-2"
           >
             {/* Translated AND sized, rather than stretched with top-0/bottom-0
                 the way the navbar's is: this rail has `p-2`, so a stretched
@@ -556,7 +889,10 @@ function Shell({ username }: { username: string }) {
             // Extra bottom room on phones so the fixed unsaved-changes pill never
             // parks on top of the last control. On desktop the pill is centred on
             // the viewport, which puts it over the preview, not the panel.
-            className="min-h-0 flex-1 overflow-y-auto p-4 pb-28 lg:pb-4"
+            // `@container`, so panels can respond to the PANEL's width rather
+            // than the viewport's: this pane is user-resizable between 300 and
+            // 680px, which no viewport breakpoint knows anything about.
+            className="@container min-h-0 flex-1 overflow-y-auto p-4 pb-28 lg:pb-4"
           >
             <SectionBody section={section} />
           </div>
@@ -656,6 +992,49 @@ function Shell({ username }: { username: string }) {
         </div>
       ) : null}
 
+      {/* Keyboard shortcuts. Reuses the Studio's shared Modal so it fades and
+          scales like every other dialog here. */}
+      <Modal
+        open={shortcutsOpen}
+        title="Keyboard shortcuts"
+        onClose={() => setShortcutsOpen(false)}
+        size="sm"
+      >
+        <dl className="flex flex-col">
+          {[
+            { keys: [isMac ? "⌘" : "Ctrl", "S"], what: "Save your changes" },
+            { keys: [isMac ? "⌘" : "Ctrl", "Z"], what: "Undo" },
+            {
+              keys: isMac ? ["⇧", "⌘", "Z"] : ["Ctrl", "Y"],
+              what: "Redo",
+            },
+            { keys: ["Esc"], what: "Deselect / close" },
+            { keys: ["?"], what: "This list" },
+          ].map((row) => (
+            <div
+              key={row.what}
+              className="flex items-center justify-between gap-4 border-border/60 border-b py-2 last:border-0"
+            >
+              <dt className="text-muted-foreground text-sm">{row.what}</dt>
+              <dd className="flex shrink-0 items-center gap-1">
+                {row.keys.map((k) => (
+                  <kbd
+                    key={k}
+                    className="min-w-6 rounded border border-border bg-muted px-1.5 py-0.5 text-center font-medium font-sans text-[11px] text-foreground"
+                  >
+                    {k}
+                  </kbd>
+                ))}
+              </dd>
+            </div>
+          ))}
+        </dl>
+        <p className="mt-3 text-muted-foreground/70 text-[11px]">
+          Undo covers every edit in the Studio, including applying a theme and
+          discarding changes.
+        </p>
+      </Modal>
+
       {/* Confirm save dialog */}
       {confirmDlg.value ? (
         <div
@@ -681,10 +1060,26 @@ function Shell({ username }: { username: string }) {
               confirmDlg.visible ? "animate-pop" : "animate-pop-out",
             )}
           >
-            <h2 className="font-semibold text-lg">Confirm changes</h2>
+            <h2 className="font-semibold text-lg">Publish changes</h2>
             <p className="mt-2 text-muted-foreground text-sm">
-              Are you sure you want to save these changes?
+              This updates your live page at{" "}
+              <span className="text-foreground">stacked.page/{username}</span>{" "}
+              right away.
             </p>
+            {/* An escape hatch from a dialog that, once you've read it once,
+                stands between you and every subsequent save. The safety net is
+                worth having the first time — it isn't worth having the
+                fortieth, and an editor that asks "are you sure?" on every save
+                trains people to click through it without reading. */}
+            <label className="mt-4 flex cursor-pointer select-none items-center gap-2 text-muted-foreground text-sm hover:text-foreground">
+              <input
+                type="checkbox"
+                checked={skipConfirm}
+                onChange={(e) => setSkipConfirm(e.target.checked)}
+                className="size-4 accent-[var(--brand-violet)]"
+              />
+              Don't ask again on this device
+            </label>
             <div className="mt-4 flex justify-end gap-2">
               <Button
                 variant="ghost"
@@ -694,7 +1089,7 @@ function Shell({ username }: { username: string }) {
                 Cancel
               </Button>
               <Button ref={confirmSaveBtnRef} size="sm" onClick={confirmSave}>
-                Confirm
+                Publish
               </Button>
             </div>
           </div>
@@ -707,9 +1102,16 @@ function Shell({ username }: { username: string }) {
 export function StudioClient({
   initialData,
   username,
+  demo = false,
 }: {
   initialData: PageData | null;
   username: string;
+  /**
+   * Sandbox mode: the whole editor works, but Save never writes a row and the
+   * unsaved-changes guards stand down. Used by the /studio-demo tour route so
+   * the Studio can be shown (and driven) without an account behind it.
+   */
+  demo?: boolean;
 }) {
   // No page row yet: start from a blank draft seeded with their username, so
   // the first thing they see is their own name rather than an empty field. The
@@ -720,7 +1122,7 @@ export function StudioClient({
 
   return (
     <StudioProvider initial={initial} baseline={initialData ?? blank}>
-      <Shell username={username} />
+      <Shell username={username} demo={demo} />
     </StudioProvider>
   );
 }

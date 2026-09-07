@@ -387,7 +387,16 @@ export function HowItWorks() {
             items of this container in their own right, and the demo can be
             ordered BETWEEN them -- so a step is never separated from the thing
             it drives. At lg the wrapper is a normal block holding column one. */}
-        <div className="flex flex-col gap-10 lg:flex-row lg:items-center lg:gap-12">
+        {/* items-start, not items-center. Centring balanced two columns of very
+            different heights -- 406px of heading + steps against the demo's
+            758px -- by dropping ~176px of black above the heading, so "How it
+            works" floated at the section's vertical middle with nothing over it
+            and read as unmoored from the section it titles. Starting both
+            columns puts the heading back at the top edge where a section title
+            belongs; the copy column's own bottom air is now simply the height
+            the demo needs, which the eye reads as the demo being tall rather
+            than the heading being adrift. */}
+        <div className="flex flex-col gap-10 lg:flex-row lg:items-start lg:gap-12">
           {/* flex-1, so switching device visibly pushes this column aside: the
               demo column's width is what animates, and this one re-flows to
               fill whatever is left on every frame of it.
@@ -406,13 +415,45 @@ export function HowItWorks() {
             <Reveal
               as="h2"
               id="how-it-works-heading"
-              className="order-1 text-balance font-bold text-3xl leading-tight tracking-tight sm:text-4xl md:text-5xl"
+              className="order-1 text-balance font-bold text-3xl leading-tight tracking-tight sm:text-4xl md:text-5xl lg:max-w-2xl"
             >
               How it works
             </Reveal>
 
+            {/* Two lg-only corrections, both about edges this column did not
+                have. The wrapper above is `flex-1` ON PURPOSE (see its comment)
+                and stays that way -- it has to keep absorbing the leftover so
+                the demo column's width is the thing that animates on a device
+                switch. What gets capped is the CONTENT inside it, not the
+                column.
+
+                max-w-2xl, because without it these rows inherited the whole
+                leftover: 864px cards at a 1440 viewport and 1024px at 1920,
+                holding descriptions whose text is only 554 / 474 / 345px wide.
+                Step three was a 60%-empty box at 1920 -- and the ACTIVE row
+                draws the brand ring and the progress bar around exactly that
+                emptiness, so the widest void was also the most conspicuous
+                thing in the section. The cap also settles the ragged right
+                edge, which was landing ~270px apart across the three rows, so
+                they read as a column of text instead of a triangle. 2xl is
+                sized off the longest line: step one's 554px plus the copy's
+                2.6rem indent and the card's own padding lands just under it, so
+                the longest row fills its card and nothing wraps to a second
+                line. The leftover the cap gives up becomes a gutter BETWEEN the
+                two columns, which reads as air; the same pixels inside a
+                bordered card read as a mistake.
+
+                The negative margin puts the heading and the list back on one
+                left rail. These buttons carry `sm:p-5` so their card fill has
+                room, which pushed the "01" 21px right of the h2 above it -- a
+                drift small enough to never look like a bug and big enough to
+                make the column feel untidy. Pulling the list out by exactly
+                that padding aligns the step numbers to the heading while the
+                cards keep their inset. lg-only: at mobile widths the section's
+                px-6 is all that stands between these cards and the viewport
+                edge, and -20px would eat most of it. */}
             <ol
-              className="order-3 flex flex-col gap-2 lg:mt-10"
+              className="order-3 flex flex-col gap-2 lg:-ml-5 lg:mt-10 lg:max-w-2xl"
               onMouseEnter={() => setHovering(true)}
               onMouseLeave={() => setHovering(false)}
               onFocusCapture={() => setHovering(true)}

@@ -14,8 +14,11 @@ import type { ReactNode } from "react";
  * A wrapper rather than a check inside `Footer` itself, so the footer stays a
  * server component — only this boundary ships to the client.
  */
+/** Routes that mount the Studio shell and therefore own the whole viewport. */
+const FULL_HEIGHT_ROUTES = new Set(["/edit", "/studio-demo"]);
+
 export function FooterSlot({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  if (pathname === "/edit") return null;
+  if (FULL_HEIGHT_ROUTES.has(pathname)) return null;
   return <>{children}</>;
 }

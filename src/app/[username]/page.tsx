@@ -30,7 +30,11 @@ export const dynamic = "force-dynamic";
  * instead of a stale one. (The image route itself is already `force-dynamic`.)
  */
 function contentVersion(page: PublicPage): string {
-  const { name, bio, avatar, nameStyle, bioStyle, background } = page.data;
+  const { name, bio, avatar, nameStyle, bioStyle, background, hidden } =
+    page.data;
+  // `hidden` belongs here for the same reason the rest do: switching the name
+  // off changes what the card renders, and a version that did not move would
+  // leave every scraper holding the card that still shows it.
   const key = JSON.stringify([
     name,
     bio,
@@ -38,6 +42,7 @@ function contentVersion(page: PublicPage): string {
     nameStyle,
     bioStyle,
     background,
+    hidden,
   ]);
   let h = 2166136261; // FNV-1a
   for (let i = 0; i < key.length; i++) {
@@ -234,6 +239,7 @@ export default async function UserPage({
     !page.data.background &&
     !page.data.music?.enabled &&
     !page.data.intro?.enabled &&
+    !page.data.status?.enabled &&
     page.data.links.length === 0;
   if (isOwner && isEmpty) {
     return (

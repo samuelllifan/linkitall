@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { FinalCta } from "~/components/final-cta";
 import { HowItWorks } from "~/components/how-it-works";
-import { isLinkLive, type PageData } from "~/lib/pages";
+import { type Background, isLinkLive, type PageData } from "~/lib/pages";
 import { getFeaturedPagesServer, getPageServer } from "~/lib/pages.server";
 import { SITE_TITLE } from "~/lib/site-meta";
 import { HomeHero } from "./home-hero";
@@ -77,14 +77,17 @@ export default async function Home() {
 // and runs a perpetual animation on every card), and swap an aurora background
 // for a plain gradient.
 //
-// The aurora swap is a hard requirement, not a nicety: AuroraCanvas creates a
-// WebGL context per mount (profile-view.tsx), and pinning `speed` to 0 only
-// stops the rAF loop -- the context is still created. One featured page with an
-// aurora background appears once per card, so the wall was holding ~10 live
-// contexts at 2316x1446 each (~13MB of GPU memory apiece). Browsers cap live
-// WebGL contexts around 16 and silently drop the oldest, which blanks cards.
-// A vertical `color -> baseColor` gradient reads almost identically at the
-// wall's card size and costs nothing.
+// The shader swap is a hard requirement, not a nicety: every shader background
+// creates a WebGL context per mount (ShaderCanvas), and pinning `speed` to 0
+// only stops the rAF loop -- the context is still created. One featured page
+// with a shader background appears once per card, so the wall was holding ~10
+// live contexts at 2316x1446 each (~13MB of GPU memory apiece). Browsers cap
+// live WebGL contexts around 16 and silently drop the oldest, which blanks
+// cards. A static two-stop gradient reads almost identically at the wall's card
+// size and costs nothing.
+//
+// This applies to EVERY shader type, not just aurora -- adding a fifth one
+// means adding it to `staticStandIn` below, or the wall starts blanking again.
 function sanitizeForPreview(page: PageData): PageData {
   return {
     ...page,
@@ -92,17 +95,41 @@ function sanitizeForPreview(page: PageData): PageData {
     music: undefined,
     intro: undefined,
     avatarEffect: undefined,
-    background:
-      page.background?.type === "aurora"
-        ? {
-            type: "gradient",
-            from: page.background.color,
-            to: page.background.baseColor,
-            direction: "vertical",
-            // The real aurora blooms from the top and fades out well before the
-            // bottom, so bias the blend upward instead of the 50% default.
-            distribution: 35,
-          }
-        : page.background,
+    background: staticStandIn(page.background),
   };
+}
+
+/**
+ * A no-WebGL stand-in for a shader background, for the landing wall's cards.
+ * Anything else is returned untouched.
+ *
+ * Each one keeps the page's own colours and the direction its light actually
+ * comes from, so a card still looks like the page it is advertising:
+ *
+ *  - Aurora blooms from the top and fades out well before the bottom, so the
+ *    blend is biased upward rather than sitting at the 50% default.
+ *  - Ripple is lit from above too, but far more weakly, and its base colour is
+ *    most of what a card-sized version shows.
+ */
+function staticStandIn(bg: Background | undefined): Background | undefined {
+  if (!bg) return bg;
+  if (bg.type === "aurora") {
+    return {
+      type: "gradient",
+      from: bg.color,
+      to: bg.baseColor,
+      direction: "vertical",
+      distribution: 35,
+    };
+  }
+  if (bg.type === "ripple") {
+    return {
+      type: "gradient",
+      from: bg.glowColor,
+      to: bg.baseColor,
+      direction: "vertical",
+      distribution: 12,
+    };
+  }
+  return bg;
 }

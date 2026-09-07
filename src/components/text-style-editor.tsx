@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { FONTS, NO_TINT } from "~/components/profile-view";
 import { Button } from "~/components/ui/button";
 import type { TextStyle } from "~/lib/pages";
@@ -333,8 +333,12 @@ export function TextStyleEditor({
           aria-label="Text font"
           className="h-8 rounded-md border border-input bg-transparent px-2 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring md:text-sm"
         >
+          {/* Each option set in its own face, so the list is a specimen sheet
+              rather than twelve names in the same font. Twelve typefaces whose
+              only difference is their name is not a choice anyone can make
+              without picking one, looking at the preview, and going back. */}
           {Object.entries(FONTS).map(([key, f]) => (
-            <option key={key} value={key}>
+            <option key={key} value={key} style={{ fontFamily: f.family }}>
               {f.label}
             </option>
           ))}
@@ -410,6 +414,99 @@ export function TextStyleEditor({
           onChange={(c) => onChange({ color: c })}
           ariaLabel="Text color"
         />
+      </div>
+      <TextEffectPicker
+        value={style.animation ?? "none"}
+        onChange={(animation) => onChange({ animation })}
+      />
+    </div>
+  );
+}
+
+/** The four text effects, each labelled by a chip that IS the effect. */
+const TEXT_EFFECTS: {
+  value: NonNullable<TextStyle["animation"]>;
+  label: string;
+}[] = [
+  { value: "none", label: "None" },
+  { value: "gradient", label: "Gradient" },
+  { value: "rainbow", label: "Rainbow" },
+  { value: "shine", label: "Shine" },
+];
+
+/**
+ * Animated text effect picker.
+ *
+ * Deliberately NOT the app's `Segmented` control: three of the four options are
+ * a *look*, and naming a look is a poor substitute for showing it — a row of
+ * words reading "Gradient / Rainbow / Shine" asks the creator to click each one
+ * and watch the preview to find out what they mean. Each chip here renders its
+ * own label through its own effect, so the control is its own legend.
+ *
+ * The chips share the real `.text-anim-*` classes with the page, so they cannot
+ * drift from what choosing them actually does.
+ */
+function TextEffectPicker({
+  value,
+  onChange,
+}: {
+  value: NonNullable<TextStyle["animation"]>;
+  onChange: (v: NonNullable<TextStyle["animation"]>) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5 text-sm">
+      <span className="text-muted-foreground">Effect</span>
+      <div className="grid grid-cols-4 gap-1 rounded-lg border border-border bg-muted/60 p-1">
+        {TEXT_EFFECTS.map((e) => {
+          const on = value === e.value;
+          const anim =
+            e.value === "none"
+              ? ""
+              : e.value === "gradient"
+                ? "text-anim-gradient"
+                : e.value === "rainbow"
+                  ? "text-anim-rainbow"
+                  : "text-anim-shine";
+          return (
+            <button
+              key={e.value}
+              type="button"
+              onClick={() => onChange(e.value)}
+              aria-pressed={on}
+              className={cn(
+                "rounded-md px-1 py-1.5 text-center font-semibold text-xs transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                // The one control in the app whose selected chip is DARK rather
+                // than the usual white `Segmented` fill. Three of these four
+                // labels paint their own glyphs, and two of those palettes are
+                // light — a white chip puts light purple on white and the
+                // selected option becomes the least readable one in the row.
+                // A dark chip with the brand ring says "this one" just as
+                // loudly and leaves the labels legible.
+                on
+                  ? "bg-background text-foreground ring-1 ring-[var(--brand-violet)]"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {/* `--text-c` feeds the shine sweep's base colour, and it has to
+                  be an explicit colour: `.text-anim-shine` sets `color:
+                  transparent` so the gradient can show through the glyphs, so
+                  `currentColor` here resolves to transparent and the Shine chip
+                  renders blank — the one chip in the row that says nothing. */}
+              <span
+                className={anim}
+                style={
+                  {
+                    "--text-c": on
+                      ? "var(--foreground)"
+                      : "var(--muted-foreground)",
+                  } as CSSProperties
+                }
+              >
+                {e.label}
+              </span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );

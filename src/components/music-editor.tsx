@@ -14,7 +14,7 @@ import {
   releaseYear,
   type SpotifyTrackInfo,
 } from "~/lib/music";
-import { cn } from "~/lib/utils";
+import { cn, sliderFill } from "~/lib/utils";
 
 const FILE_INPUT_CLASS =
   "text-foreground text-sm file:mr-3 file:rounded-md file:border file:border-border file:bg-background file:px-3 file:py-1.5 file:font-medium file:text-foreground file:text-sm hover:file:bg-accent";
@@ -114,6 +114,10 @@ export function MusicEditor({
       }
       onChange({
         ...value,
+        // Picking a song IS asking for music. Leaving `enabled` false here meant
+        // pasting a link, watching the card appear, and hearing nothing — with
+        // the switch that explains it scrolled off the top of the panel.
+        enabled: true,
         meta: {
           title: data.title,
           artist: data.artist,
@@ -153,6 +157,7 @@ export function MusicEditor({
       setAudioName(file.name);
       onChange({
         ...value,
+        enabled: true,
         audio: { kind: "file", src, fileName: file.name },
         meta: {
           ...value.meta,
@@ -169,11 +174,21 @@ export function MusicEditor({
   return (
     <div className="flex flex-col gap-6">
       {/* Enable */}
-      <ToggleRow
-        label="Play music on my page"
-        checked={value.enabled}
-        onChange={(v) => update({ enabled: v })}
-      />
+      <div className="flex flex-col gap-1.5">
+        <ToggleRow
+          label="Play music on my page"
+          checked={value.enabled}
+          onChange={(v) => update({ enabled: v })}
+        />
+        {/* The settings below stay live and editable while this is off, which
+            without a line saying so reads as a broken switch. */}
+        {value.enabled ? null : (
+          <p className="text-muted-foreground text-xs">
+            Off — visitors won't see or hear a player. Your song and settings
+            are kept.
+          </p>
+        )}
+      </div>
 
       {/* Song source */}
       <div className="flex flex-col gap-3">
@@ -266,10 +281,12 @@ export function MusicEditor({
       {/* Playback */}
       <div className="flex flex-col gap-4">
         <SectionLabel>Playback</SectionLabel>
-        <div className="flex flex-col gap-1.5">
+        {/* `group`, so the read-out can brighten while the slider under it is
+            being used — same behaviour as the editor's shared Slider. */}
+        <div className="group flex flex-col gap-1.5">
           <div className="flex items-center justify-between text-sm">
             <span className="text-muted-foreground">Starting volume</span>
-            <span className="text-muted-foreground tabular-nums">
+            <span className="text-muted-foreground tabular-nums transition-colors group-hover:text-foreground group-focus-within:text-foreground">
               {volumePct}%
             </span>
           </div>
@@ -283,7 +300,8 @@ export function MusicEditor({
                 initialVolume: clamp(Number(e.target.value) / 100, 0, 1),
               })
             }
-            className="w-full"
+            style={sliderFill(volumePct, 0, 100)}
+            className="studio-slider w-full"
             aria-label="Starting volume"
           />
         </div>

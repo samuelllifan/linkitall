@@ -64,6 +64,59 @@ export interface ChangelogEntry {
 /** Newest first. The first entry is the one the pop-up announces. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-06",
+    date: "September 6, 2026",
+    title: "Beta 1.3",
+    subtitle: "Themes and button design",
+    items: [
+      {
+        feature: "Themes",
+        description:
+          "Eight ready-made looks for your whole page. One click sets the background, the buttons and the type; your name, photo, links and music stay exactly as they are.",
+      },
+      {
+        feature: "Status",
+        description:
+          "Show what you're up to under your name \u2014 an online, idle or do-not-disturb dot and a line like \u201cback in an hour\u201d. Set it to clear itself after 30 minutes, an hour, or at the end of the day.",
+      },
+      {
+        feature: "Button shapes and shadows",
+        description:
+          "Make your links square, rounded or pill-shaped, and give them a soft, hard or glowing shadow.",
+      },
+      {
+        feature: "Attention animations",
+        description:
+          "Make one link pulse, bounce, shake or glow so people look at it first.",
+      },
+      {
+        feature: "Sections and icon rows",
+        description:
+          "Add a title above a group of links, or show a link as just its logo \u2014 logos next to each other share one row.",
+      },
+      {
+        feature: "Text and photo effects",
+        description:
+          "Give your name, bio or links a gradient, rainbow or shine, and add drifting particles or a moving shine to your profile picture.",
+      },
+      {
+        feature: "Ripple background",
+        description:
+          "Slow glowing lines that drift across your page. Pick the base and glow colors, how fine the pattern is, and how fast it moves.",
+      },
+      {
+        feature: "Undo and redo",
+        description:
+          "Take back any change while you're building your page, and put it back again. Ctrl+Z and \u2318Z work too.",
+      },
+      {
+        feature: "Fixes and polish",
+        description:
+          "Copy your page link straight from the Studio, search when adding a link, duplicate a link, schedule when a link appears, and gradients that run corner to corner.",
+      },
+    ],
+  },
+  {
     id: "2026-09-04",
     date: "September 4, 2026",
     title: "Beta 1.2",

@@ -1,4 +1,5 @@
 import { hexToRgb255, memoByKey, pngDataUri } from "~/lib/og-png";
+import { fbm2, smoothstep } from "~/lib/og-shader-cpu";
 
 /**
  * A still frame of the aurora background, for the share cards.
@@ -53,61 +54,6 @@ const RASTER_H = 158;
  */
 const RASTER_ASPECT = 1200 / 630;
 
-// ---------------------------------------------------------------------------
-// GLSL builtins
-// ---------------------------------------------------------------------------
-
-const fract = (x: number) => x - Math.floor(x);
-
-function smoothstep(edge0: number, edge1: number, x: number): number {
-  const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)));
-  return t * t * (3 - 2 * t);
-}
-
-/** `hash2` — two chaotic values in [-1, 1] from a 2D cell. */
-function hash2(px: number, py: number): [number, number] {
-  const qx = px * 127.1 + py * 311.7;
-  const qy = px * 269.5 + py * 183.3;
-  return [
-    -1 + 2 * fract(Math.sin(qx) * 43758.5453123),
-    -1 + 2 * fract(Math.sin(qy) * 43758.5453123),
-  ];
-}
-
-/** `noise` — smooth gradient noise in [-1, 1]. */
-function noise(px: number, py: number): number {
-  const ix = Math.floor(px);
-  const iy = Math.floor(py);
-  const fx = px - ix;
-  const fy = py - iy;
-  const ux = fx * fx * (3 - 2 * fx);
-  const uy = fy * fy * (3 - 2 * fy);
-
-  const dot = (cx: number, cy: number) => {
-    const [hx, hy] = hash2(ix + cx, iy + cy);
-    return hx * (fx - cx) + hy * (fy - cy);
-  };
-
-  const bottom = dot(0, 0) + (dot(1, 0) - dot(0, 0)) * ux;
-  const top = dot(0, 1) + (dot(1, 1) - dot(0, 1)) * ux;
-  return bottom + (top - bottom) * uy;
-}
-
-/** `fbm` — two octaves, matching the shader's loop exactly. */
-function fbm(px: number, py: number): number {
-  let v = 0;
-  let a = 0.5;
-  let x = px;
-  let y = py;
-  for (let i = 0; i < 2; i++) {
-    v += a * noise(x, y);
-    x *= 2;
-    y *= 2;
-    a *= 0.5;
-  }
-  return v;
-}
-
 /**
  * A `data:image/png;base64,…` still of the aurora at `t = 0`, ready to hand to
  * Satori as a `backgroundImage`. Stretch it over the whole card — it is
@@ -129,7 +75,7 @@ function render(color: string, baseColor: string): string {
 
     // The horizon is a function of x alone, so it is hoisted out of the row
     // loop. At t = 0: stretch = 1 and every drift term is zero.
-    const nx = fbm(uvx * RASTER_ASPECT * 0.9, 0.7);
+    const nx = fbm2(uvx * RASTER_ASPECT * 0.9, 0.7);
     const wave =
       Math.sin(uvx * 6.2831 * 1.1 + 0.6) * 0.085 +
       Math.sin(uvx * 6.2831 * 2.3 - 1.2) * 0.042 +

@@ -61,13 +61,25 @@ export default async function OpengraphImage({
       row?.sensitive === true ||
       row?.password_protected === true;
     if (row && !gated) {
-      name = plainText(row.name as string) || `@${row.username ?? username}`;
-      tagline = plainText(row.bio as string);
-      const a = (row.avatar as string | null) ?? null;
+      const styles = row.styles as {
+        background?: Background;
+        hidden?: { avatar?: boolean; name?: boolean; bio?: boolean };
+      } | null;
+      // The card is a picture of the page, so a part switched off on the page is
+      // off here too — otherwise hiding your name still unfurls it into every
+      // Discord channel someone drops the link in, which is the one place the
+      // setting most needs to hold. Each falls back down the path this route
+      // already used for an EMPTY field, so a fully switched-off page still
+      // produces a card rather than a blank rectangle.
+      const hidden = styles?.hidden;
+      name = hidden?.name
+        ? `@${row.username ?? username}`
+        : plainText(row.name as string) || `@${row.username ?? username}`;
+      tagline = hidden?.bio ? "" : plainText(row.bio as string);
+      const a = hidden?.avatar ? null : ((row.avatar as string | null) ?? null);
       // Satori can embed https and data:image sources; skip anything else.
       if (a && (a.startsWith("http") || a.startsWith("data:image"))) avatar = a;
-      background = (row.styles as { background?: Background } | null)
-        ?.background;
+      background = styles?.background;
     }
   } catch {
     // Fall back to the username-only card below.

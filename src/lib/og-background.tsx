@@ -1,7 +1,9 @@
 import type { ReactElement } from "react";
 import { auroraStillDataUri } from "~/lib/og-aurora";
 import { gridFadeDataUri } from "~/lib/og-grid-fade";
+import { rippleStillDataUri } from "~/lib/og-still";
 import type { Background } from "~/lib/pages";
+import { gradientDirectionCss } from "~/lib/pages";
 
 /**
  * Translates a page's saved `background` into something Satori can rasterize,
@@ -180,7 +182,7 @@ export function resolveBackground(
   if (bg.type === "custom") return plain(bg.color);
 
   if (bg.type === "gradient") {
-    const dir = bg.direction === "horizontal" ? "to right" : "to bottom";
+    const dir = gradientDirectionCss(bg.direction);
     const mid = bg.distribution ?? 50;
     return {
       layers: [
@@ -252,6 +254,32 @@ export function resolveBackground(
       // and the top lockup off the lit colour that fills the band it's in.
       fg: readableText(baseColor),
       topFg: readableText(color),
+    };
+  }
+
+  // A CPU-rendered still of the shader at t = 0 (see `~/lib/og-still`),
+  // stretched over the card. It is generated at the card's own aspect ratio, so
+  // it is `100% 100%` and never `cover`. Text colour keys off the BASE colour:
+  // the lines are capped well short of the glow colour, so the base is what any
+  // text actually sits on.
+  if (bg.type === "ripple") {
+    return {
+      layers: [
+        layer(
+          {
+            backgroundImage: `url(${rippleStillDataUri(
+              bg.baseColor,
+              bg.glowColor,
+              bg.scale,
+            )})`,
+            backgroundSize: "100% 100%",
+          },
+          size,
+        ),
+      ],
+      fill: bg.baseColor,
+      fg: readableText(bg.baseColor),
+      topFg: readableText(bg.baseColor),
     };
   }
 

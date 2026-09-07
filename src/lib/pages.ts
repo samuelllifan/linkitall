@@ -1,12 +1,37 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { IntroConfig } from "~/lib/intro";
 import type { MusicConfig } from "~/lib/music";
+import type { StatusConfig } from "~/lib/status";
 import { createClient } from "~/lib/supabase/client";
+
+/**
+ * What a row in `links` actually is. Undefined = "link", which is every row
+ * saved before headers existed.
+ *
+ * - `link` — a button (or logo, in the Logos layout) that goes somewhere.
+ * - `icon` — the same destination drawn as its bare logo. Consecutive icon rows
+ *   render as ONE centered strip, in list order, so a creator can put a row of
+ *   socials above their buttons, below them, or between two groups — without
+ *   the all-or-nothing switch the Logos layout makes them take.
+ * - `header` — a label that groups the links under it. No href, not clickable,
+ *   and skipped entirely by the Logos layout, which is a row of icons.
+ */
+export type LinkKind = "link" | "icon" | "header";
+
+/**
+ * An attention animation played on a link button, for the one link a creator
+ * wants read first ("Commissions open"). Undefined / "none" = still.
+ */
+export type LinkHighlight = "none" | "pulse" | "bounce" | "shake" | "glow";
 
 export interface LinkItem {
   id: string;
   label: string;
   href: string;
+  /** Row type. Undefined = "link" (every row saved before headers existed). */
+  kind?: LinkKind;
+  /** Attention animation on the button. Undefined = none. */
+  highlight?: LinkHighlight;
   /** Optional custom logo (data URL) for links without a built-in platform icon. */
   logo?: string;
   /** Deprecated fill color (hex). Superseded by `box`; still read for old pages. */
@@ -44,6 +69,10 @@ export function linkScheduleStatus(
   now: number = Date.now(),
 ): LinkScheduleStatus {
   const schedule = link.schedule;
+  // Headers carry no schedule UI, but a row converted from a scheduled link
+  // would still hold one — and a header that silently disappeared would take
+  // its whole group's meaning with it.
+  if (link.kind === "header") return "live";
   if (!schedule) return "live";
   const start = schedule.start ? Date.parse(schedule.start) : Number.NaN;
   const end = schedule.end ? Date.parse(schedule.end) : Number.NaN;
@@ -138,8 +167,11 @@ export type Background =
       type: "gradient";
       from: string;
       to: string;
-      /** "vertical" = top→bottom, "horizontal" = left→right. Default vertical. */
-      direction?: "vertical" | "horizontal";
+      /**
+       * "vertical" = top→bottom, "horizontal" = left→right, "diagonal" =
+       * top-left→bottom-right. Default vertical.
+       */
+      direction?: "vertical" | "horizontal" | "diagonal";
       /** Blend midpoint 0–100 (where the two colors meet). Default 50. */
       distribution?: number;
     }
@@ -170,6 +202,22 @@ export type Background =
       /** Drift speed, 0 (static) – 10 (fast). */
       speed: number;
     }
+  | {
+      /**
+       * A slow field of glowing contour loops that drift and re-form — the
+       * pattern light makes over a rippled surface. Animated; `speed` 0 holds
+       * the tuned still.
+       */
+      type: "ripple";
+      /** Background color the lines sit on (hex). */
+      baseColor: string;
+      /** Line color (hex). */
+      glowColor: string;
+      /** Pattern size — larger is a finer, busier field. */
+      scale: number;
+      /** Drift speed, 0 (static) – 10 (fast). */
+      speed: number;
+    }
   | ({ type: "media" } & MediaBackground);
 
 /**
@@ -182,7 +230,7 @@ export interface BackgroundMemory {
   gradient?: {
     from: string;
     to: string;
-    direction?: "vertical" | "horizontal";
+    direction?: "vertical" | "horizontal" | "diagonal";
     distribution?: number;
   };
   grid?: {
@@ -192,6 +240,12 @@ export interface BackgroundMemory {
     thickness: number;
   };
   aurora?: { color: string; baseColor: string; speed: number };
+  ripple?: {
+    baseColor: string;
+    glowColor: string;
+    scale: number;
+    speed: number;
+  };
   media?: MediaBackground;
 }
 
@@ -214,7 +268,40 @@ export interface BoxStyle {
    * fully transparent — no fill and no outline — leaving just its content.
    */
   enabled?: boolean;
+  /**
+   * Corner radius in px, 0 (square) – 32 (pill, for a button-height surface).
+   * Undefined = 8px, the `rounded-lg` every page rendered before this existed.
+   */
+  radius?: number;
+  /**
+   * Drop shadow under the surface. Undefined / "none" = flat, which is what
+   * every page saved before this existed renders as.
+   *
+   * - `soft` — a diffuse lift, the default "this is a card" shadow.
+   * - `hard` — an offset solid block with no blur (the sticker/brutalist look
+   *   Linktree calls "hard shadow").
+   * - `glow` — a colored bloom picked up from the surface's own fill, for the
+   *   neon look that reads as gaming/Discord.
+   */
+  shadow?: BoxShadow;
 }
+
+/** See {@link BoxStyle.shadow}. */
+export type BoxShadow = "none" | "soft" | "hard" | "glow";
+
+/**
+ * The radius a box renders at when {@link BoxStyle.radius} is unset.
+ *
+ * Two values, not one, because the two surfaces were built with two different
+ * Tailwind classes and `boxCss` now writes `border-radius` inline — which beats
+ * the class. A single default would have silently restyled every page already
+ * out there: the name/bio card wore `rounded-lg` (8px) and the link buttons
+ * wore `rounded-md` (6px), so 8 everywhere would have rounded every live page's
+ * buttons by two pixels for no reason anybody asked for.
+ */
+export const DEFAULT_BOX_RADIUS = 8;
+/** See {@link DEFAULT_BOX_RADIUS} — link buttons were `rounded-md`. */
+export const DEFAULT_LINK_RADIUS = 6;
 
 /**
  * Background panel sitting behind the whole profile block (avatar, the name/bio
@@ -287,6 +374,25 @@ export type AvatarEffect =
       speed: number;
     };
 
+/**
+ * Parts of the profile the owner has switched OFF.
+ *
+ * Separate from "empty": a hidden field keeps its text and all of its styling,
+ * it just stops rendering. That is the difference between "I have not written a
+ * bio yet" and "I want a page with no bio on it" — the second is a layout
+ * choice, and losing the copy to make it is not a fair price.
+ *
+ * A missing key means shown, so every page written before this renders exactly
+ * as it did. One object rather than three top-level booleans: it is one idea,
+ * one key in the jsonb, and it has somewhere to grow if links or the status
+ * ever want the same switch.
+ */
+export interface HiddenParts {
+  avatar?: boolean;
+  name?: boolean;
+  bio?: boolean;
+}
+
 export interface PageData {
   name: string;
   bio: string;
@@ -303,6 +409,8 @@ export interface PageData {
   bioStyle?: TextStyle;
   background?: Background;
   bgMemory?: BackgroundMemory;
+  /** Which of avatar / name / bio are switched off. Absent = all shown. */
+  hidden?: HiddenParts;
   /** Box behind the name. */
   nameBox?: BoxStyle;
   /** Box behind the bio/description. */
@@ -327,6 +435,11 @@ export interface PageData {
    * also starts the track.
    */
   intro?: IntroConfig;
+  /**
+   * Optional Discord-style status line under the name (presence dot, custom
+   * message, activity). Absent = no status pill.
+   */
+  status?: StatusConfig;
 }
 
 /** Shape of the `styles` jsonb column. */
@@ -335,6 +448,7 @@ interface StoredStyles {
   bio?: TextStyle;
   background?: Background;
   bgMemory?: BackgroundMemory;
+  hidden?: HiddenParts;
   nameBox?: BoxStyle;
   bioBox?: BoxStyle;
   linkBox?: BoxStyle;
@@ -346,6 +460,7 @@ interface StoredStyles {
   avatarEffect?: AvatarEffect;
   music?: MusicConfig;
   intro?: IntroConfig;
+  status?: StatusConfig;
 }
 
 /**
@@ -383,6 +498,7 @@ export async function queryPage(
     bioStyle: styles.bio,
     background: styles.background,
     bgMemory: styles.bgMemory,
+    hidden: styles.hidden,
     nameBox: styles.nameBox,
     bioBox: styles.bioBox,
     linkBox: styles.linkBox,
@@ -394,6 +510,7 @@ export async function queryPage(
     avatarEffect: styles.avatarEffect,
     music: styles.music,
     intro: styles.intro,
+    status: styles.status,
   };
 }
 
@@ -546,6 +663,7 @@ export async function savePage(pageInput: PageData): Promise<void> {
     bio: page.bioStyle,
     background: page.background,
     bgMemory: page.bgMemory,
+    hidden: page.hidden,
     nameBox: page.nameBox,
     bioBox: page.bioBox,
     linkBox: page.linkBox,
@@ -557,6 +675,7 @@ export async function savePage(pageInput: PageData): Promise<void> {
     avatarEffect: page.avatarEffect,
     music: page.music,
     intro: page.intro,
+    status: page.status,
   };
 
   const { error } = await supabase.from("pages").upsert(
@@ -575,4 +694,19 @@ export async function savePage(pageInput: PageData): Promise<void> {
   );
 
   if (error) throw error;
+}
+
+/**
+ * The CSS gradient direction for a page background. Shared, because this
+ * mapping is needed in four places (the live page, the Studio's swatch, the
+ * share card, and the landing wall's stand-in) and a fifth direction added to
+ * three of them is a background that renders differently depending on where you
+ * look at it.
+ */
+export function gradientDirectionCss(
+  direction: "vertical" | "horizontal" | "diagonal" | undefined,
+): string {
+  if (direction === "horizontal") return "to right";
+  if (direction === "diagonal") return "to bottom right";
+  return "to bottom";
 }

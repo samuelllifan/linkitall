@@ -95,7 +95,16 @@ export function FinalCta() {
         <Reveal
           as="p"
           delay={120}
-          className="mt-6 text-pretty text-lg text-muted-foreground leading-relaxed sm:text-xl"
+          // text-balance, not text-pretty. `pretty` only protects the LAST line
+          // from being a single short word, which this line never was -- so it
+          // did nothing here and left the block at 603px over 176px, a stranded
+          // "links — all for free." under a full-width line. `balance` evens the
+          // two out. It is also what the heading directly above already uses, so
+          // the two centred blocks now rag the same way instead of one being
+          // tuned and the other not. Safe at this length: balancing is capped at
+          // a handful of lines by every engine that implements it, and this is
+          // two.
+          className="mt-6 text-balance text-lg text-muted-foreground leading-relaxed sm:text-xl"
         >
           Start creating your page now. Music, an intro screen, scheduled links
           — all for free.

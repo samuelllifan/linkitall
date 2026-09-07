@@ -25,7 +25,9 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { MusicPlayer } from "~/components/music-player";
+import { ShaderSurface } from "~/components/shader-background";
 import { recordClick, recordView } from "~/lib/analytics";
+import { AURORA_FRAG, RIPPLE_FRAG } from "~/lib/background-shaders";
 import type { MusicConfig } from "~/lib/music";
 import type {
   AvatarEffect,
@@ -37,7 +39,23 @@ import type {
   PanelStyle,
   TextStyle,
 } from "~/lib/pages";
-import { DEFAULT_AVATAR_CROP } from "~/lib/pages";
+import {
+  DEFAULT_AVATAR_CROP,
+  DEFAULT_BOX_RADIUS,
+  DEFAULT_LINK_RADIUS,
+  gradientDirectionCss,
+} from "~/lib/pages";
+import {
+  DEFAULT_STATUS_BOX,
+  DEFAULT_STATUS_RADIUS,
+  DEFAULT_STATUS_TEXT_STYLE,
+  PRESENCE_COLORS,
+  PRESENCE_LABELS,
+  type PresenceState,
+  type StatusConfig,
+  shouldRenderStatus,
+  statusHasContent,
+} from "~/lib/status";
 import { usePresence } from "~/lib/use-popover";
 import { cn } from "~/lib/utils";
 
@@ -229,24 +247,124 @@ function withOpacity(color: string, opacity: number): string {
   return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${a})`;
 }
 
-/** Inline CSS (background + outline) for a box surface. `fill` overrides color. */
-export function boxCss(box: BoxStyle, fill?: string): CSSProperties {
+/**
+ * The `box-shadow` for a box surface's chosen shadow style.
+ *
+ * `glow` samples the surface's own colour so a purple button blooms purple —
+ * the neon look — but falls back to the outline colour when the fill is turned
+ * off or fully transparent, which is exactly the outline-only "neon sign" case
+ * where a glow matters most. A `hard` shadow is deliberately un-blurred and
+ * always black: it is a shape, not a light, and tinting it to the button made
+ * it read as a misaligned duplicate rather than as depth.
+ */
+function boxShadowCss(box: BoxStyle): string | undefined {
+  const shadow = box.shadow ?? "none";
+  if (shadow === "none") return undefined;
+  if (shadow === "soft") return "0 6px 18px -4px rgba(0, 0, 0, 0.55)";
+  if (shadow === "hard") return "4px 4px 0 0 rgba(0, 0, 0, 0.85)";
+  const lit =
+    box.enabled === false || box.opacity === 0
+      ? box.outline
+        ? box.outlineColor
+        : box.color
+      : box.color;
+  return `0 0 12px -1px ${withOpacity(lit, 70)}, 0 0 26px -4px ${withOpacity(
+    lit,
+    45,
+  )}`;
+}
+
+/**
+ * Inline CSS (background + outline + shape) for a box surface. `fill` overrides
+ * color; `fallbackRadius` is the radius to use when the box has none of its own
+ * — see {@link DEFAULT_BOX_RADIUS} for why that differs per surface.
+ */
+export function boxCss(
+  box: BoxStyle,
+  fill?: string,
+  fallbackRadius: number = DEFAULT_BOX_RADIUS,
+): CSSProperties {
   // `padding-box` keeps the fill from rendering under the antialiased rounded
   // border. Without it, Windows Chromium (notably at fractional display
   // scaling) leaves a bright hairline / square-looking artifact at the corners.
+  //
+  // `borderRadius` is always written, even at the default, so it beats the
+  // `rounded-lg` utility every call site already carries — a box set to square
+  // has to be able to win against the class it is layered over.
+  const shape: CSSProperties = {
+    borderRadius: `${box.radius ?? fallbackRadius}px`,
+    boxShadow: boxShadowCss(box),
+  };
   if (box.enabled === false) {
     // Background turned off → no fill, but the outline can still be shown.
     return {
+      ...shape,
       backgroundColor: "transparent",
       border: `1px solid ${box.outline ? box.outlineColor : "transparent"}`,
       backgroundClip: "padding-box",
     };
   }
   return {
+    ...shape,
     backgroundColor: withOpacity(fill ?? box.color, box.opacity),
     border: `1px solid ${box.outline ? box.outlineColor : "transparent"}`,
     backgroundClip: "padding-box",
   };
+}
+
+/**
+ * The global class implementing a link's attention animation, or "" for none.
+ *
+ * These are page CONTENT, not app chrome, which is why they are allowed to be
+ * loud where the rest of the app is not: a creator marking one link "this is
+ * the one" is the whole point. The keyframes live in globals.css next to the
+ * text effects.
+ *
+ * They run on a wrapper, never on the button itself — the button already owns
+ * `transform` for its hover lift, and two owners of one property means the
+ * hover silently wins and the animation looks broken.
+ */
+/**
+ * `--fx-glow` for a link wearing the "glow" attention animation: the colour the
+ * bloom should be, which is the button's own fill (or its outline, when the
+ * fill is turned off — the outline-only neon look). Returns undefined for every
+ * other highlight, so nothing else pays for an inline style.
+ */
+export function glowVar(
+  link: LinkItem,
+  fallback: BoxStyle,
+): CSSProperties | undefined {
+  if (link.highlight !== "glow") return undefined;
+  const box = resolveLinkBox(link, fallback);
+  const lit =
+    box.enabled === false || box.opacity === 0
+      ? box.outline
+        ? box.outlineColor
+        : box.color
+      : box.color;
+  // A near-black button would bloom near-black, i.e. not at all — and a glow
+  // you can't see is a broken feature, not a subtle one. Fall back to the brand
+  // purple there, which is both visible and the obvious "neon" default.
+  const rgb = parseColor(lit);
+  const tooDark = !rgb || relLuminance(rgb) < 0.05;
+  return {
+    "--fx-glow": tooDark ? "var(--brand-violet)" : lit,
+  } as CSSProperties;
+}
+
+export function linkHighlightClass(link: LinkItem): string {
+  switch (link.highlight) {
+    case "pulse":
+      return "link-fx-pulse";
+    case "bounce":
+      return "link-fx-bounce";
+    case "shake":
+      return "link-fx-shake";
+    case "glow":
+      return "link-fx-glow";
+    default:
+      return "";
+  }
 }
 
 /**
@@ -409,9 +527,7 @@ function adaptHtmlColors(html: string, isDark: boolean): string {
 
 /** Turn a TextStyle into inline CSS. Undefined props fall back to CSS/classes. */
 export function styleToCss(s: TextStyle, isDark: boolean): CSSProperties {
-  // Animated text effects are temporarily disabled, so text always renders as a
-  // static solid color (see `textAnimClass`).
-  const animated = false;
+  const animated = Boolean(s.animation && s.animation !== "none");
   const color = adaptColor(s.color, isDark);
   return {
     fontFamily: s.fontFamily ? FONTS[s.fontFamily]?.family : undefined,
@@ -432,10 +548,19 @@ export function styleToCss(s: TextStyle, isDark: boolean): CSSProperties {
   };
 }
 
-/** Tailwind/global class for a text style's animated effect.
- *  Text effects are temporarily disabled, so this always returns none. */
-export function textAnimClass(_s?: TextStyle): string {
-  return "";
+/** The global class implementing a text style's animated effect, or "" for none.
+ *  The keyframes live in globals.css (`.text-anim-*`). */
+export function textAnimClass(s?: TextStyle): string {
+  switch (s?.animation) {
+    case "gradient":
+      return "text-anim-gradient";
+    case "rainbow":
+      return "text-anim-rainbow";
+    case "shine":
+      return "text-anim-shine";
+    default:
+      return "";
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -518,6 +643,32 @@ export function sanitizeRichHtml(html: string): string {
   tmp.innerHTML = html;
   sanitizeNode(tmp);
   return tmp.innerHTML;
+}
+
+/**
+ * Whether a rich-text value would actually paint anything.
+ *
+ * "Empty" is not `=== ""`. The name and bio are edited in a contentEditable, so
+ * clearing one by hand leaves behind whatever the browser puts in an emptied
+ * field — `<br>`, `&nbsp;`, `<font color="#fff"></font>`, a stray `<span>`. All
+ * of those are falsy to a reader and truthy to `if (data.bio)`, which is why an
+ * erased bio still reserved a padded box and left a gap in the panel.
+ *
+ * Deliberately regex over DOM: this runs during render, and `profile-view` is
+ * server-rendered for public pages where `document` does not exist (the same
+ * reason `sanitizeRichHtml` above bails on the server). Tags are dropped
+ * wholesale, the space-like entities are treated as blank, and any OTHER entity
+ * counts as content — `&amp;` alone is a real, visible bio.
+ */
+export function hasRichText(html: string | undefined | null): boolean {
+  if (!html) return false;
+  return (
+    html
+      .replace(/<[^>]*>/g, "")
+      .replace(/&nbsp;|&#160;|&#xa0;/gi, " ")
+      .replace(/&[a-z]+;|&#\d+;|&#x[0-9a-f]+;/gi, "content")
+      .trim() !== ""
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -1196,7 +1347,7 @@ export function LinkAnchor({
   }, [previewOpen]);
 
   const boxStyle: CSSProperties = {
-    ...boxCss(resolved),
+    ...boxCss(resolved, undefined, DEFAULT_LINK_RADIUS),
     color: textColor,
     fontFamily: ts?.fontFamily ? FONTS[ts.fontFamily]?.family : undefined,
     fontSize: ts?.fontSize ? `${ts.fontSize}px` : undefined,
@@ -1339,6 +1490,96 @@ export function LinkAnchor({
 }
 
 /**
+ * One rendered row of the stacked layout: either a single item (a button or a
+ * header) or a RUN of consecutive icon links, which share one centered strip.
+ */
+type RenderRow =
+  | { kind: "single"; link: LinkItem }
+  | { kind: "icons"; links: LinkItem[]; id: string };
+
+/**
+ * Collapse consecutive `kind: "icon"` rows into single strips, leaving
+ * everything else alone.
+ *
+ * Grouping by adjacency — rather than pulling every icon into one row pinned to
+ * the bottom of the page — is what keeps the editor's list order honest: the
+ * strip appears exactly where its rows sit in the list, so a creator can put
+ * their socials above the buttons, below them, or between two groups, and drag
+ * them there rather than learning a rule about where icons "go".
+ */
+export function groupLinkRows(links: LinkItem[]): RenderRow[] {
+  const rows: RenderRow[] = [];
+  for (const link of links) {
+    if (link.kind !== "icon") {
+      rows.push({ kind: "single", link });
+      continue;
+    }
+    const last = rows[rows.length - 1];
+    if (last?.kind === "icons") last.links.push(link);
+    else rows.push({ kind: "icons", links: [link], id: link.id });
+  }
+  return rows;
+}
+
+/**
+ * A section header in the link list — a label that groups the buttons under it
+ * ("Commissions", "Socials"). Not a link: no box, no href, nothing to click.
+ *
+ * It follows the page's link typography (so a page with a custom font doesn't
+ * sprout a stray system-font heading) but stays deliberately quieter than the
+ * buttons it labels: uppercase, tracked out, and dimmed when the creator hasn't
+ * given it a colour of its own. A header shouting louder than the links would
+ * inverte the hierarchy it exists to create.
+ */
+export function LinkHeader({
+  link,
+  textStyle,
+  isDark = false,
+}: {
+  link: LinkItem;
+  textStyle?: TextStyle;
+  isDark?: boolean;
+}) {
+  // A header inherits the page's link FONT — so a page with a custom typeface
+  // doesn't sprout a stray system-font heading — and nothing else.
+  //
+  // Notably not the colour or the size. A link label's colour is chosen to
+  // contrast with its BUTTON FILL, and a header sits on the page background
+  // instead: the Amethyst theme's near-black label on a lilac button would
+  // render as near-black text on a dark purple page. And the size is what makes
+  // a header quieter than the links it groups, which is the whole point of it.
+  // Both still come from the header's own `textStyle` once it has one.
+  const own = link.textStyle;
+  const family = own?.fontFamily ?? textStyle?.fontFamily;
+  const color = own?.color ? adaptColor(own.color, isDark) : undefined;
+  const align = own?.align ?? "center";
+  return (
+    <div className="flex w-full flex-col">
+      <span
+        className={cn(
+          "w-full break-words pt-2 font-semibold text-xs uppercase tracking-[0.14em]",
+          !color && "opacity-60",
+          own?.animation && own.animation !== "none" ? textAnimClass(own) : "",
+        )}
+        style={
+          {
+            color,
+            fontFamily: family ? FONTS[family]?.family : undefined,
+            fontSize: own?.fontSize ? `${own.fontSize}px` : undefined,
+            fontStyle: own?.italic ? "italic" : undefined,
+            textDecoration: own?.underline ? "underline" : undefined,
+            textAlign: align,
+            "--text-c": color ?? "#ffffff",
+          } as CSSProperties
+        }
+      >
+        {link.label}
+      </span>
+    </div>
+  );
+}
+
+/**
  * A link rendered as its logo/icon only (no box, no label) — used by the
  * "horizontal" layout, where the links sit in a centered row of icons.
  */
@@ -1432,266 +1673,45 @@ export function LinkIconAnchor({
 // Page background
 // ---------------------------------------------------------------------------
 
-// GLSL for the aurora surface. A full-screen triangle is shaded per-pixel: a
-// broad light-top → dark-bottom gradient (NOT a radial glow — the light fills
-// the whole top), whose transition line is pushed up and down by domain-warped
-// fractal noise so it undulates in smooth, organic waves. Colour is mixed in
-// linear steps and a tiny per-pixel dither is added, so the gradient stays
-// perfectly smooth with no 8-bit banding. `u_time` drifts the noise to animate.
-const AURORA_VERT = `
-attribute vec2 a_pos;
-void main() { gl_Position = vec4(a_pos, 0.0, 1.0); }
-`;
-
-const AURORA_FRAG = `
-// Prefer highp for smooth noise/gradients, but fall back to mediump on GPUs
-// that don't advertise fragment highp (some older Windows/Intel ANGLE configs);
-// hardcoding highp there makes the shader fail to compile and the aurora vanish.
-#ifdef GL_FRAGMENT_PRECISION_HIGH
-precision highp float;
-#else
-precision mediump float;
-#endif
-uniform vec2 u_resolution;
-uniform float u_time;
-uniform vec3 u_light;
-uniform vec3 u_dark;
-
-vec2 hash2(vec2 p) {
-  p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
-  return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
-}
-
-// Smooth value noise in [-1, 1].
-float noise(vec2 p) {
-  vec2 i = floor(p);
-  vec2 f = fract(p);
-  vec2 u = f * f * (3.0 - 2.0 * f);
-  return mix(mix(dot(hash2(i + vec2(0.0, 0.0)), f - vec2(0.0, 0.0)),
-                 dot(hash2(i + vec2(1.0, 0.0)), f - vec2(1.0, 0.0)), u.x),
-             mix(dot(hash2(i + vec2(0.0, 1.0)), f - vec2(0.0, 1.0)),
-                 dot(hash2(i + vec2(1.0, 1.0)), f - vec2(1.0, 1.0)), u.x), u.y);
-}
-
-// Fractal Brownian motion — only two octaves so the field stays a clean, smooth
-// undulation. More octaves add fine high-frequency detail that reads as smoke.
-float fbm(vec2 p) {
-  float v = 0.0;
-  float a = 0.5;
-  for (int i = 0; i < 2; i++) {
-    v += a * noise(p);
-    p *= 2.0;
-    a *= 0.5;
-  }
-  return v;
-}
-
-float hash1(vec2 p) {
-  return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
-}
-
-void main() {
-  vec2 uv = gl_FragCoord.xy / u_resolution.xy;
-  uv.y = 1.0 - uv.y;                          // y = 0 at the top
-  float aspect = u_resolution.x / u_resolution.y;
-  vec2 p = vec2(uv.x * aspect, uv.y);         // isotropic noise coords
-  float t = u_time;
-
-  // A smooth, clearly wavy "horizon" between the light top and dark bottom: two
-  // sine waves of different frequency give clean, pronounced undulation, and
-  // low-frequency noise nudges the crests so they read as organic, not
-  // mechanical.
-  //
-  // Animation: stretch slowly breathes the waves' horizontal length in and out;
-  // the sine phases drift at two incommensurate rates and the noise term drifts
-  // in time, so the pattern continuously cycles without ever exactly repeating.
-  // Every time term is zero at t = 0 (sin(0)=0, +t*k=0, stretch=1), so the
-  // paused / reduced-motion frame is exactly the tuned static look.
-  float stretch = 1.0 + 0.16 * sin(t * 0.40);
-  float nx = fbm(vec2(p.x * 0.9 * stretch + t * 0.28, 0.7 + t * 0.20));
-  float wave =
-      sin(uv.x * 6.2831 * 1.1 * stretch + 0.6 + t * 0.80) * 0.085
-    + sin(uv.x * 6.2831 * 2.3 * stretch - 1.2 - t * 0.62) * 0.042
-    + nx * 0.09;
-  float horizon = 0.45 + wave;
-
-  // Light above the horizon, dark below, with a wide fade → a long, very smooth
-  // vertical gradient (no radial glow).
-  float v = 1.0 - smoothstep(horizon - 0.5, horizon + 0.5, uv.y);
-
-  // Gentle, wide horizontal easing so the far corners settle a touch darker.
-  v *= 0.9 + 0.1 * (1.0 - pow(min(abs(uv.x - 0.5) * 2.0, 1.0), 2.6));
-  v = clamp(v, 0.0, 1.0);
-
-  vec3 col = mix(u_dark, u_light, v);
-
-  // Per-pixel dither breaks up 8-bit banding across the smooth falloff.
-  col += (hash1(gl_FragCoord.xy + fract(t)) - 0.5) / 255.0;
-
-  gl_FragColor = vec4(col, 1.0);
-}
-`;
-
 /**
- * Parse a `#rgb` / `#rrggbb` hex string into normalized [r, g, b] (0–1).
- * Tolerates missing/invalid input (returns black) so a malformed background
- * can never crash the shader setup.
+ * The shader-driven backgrounds (Aurora and Ripple) both render
+ * through one `ShaderSurface`; the GLSL lives in `~/lib/background-shaders` and
+ * the WebGL plumbing in `~/components/shader-background`. This file used to
+ * carry an inlined copy of both for Aurora, which was reasonable while Aurora
+ * was the only one and is not now.
+ *
+ * Each wrapper below is only a mapping from the saved `Background` fields onto
+ * that shader's uniform names, plus the sensible fallback for a page saved
+ * before the field existed.
  */
-function hexToRgb(hex: string): [number, number, number] {
-  const h = (typeof hex === "string" ? hex : "").replace("#", "");
-  const full =
-    h.length === 3
-      ? h
-          .split("")
-          .map((c) => c + c)
-          .join("")
-      : h.padEnd(6, "0").slice(0, 6);
-  const n = Number.parseInt(full, 16);
-  if (Number.isNaN(n)) return [0, 0, 0];
-  return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
-}
 
-function compileShader(
-  gl: WebGLRenderingContext,
-  type: number,
-  src: string,
-): WebGLShader | null {
-  const sh = gl.createShader(type);
-  if (!sh) return null;
-  gl.shaderSource(sh, src);
-  gl.compileShader(sh);
-  if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
-    console.warn("aurora shader compile failed:", gl.getShaderInfoLog(sh));
-    gl.deleteShader(sh);
-    return null;
-  }
-  return sh;
-}
-
-/**
- * WebGL canvas that renders (and, when `speed` > 0, animates) the aurora
- * surface. Fills its positioned parent. `baseColor` is also set as the canvas
- * background so a WebGL-less browser degrades to a plain dark fill.
- */
-function AuroraCanvas({
-  color,
-  baseColor,
+function ShaderPageBackground({
+  frag,
+  uniforms,
   speed,
+  baseColor,
 }: {
-  color: string;
-  baseColor: string;
+  frag: string;
+  uniforms: Record<string, number | string>;
   speed: number;
+  baseColor: string;
 }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const gl = canvas.getContext("webgl", { alpha: false, antialias: false });
-    if (!gl) return;
-
-    const vs = compileShader(gl, gl.VERTEX_SHADER, AURORA_VERT);
-    const fs = compileShader(gl, gl.FRAGMENT_SHADER, AURORA_FRAG);
-    if (!vs || !fs) return;
-    const program = gl.createProgram();
-    if (!program) return;
-    gl.attachShader(program, vs);
-    gl.attachShader(program, fs);
-    gl.linkProgram(program);
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-      console.warn(
-        "aurora program link failed:",
-        gl.getProgramInfoLog(program),
-      );
-      return;
-    }
-    // Activate the program via a bound reference instead of a direct
-    // `gl.useProgram(...)` call: Biome's useHookAtTopLevel rule misreads that
-    // call as a misplaced React hook (the `use*` name) and won't suppress inline.
-    const activateProgram = gl.useProgram.bind(gl);
-    activateProgram(program);
-
-    const buffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    // One oversized triangle covering the whole clip space.
-    gl.bufferData(
-      gl.ARRAY_BUFFER,
-      new Float32Array([-1, -1, 3, -1, -1, 3]),
-      gl.STATIC_DRAW,
-    );
-    const aPos = gl.getAttribLocation(program, "a_pos");
-    gl.enableVertexAttribArray(aPos);
-    gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
-
-    const uRes = gl.getUniformLocation(program, "u_resolution");
-    const uTime = gl.getUniformLocation(program, "u_time");
-    const uLight = gl.getUniformLocation(program, "u_light");
-    const uDark = gl.getUniformLocation(program, "u_dark");
-    gl.uniform3fv(uLight, hexToRgb(color));
-    gl.uniform3fv(uDark, hexToRgb(baseColor));
-
-    // Motion is a user-chosen feature here, so it always plays (see the note in
-    // globals.css — Windows over-reports `prefers-reduced-motion: reduce`).
-    const animate = speed > 0;
-
-    let raf = 0;
-    let startTime = 0;
-
-    const draw = (t: number) => {
-      gl.uniform1f(uTime, t);
-      gl.drawArrays(gl.TRIANGLES, 0, 3);
-    };
-
-    const resize = () => {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      const w = Math.max(1, Math.floor(canvas.clientWidth * dpr));
-      const h = Math.max(1, Math.floor(canvas.clientHeight * dpr));
-      if (canvas.width !== w || canvas.height !== h) {
-        canvas.width = w;
-        canvas.height = h;
-      }
-      gl.viewport(0, 0, w, h);
-      gl.uniform2f(uRes, w, h);
-      // Always paint at least one frame (t = 0) so the surface shows even if the
-      // animation loop is throttled (e.g. a background/hidden tab).
-      draw(0);
-    };
-
-    const frame = (now: number) => {
-      if (!startTime) startTime = now;
-      draw(((now - startTime) / 1000) * speed * 0.08);
-      raf = requestAnimationFrame(frame);
-    };
-
-    resize();
-    window.addEventListener("resize", resize);
-    if (animate) raf = requestAnimationFrame(frame);
-
-    return () => {
-      cancelAnimationFrame(raf);
-      window.removeEventListener("resize", resize);
-      gl.deleteProgram(program);
-      gl.deleteShader(vs);
-      gl.deleteShader(fs);
-      gl.deleteBuffer(buffer);
-    };
-  }, [color, baseColor, speed]);
-
   return (
-    <canvas
-      ref={canvasRef}
-      aria-hidden
-      className="absolute inset-0 h-full w-full"
-      style={{ backgroundColor: baseColor }}
-    />
+    <div aria-hidden className="absolute inset-0 -z-10">
+      <ShaderSurface
+        frag={frag}
+        uniforms={uniforms}
+        speed={speed}
+        baseColor={baseColor}
+      />
+    </div>
   );
 }
 
 /**
- * Aurora background — a broad light-to-dark gradient whose boundary undulates in
- * smooth organic waves (a WebGL shader; see `AURORA_FRAG`), recreated from a
- * reference design. `AuroraSurface` fills its positioned parent;
- * `AuroraBackground` pins that surface to the whole viewport behind the page.
+ * Aurora — a broad light-to-dark gradient whose boundary undulates in smooth
+ * organic waves. `AuroraSurface` fills its positioned parent, and is exported
+ * because the Studio's own preview draws it directly.
  */
 export function AuroraSurface({
   color,
@@ -1703,29 +1723,12 @@ export function AuroraSurface({
   speed: number;
 }) {
   return (
-    <div
-      aria-hidden
-      className="absolute inset-0 overflow-hidden"
-      style={{ backgroundColor: baseColor }}
-    >
-      <AuroraCanvas color={color} baseColor={baseColor} speed={speed} />
-    </div>
-  );
-}
-
-function AuroraBackground({
-  color,
-  baseColor,
-  speed,
-}: {
-  color: string;
-  baseColor: string;
-  speed: number;
-}) {
-  return (
-    <div aria-hidden className="absolute inset-0 -z-10">
-      <AuroraSurface color={color} baseColor={baseColor} speed={speed} />
-    </div>
+    <ShaderSurface
+      frag={AURORA_FRAG}
+      uniforms={{ u_light: color, u_dark: baseColor }}
+      speed={speed}
+      baseColor={baseColor}
+    />
   );
 }
 
@@ -1748,7 +1751,7 @@ export function PageBackground({ bg }: { bg?: Background }) {
   }
 
   if (bg.type === "gradient") {
-    const dir = bg.direction === "horizontal" ? "to right" : "to bottom";
+    const dir = gradientDirectionCss(bg.direction);
     const mid = bg.distribution ?? 50;
     return (
       <div
@@ -1787,11 +1790,29 @@ export function PageBackground({ bg }: { bg?: Background }) {
   }
 
   if (bg.type === "aurora") {
+    const baseColor = bg.baseColor ?? "#000000";
     return (
-      <AuroraBackground
-        color={bg.color ?? "#e6e6e6"}
-        baseColor={bg.baseColor ?? "#000000"}
+      <ShaderPageBackground
+        frag={AURORA_FRAG}
+        uniforms={{ u_light: bg.color ?? "#e6e6e6", u_dark: baseColor }}
         speed={bg.speed ?? 5}
+        baseColor={baseColor}
+      />
+    );
+  }
+
+  if (bg.type === "ripple") {
+    const baseColor = bg.baseColor ?? "#0a0a0a";
+    return (
+      <ShaderPageBackground
+        frag={RIPPLE_FRAG}
+        uniforms={{
+          u_base: baseColor,
+          u_glow: bg.glowColor ?? "#e6e6e6",
+          u_scale: bg.scale ?? 3,
+        }}
+        speed={bg.speed ?? 5}
+        baseColor={baseColor}
       />
     );
   }
@@ -1969,6 +1990,170 @@ export function AvatarFx({
  * `username` is provided (i.e. a real public visit), the view is recorded once
  * and link clicks are tracked for the owner's analytics.
  */
+// ---------------------------------------------------------------------------
+// Status pill (Discord-style presence line)
+// ---------------------------------------------------------------------------
+
+/** Rendered size of the presence dot, in px. */
+const PRESENCE_DOT_SIZE = 10;
+
+/**
+ * The presence dot, drawn the way Discord draws it: online is a full disc, idle
+ * a crescent, do-not-disturb a disc with a bar knocked out of it, and offline a
+ * hollow ring.
+ *
+ * The *shape* carries the meaning alongside the color, which is the whole
+ * reason Discord bothers: four colored circles are four identical circles to a
+ * red-green colorblind visitor, and at 10px on a phone the hue is the first
+ * thing to go. Four silhouettes survive both.
+ *
+ * Each mask's id comes from the state rather than from `useId`, so the landing
+ * page's wall of a dozen cards emits at most four mask definitions instead of a
+ * dozen — identical content under an identical id resolves to one definition.
+ */
+export function PresenceDot({
+  state,
+  animate,
+  srLabel = true,
+}: {
+  state: PresenceState;
+  animate?: boolean;
+  /**
+   * Whether the dot carries its own screen-reader name. True on a page, where
+   * the dot is the only thing that states the presence at all; false wherever
+   * the dot sits beside a visible label already saying it — the editor's
+   * presence picker, whose chips otherwise read out "Online Online".
+   */
+  srLabel?: boolean;
+}) {
+  const color = PRESENCE_COLORS[state];
+  const maskId = `status-dot-${state}`;
+  return (
+    <span
+      className="relative inline-flex shrink-0 items-center justify-center"
+      style={{ width: PRESENCE_DOT_SIZE, height: PRESENCE_DOT_SIZE }}
+    >
+      {/* The halo sits BEHIND the dot and only ever scales + fades, so the mark
+          itself stays crisp while the glow breathes. */}
+      {animate ? (
+        <span
+          className="status-dot-halo pointer-events-none absolute inset-0 rounded-full"
+          style={{ backgroundColor: color }}
+        />
+      ) : null}
+      <svg
+        viewBox="0 0 12 12"
+        className="relative size-full"
+        aria-hidden="true"
+        focusable="false"
+      >
+        {state === "online" ? null : (
+          <mask id={maskId}>
+            <circle cx="6" cy="6" r="6" fill="#fff" />
+            {state === "idle" ? (
+              <circle cx="2.4" cy="2.4" r="4.2" fill="#000" />
+            ) : state === "dnd" ? (
+              <rect
+                x="2.4"
+                y="4.8"
+                width="7.2"
+                height="2.4"
+                rx="1.2"
+                fill="#000"
+              />
+            ) : (
+              <circle cx="6" cy="6" r="2.7" fill="#000" />
+            )}
+          </mask>
+        )}
+        <circle
+          cx="6"
+          cy="6"
+          r="6"
+          fill={color}
+          mask={state === "online" ? undefined : `url(#${maskId})`}
+        />
+      </svg>
+      {/* On a page the dot is the only place the presence is stated at all, so
+          it carries the word for anyone who can't see the shape. */}
+      {srLabel ? (
+        <span className="sr-only">{PRESENCE_LABELS[state]}</span>
+      ) : null}
+    </span>
+  );
+}
+
+/**
+ * The status line under the name: a presence dot and an emoji + message. Sized
+ * to its content rather than to the column, so a three-word status reads as a
+ * chip and not as another full-width card.
+ *
+ * Callers decide *whether* to render it (see {@link shouldRenderStatus}); this
+ * only decides what it looks like.
+ */
+export function StatusPill({
+  status,
+  fallbackBox,
+  isDark,
+}: {
+  status: StatusConfig;
+  /**
+   * The surface to wear when the status has no box of its own — the page's bio
+   * box, so a theme restyles the pill along with everything else it owns.
+   *
+   * Without this a themed page would grow one element that ignored the theme,
+   * which is the exact failure `resolveLinkBox` exists to prevent for links.
+   * An unthemed page lands on {@link DEFAULT_STATUS_BOX} either way: the bio
+   * default carries no radius, so the pill still rounds itself fully.
+   */
+  fallbackBox?: BoxStyle;
+  isDark: boolean;
+}) {
+  const box = status.box ?? fallbackBox ?? DEFAULT_STATUS_BOX;
+  const textStyle = { ...DEFAULT_STATUS_TEXT_STYLE, ...status.textStyle };
+  const emoji = status.emoji?.trim();
+  const message = status.text?.trim();
+
+  return (
+    <div
+      style={boxCss(box, undefined, DEFAULT_STATUS_RADIUS)}
+      className="flex min-w-0 max-w-full items-center justify-center gap-1.5 px-3 py-1.5"
+    >
+      {status.presence ? (
+        // The halo means "live", so it is a property of the state rather than a
+        // switch: an offline dot that breathed would be saying two things at
+        // once.
+        <PresenceDot
+          state={status.presence}
+          animate={status.presence !== "offline"}
+        />
+      ) : null}
+      {emoji ? (
+        // Sized off the message so glyph and emoji share a baseline; the
+        // message's font and color deliberately do NOT apply — a recolored
+        // emoji is a broken emoji.
+        <span
+          className="shrink-0 leading-none"
+          style={{ fontSize: `${textStyle.fontSize ?? 14}px` }}
+        >
+          {emoji}
+        </span>
+      ) : null}
+      {message ? (
+        <span
+          className={cn(
+            "min-w-0 break-words whitespace-pre-wrap",
+            textAnimClass(textStyle),
+          )}
+          style={styleToCss(textStyle, isDark)}
+        >
+          {message}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 export function ProfileView({
   data,
   username,
@@ -2030,6 +2215,14 @@ export function ProfileView({
   // Old pages had a single box behind both name and bio; fall back to it so
   // their look is preserved until the bio box is customized on its own.
   const bioBox = data.bioBox ?? data.nameBox ?? DEFAULT_BIO_BOX;
+  // Whether each part paints at all. Two independent reasons not to: the owner
+  // switched it off, or there is nothing in it (see `hasRichText` — a bio the
+  // owner cleared by hand is rarely the empty string). The switch wins first so
+  // a hidden field costs nothing to evaluate.
+  const hidden = data.hidden;
+  const showAvatar = !hidden?.avatar;
+  const hasName = !hidden?.name && hasRichText(data.name);
+  const hasBio = !hidden?.bio && hasRichText(data.bio);
   const linkBox = data.linkBox ?? DEFAULT_LINK_BOX;
   const panel = data.panel ?? DEFAULT_PANEL;
   // "horizontal" keeps everything centered and stacked, but lays the links out
@@ -2037,6 +2230,50 @@ export function ProfileView({
   const horizontal = data.panelOrientation === "horizontal";
   // Only render music when it's enabled and actually has something to show/play.
   const music = data.music?.enabled ? data.music : undefined;
+
+  // A status with a "clear after" has to stop showing when it actually expires,
+  // not whenever the next visitor happens to reload — someone reading the page
+  // at 5:59 should not still be seeing a status that ran out at 6:00. The only
+  // job of the timer is one re-render at that instant; the decision below is made
+  // fresh from the clock on every render.
+  const [, setStatusTick] = useState(0);
+  const statusExpiresAt = data.status?.expiresAt;
+  useEffect(() => {
+    const at = statusExpiresAt ? Date.parse(statusExpiresAt) : Number.NaN;
+    if (Number.isNaN(at)) return;
+    const ms = at - Date.now();
+    // Already past: the render below has handled it. And setTimeout truncates
+    // its delay to a signed 32-bit int, so anything beyond ~24.9 days fires
+    // IMMEDIATELY — which would blank a status that is still perfectly live.
+    if (ms <= 0 || ms > 2_147_483_647) return;
+    const timer = setTimeout(() => setStatusTick((t) => t + 1), ms + 50);
+    return () => clearTimeout(timer);
+  }, [statusExpiresAt]);
+
+  // The owner keeps seeing an expired status in their editor — same rule as a
+  // scheduled link, and the panel says in words that visitors don't see it.
+  // Hiding it there would look like the editor had eaten their work.
+  const showStatus = selectable
+    ? Boolean(data.status?.enabled) && statusHasContent(data.status)
+    : shouldRenderStatus(data.status);
+  // Captured as the value rather than a boolean: the name/bio group needs to
+  // know whether the pill renders BEFORE it decides to exist at all, and a bare
+  // flag would lose the narrowing that `showStatus && data.status` gave the
+  // JSX below.
+  const statusPill = showStatus ? (data.status ?? null) : null;
+
+  // A header labels the links under it, so one with nothing under it — every
+  // link in its group scheduled out, or it was simply left at the bottom of the
+  // list — is a title over empty space. Drop those, but only on the real page:
+  // in the editor a freshly added header has to stay put long enough for its
+  // links to be added beneath it.
+  const visibleRows = selectable
+    ? data.links
+    : data.links.filter(
+        (link, i) =>
+          link.kind !== "header" ||
+          data.links.slice(i + 1).some((next) => next.kind !== "header"),
+      );
 
   // Editor seam: spread onto an element to tag it for the Studio editor. Returns
   // nothing on public pages (selectable = false), so the markup is unchanged.
@@ -2088,62 +2325,106 @@ export function ProfileView({
           panel.type !== "transparent" && "rounded-2xl p-6",
         )}
       >
-        {selectable ? (
-          <div data-select="avatar" className="inline-flex">
-            {avatarNode}
-          </div>
-        ) : (
-          avatarNode
-        )}
+        {/* An avatar switched off renders nothing at all — not even the
+            initial-letter circle that stands in for a missing photo. That
+            fallback answers "you have not uploaded one yet"; it is the wrong
+            answer to "I do not want one", and it was the only reason a page
+            could not simply have no avatar. */}
+        {showAvatar ? (
+          selectable ? (
+            <div data-select="avatar" className="inline-flex">
+              {avatarNode}
+            </div>
+          ) : (
+            avatarNode
+          )
+        ) : null}
 
-        {/* Name and bio, kept close together in their own group. */}
-        <div className="flex w-full flex-col items-center gap-2">
-          <div
-            style={boxCss(nameBox)}
-            {...mark("name")}
-            className="flex w-full flex-col items-center rounded-lg px-4 py-3"
-          >
-            <RichText
-              as={decorative ? "p" : "h1"}
-              html={data.name}
-              isDark={isDark}
-              className={cn(
-                "w-full tracking-tight break-words whitespace-pre-wrap",
-                textAnimClass(nameStyle),
-              )}
-              style={styleToCss(nameStyle, isDark)}
-            />
-          </div>
-          <div
-            style={boxCss(bioBox)}
-            {...mark("bio")}
-            className="flex w-full flex-col items-center rounded-lg px-4 py-3"
-          >
-            <RichText
-              as="p"
-              html={data.bio}
-              isDark={isDark}
-              className={cn(
-                "w-full break-words whitespace-pre-wrap",
-                !bioStyle.color &&
-                  !bioStyle.animation &&
-                  "text-muted-foreground",
-                textAnimClass(bioStyle),
-              )}
-              style={styleToCss(bioStyle, isDark)}
-            />
-          </div>
-        </div>
+        {/* Name and bio, kept close together in their own group.
 
-        {data.links.length > 0 ? (
+            Each box renders only if it has something to say. An empty one is
+            not invisible — it is `px-4 py-3` of padding plus a line box, and it
+            wears the box background, so an erased bio left a dead band under
+            the name and doubled the space before the links. The group wrapper
+            goes too when all three are empty: it would otherwise sit as a
+            zero-height child between two `gap-6` gaps, reading as one 48px gap
+            where the panel should have had 24px. */}
+        {hasName || statusPill || hasBio ? (
+          <div className="flex w-full flex-col items-center gap-2">
+            {hasName ? (
+              <div
+                style={boxCss(nameBox)}
+                {...mark("name")}
+                className="flex w-full flex-col items-center rounded-lg px-4 py-3"
+              >
+                <RichText
+                  as={decorative ? "p" : "h1"}
+                  html={data.name}
+                  isDark={isDark}
+                  className={cn(
+                    "w-full tracking-tight break-words whitespace-pre-wrap",
+                    textAnimClass(nameStyle),
+                  )}
+                  style={styleToCss(nameStyle, isDark)}
+                />
+              </div>
+            ) : null}
+
+            {/* Between the name and the bio, exactly where Discord puts a custom
+                status on a profile card: close enough to the name to read as
+                "this person, right now", above the bio so it is the first thing
+                after who they are. */}
+            {statusPill ? (
+              <div {...mark("status")} className="flex max-w-full min-w-0">
+                <StatusPill
+                  status={statusPill}
+                  fallbackBox={bioBox}
+                  isDark={isDark}
+                />
+              </div>
+            ) : null}
+
+            {hasBio ? (
+              <div
+                style={boxCss(bioBox)}
+                {...mark("bio")}
+                className="flex w-full flex-col items-center rounded-lg px-4 py-3"
+              >
+                <RichText
+                  as="p"
+                  html={data.bio}
+                  isDark={isDark}
+                  className={cn(
+                    "w-full break-words whitespace-pre-wrap",
+                    !bioStyle.color &&
+                      !bioStyle.animation &&
+                      "text-muted-foreground",
+                    textAnimClass(bioStyle),
+                  )}
+                  style={styleToCss(bioStyle, isDark)}
+                />
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {visibleRows.length > 0 ? (
           horizontal ? (
             <div className="flex w-full flex-nowrap items-center justify-center gap-3 sm:gap-5">
-              {data.links.map((link) =>
-                selectable ? (
+              {/* A row of icons has nothing to group, so headers are dropped
+                  here rather than rendered as stray text between logos.
+                  The wrapper is unconditional now (it used to exist only in the
+                  editor): it carries the attention animation, and a highlight
+                  that rendered in every layout except this one was a setting
+                  the Logos layout silently swallowed. */}
+              {visibleRows
+                .filter((link) => link.kind !== "header")
+                .map((link) => (
                   <div
                     key={link.id}
-                    data-select={`link:${link.id}`}
-                    className="inline-flex"
+                    {...mark(`link:${link.id}`)}
+                    style={glowVar(link, linkBox)}
+                    className={cn("inline-flex", linkHighlightClass(link))}
                   >
                     <LinkIconAnchor
                       link={link}
@@ -2151,25 +2432,47 @@ export function ProfileView({
                       trackUsername={username}
                     />
                   </div>
-                ) : (
-                  <LinkIconAnchor
-                    key={link.id}
-                    link={link}
-                    isDark={isDark}
-                    trackUsername={username}
-                  />
-                ),
-              )}
+                ))}
             </div>
           ) : (
             <div className="flex w-full flex-col gap-3">
-              {data.links.map((link) =>
-                selectable ? (
-                  <div
-                    key={link.id}
-                    data-select={`link:${link.id}`}
-                    className="w-full"
-                  >
+              {groupLinkRows(visibleRows).map((row) => {
+                // A run of icon links: one centered strip, in list order.
+                if (row.kind === "icons") {
+                  return (
+                    <div
+                      key={`icons-${row.id}`}
+                      className="flex w-full flex-wrap items-center justify-center gap-3 py-1 sm:gap-4"
+                    >
+                      {row.links.map((link) => (
+                        <div
+                          key={link.id}
+                          {...mark(`link:${link.id}`)}
+                          style={glowVar(link, linkBox)}
+                          className={cn(
+                            "inline-flex",
+                            linkHighlightClass(link),
+                          )}
+                        >
+                          <LinkIconAnchor
+                            link={link}
+                            isDark={isDark}
+                            trackUsername={username}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  );
+                }
+                const link = row.link;
+                const body =
+                  link.kind === "header" ? (
+                    <LinkHeader
+                      link={link}
+                      textStyle={data.linkStyle}
+                      isDark={isDark}
+                    />
+                  ) : (
                     <LinkAnchor
                       link={link}
                       box={linkBox}
@@ -2178,19 +2481,20 @@ export function ProfileView({
                       trackUsername={username}
                       enablePreview
                     />
-                  </div>
-                ) : (
-                  <LinkAnchor
+                  );
+                // The attention animation rides on this wrapper, never on the
+                // button — the button owns `transform` for its hover lift.
+                return (
+                  <div
                     key={link.id}
-                    link={link}
-                    box={linkBox}
-                    textStyle={data.linkStyle}
-                    isDark={isDark}
-                    trackUsername={username}
-                    enablePreview
-                  />
-                ),
-              )}
+                    {...mark(`link:${link.id}`)}
+                    style={glowVar(link, linkBox)}
+                    className={cn("w-full", linkHighlightClass(link))}
+                  >
+                    {body}
+                  </div>
+                );
+              })}
             </div>
           )
         ) : null}

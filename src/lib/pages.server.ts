@@ -15,6 +15,7 @@ import {
   queryPage,
   type TextStyle,
 } from "~/lib/pages";
+import type { StatusConfig } from "~/lib/status";
 import { createClient } from "~/lib/supabase/server";
 
 /**
@@ -130,6 +131,7 @@ function mapPublicPageRow(row: any): PublicPage {
     avatarEffect?: AvatarEffect;
     music?: MusicConfig;
     intro?: IntroConfig;
+    status?: StatusConfig;
   };
   return {
     username: row.username as string,
@@ -153,6 +155,7 @@ function mapPublicPageRow(row: any): PublicPage {
       avatarEffect: styles.avatarEffect,
       music: styles.music,
       intro: styles.intro,
+      status: styles.status,
     },
   };
 }

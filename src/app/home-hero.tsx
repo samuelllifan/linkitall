@@ -9,9 +9,19 @@ import { DEMO_PROFILES } from "~/lib/demo-profiles";
 import type { PageData } from "~/lib/pages";
 import { cn } from "~/lib/utils";
 
-// How many distinct pages the wall wants before it starts repeating. The wall
-// shows 6 rows of 6, so anything under this and the same faces come round again
-// within a single screenful.
+// How many pages to top the pool up to with demos when there aren't enough real
+// ones. The wall is 4 rows of 6 (ROWS x PER_ROW in pages-wall.tsx), so it has 24
+// distinct slots and 12 fills them at exactly two appearances per page.
+//
+// This is a FLOOR on the padding, not a ceiling on the wall: `real.length >=
+// TARGET_POOL` hands the wall every real page there is, so adding usernames to
+// FEATURED_USERNAMES pushes demos out one for one and then keeps going past 12
+// on its own. Raising this number does NOT get more real pages on screen -- it
+// pads with more DEMOS, which is the opposite. The only lever for more real
+// pages is more usernames.
+//
+// 24 real pages is where every slot is a distinct real page and the demos are
+// gone entirely.
 const TARGET_POOL = 12;
 
 // Landing hero: a motto + slogan + claim field on the left, over an interactive
