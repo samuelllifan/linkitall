@@ -9,6 +9,7 @@ import {
   type AvatarOutline,
   type Background,
   type BoxStyle,
+  type HiddenParts,
   type LinkItem,
   type PageData,
   type PanelStyle,
@@ -120,6 +121,7 @@ function mapPublicPageRow(row: any): PublicPage {
     name?: TextStyle;
     bio?: TextStyle;
     background?: Background;
+    hidden?: HiddenParts;
     nameBox?: BoxStyle;
     bioBox?: BoxStyle;
     linkBox?: BoxStyle;
@@ -144,6 +146,7 @@ function mapPublicPageRow(row: any): PublicPage {
       nameStyle: styles.name,
       bioStyle: styles.bio,
       background: styles.background,
+      hidden: styles.hidden,
       nameBox: styles.nameBox,
       bioBox: styles.bioBox,
       linkBox: styles.linkBox,
